@@ -73,25 +73,84 @@ Features
 
 - Upload PDF
 - Upload Images
-- OCR Processing
 - Script Validation
 
 ---
 
-## 7. AI Evaluation Module
+## 7. OCR Module
 
 Features
 
-- Answer Understanding
-- Rubric Comparison
-- Partial Marking
-- Confidence Score
-- AI Explanation
-- Feedback Generation
+- Text Extraction from PDF/Images
+- Handwriting Recognition
+- OCR Job Management
 
 ---
 
-## 8. Teacher Review Module
+## 8. Text Processing Module
+
+Features
+
+- Text Cleaning
+- Noise Removal
+- Formatting Correction
+
+---
+
+## 9. Question Detection & Answer Segmentation Module
+
+Features
+
+- Identify question numbers in script
+- Isolate text corresponding to each answer
+
+---
+
+## 10. Rubric Engine
+
+Features
+
+- Match segmented answers to question rubrics
+- Prepare data for evaluation
+
+---
+
+## 11. Prompt Builder
+
+Features
+
+- Construct structured prompts from rubric criteria and answer text
+
+---
+
+## 12. LLM Provider Layer
+
+Features
+
+- Interface with external LLM APIs (e.g., Gemini, OpenAI)
+- Manage API requests and responses
+- Produce structured JSON output
+
+---
+
+## 13. Score Normalization & Confidence Validator
+
+Features
+
+- Normalize scores from LLM response
+- Calculate confidence score for the evaluation
+
+---
+
+## 14. Feedback Generator
+
+Features
+
+- Generate rubric-based feedback from LLM explanation
+
+---
+
+## 15. Teacher Review Module
 
 Features
 
@@ -103,7 +162,7 @@ Features
 
 ---
 
-## 9. Analytics Module
+## 16. Analytics Module
 
 Features
 
@@ -115,7 +174,7 @@ Features
 
 ---
 
-## 10. Reporting Module
+## 17. Reporting Module
 
 Features
 
@@ -126,7 +185,7 @@ Features
 
 ---
 
-# Future Modules
+## Future Modules (Post-MVP)
 
 - LMS Integration
 - Mobile Application

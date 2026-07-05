@@ -41,21 +41,33 @@ Students Complete Examination
 
 Teacher Uploads Answer Scripts
 
-↓
+        ↓
 
-OCR Extracts Text
+OCR Service Extracts Text
 
-↓
+        ↓
 
-AI Evaluates Answers
+Text Cleaning & Preprocessing
 
-↓
+        ↓
 
-Rubric Comparison
+Answer Segmentation
 
-↓
+        ↓
 
-AI Suggests Marks
+Rubric Engine Matches Answer to Rubric
+
+        ↓
+
+Prompt Builder Creates Structured Prompt
+
+        ↓
+
+LLM Provider Layer Generates Evaluation
+
+        ↓
+
+Score Normalization & Confidence Validation
 
 ↓
 
@@ -88,9 +100,9 @@ Publish Results
 4. Students complete examinations.
 5. Teachers upload scanned answer scripts.
 6. OCR extracts textual content.
-7. AI evaluates answers according to the rubric.
-8. AI assigns suggested marks and feedback.
-9. Teachers review AI-generated evaluations.
+7. The AI Evaluation Engine processes the text through a multi-stage pipeline (preprocessing, segmentation, rubric matching, LLM analysis).
+8. The system generates suggested marks, confidence scores, and explanations.
+9. Teachers review the detailed AI-assisted evaluation.
 10. Teachers approve or modify marks.
 11. Final reports are generated.
 12. Results are published.

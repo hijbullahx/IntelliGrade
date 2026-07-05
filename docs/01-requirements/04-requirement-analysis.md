@@ -69,7 +69,7 @@ The teacher wants to upload answer scripts and receive AI-assisted grading sugge
 
 2.3 The system shall automatically perform OCR.
 
-2.4 AI shall evaluate answers according to the predefined rubric.
+2.4 The AI Evaluation Engine shall process answers against the predefined rubric to generate scoring suggestions.
 
 2.5 The system shall display:
 
@@ -78,7 +78,7 @@ The teacher wants to upload answer scripts and receive AI-assisted grading sugge
 - AI Explanation
 - Suggested Feedback
 
-2.6 Teachers shall review AI-generated marks before approval.
+2.6 Teacher review and approval of all AI-generated suggestions shall be mandatory before marks are finalized.
 
 ---
 
@@ -88,7 +88,7 @@ The teacher wants to upload answer scripts and receive AI-assisted grading sugge
 
 2. The system shall extract text using OCR.
 
-3. The system shall evaluate answers using AI.
+3. The system's AI Evaluation Engine shall generate scoring suggestions.
 
 4. The system shall compare answers with grading rubrics.
 
@@ -96,7 +96,7 @@ The teacher wants to upload answer scripts and receive AI-assisted grading sugge
 
 6. The system shall generate feedback.
 
-7. The teacher shall approve or modify marks.
+7. The system shall require teachers to approve or modify all AI-generated marks.
 
 ---
 

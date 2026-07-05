@@ -72,14 +72,14 @@ This SRS is organized into four main sections.
 ## 2.1 Product Perspective
 
 IntelliGrade is a new, self-contained web application designed to address inefficiencies in the manual grading process. It integrates with external AI services (like Gemini or OpenAI APIs) for evaluation but operates as a standalone platform. It is not an extension of an existing system.
-
-The system workflow begins after students have completed a physical examination. For a detailed process overview, see the System Workflow.
+ 
+The core of the system is a modular **AI Evaluation Engine** that orchestrates a multi-step pipeline from OCR to rubric-based scoring suggestions. This architecture ensures that the core logic is decoupled from specific external services, allowing for future extensibility.
 
 ## 2.2 Product Functions
 
-The major functions of the IntelliGrade system are organized into distinct modules that handle authentication, user management, examination setup, AI evaluation, and reporting.
+The major functions of the IntelliGrade system are organized into distinct modules. These include user and course management, examination setup, and a sophisticated AI Evaluation Engine composed of sub-modules for OCR, text processing, answer segmentation, rubric matching, prompt building, LLM interaction, and score validation.
 
-For a complete list of system modules and their features, see System Modules.
+For a complete list of system modules and their features, see the [System Modules](./02-system-modules.md).
 
 ## 2.3 User Classes and Characteristics
 
@@ -153,7 +153,8 @@ A complete list is available in the Non-Functional Requirements section of the R
 
 The system will interface with external AI services for natural language processing and evaluation.
 
-- **AI API:** The system will connect to the Gemini API or OpenAI API via RESTful HTTP requests.
+- **LLM Provider Layer:** The system will connect to external Large Language Model APIs (e.g., Gemini, OpenAI) via a dedicated provider layer. This layer abstracts the specific API implementation, allowing for future extensibility to other providers (e.g., Claude, local models). The initial implementation will use the Gemini API. All communication will be via RESTful HTTP requests.
+
 - **File Storage:** In production, the system will interface with a cloud storage service (e.g., AWS S3) for storing uploaded scripts and generated reports.
 
 ---

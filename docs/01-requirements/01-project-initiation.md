@@ -71,8 +71,12 @@ Develop an intelligent web platform capable of:
 - Examination Management
 - Rubric Management
 - Answer Script Processing
-- OCR-based Text Extraction
-- AI-assisted Evaluation
+- A modular AI pipeline including:
+  - OCR-based Text Extraction
+  - Text Cleaning and Preprocessing
+  - Answer Segmentation and Rubric Matching
+  - AI-assisted evaluation via an extensible LLM Provider layer
+  - Score normalization and confidence validation
 - Instructor Review
 - Feedback Generation
 - Report Generation

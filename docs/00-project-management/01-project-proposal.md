@@ -14,8 +14,8 @@
 # 1. Project Overview
 
 IntelliGrade is a web-based AI-assisted examination evaluation platform designed to support instructors in grading descriptive answer scripts more efficiently, consistently, and transparently.
-
-Rather than replacing human examiners, IntelliGrade acts as an intelligent assistant by evaluating answer scripts according to predefined marking rubrics and suggesting marks, explanations, and feedback while allowing instructors to review and approve every assessment.
+ 
+Rather than replacing human examiners, IntelliGrade acts as an intelligent assistant. It features a modular **AI Evaluation Engine** that processes answers against predefined rubrics to suggest marks, explanations, and feedback. The system is built on an "instructor-in-the-loop" philosophy, ensuring that educators have full authority to review, modify, and approve every AI-assisted assessment.
 
 ---
 
@@ -34,11 +34,12 @@ Develop an AI-assisted web application capable of:
 - Managing examinations
 - Managing marking rubrics
 - Uploading answer scripts
-- Extracting text using OCR
-- Evaluating answers using AI
-- Suggesting rubric-based marks
-- Generating feedback
-- Allowing instructor review
+- Processing scripts through a modular AI pipeline:
+  - OCR and Text Preprocessing
+  - Answer Segmentation and Rubric Matching
+  - Prompt Generation and LLM-based analysis
+  - Score Normalization and Confidence Validation
+- Allowing comprehensive instructor review and approval
 - Publishing final grades
 - Producing reports and analytics
 
@@ -54,7 +55,7 @@ Develop an AI-assisted examination evaluation platform that improves grading eff
 
 - Reduce grading time
 - Improve grading consistency
-- Generate intelligent feedback
+- Generate AI-assisted, rubric-aligned feedback
 - Support rubric-based evaluation
 - Produce grading analytics
 - Improve transparency
