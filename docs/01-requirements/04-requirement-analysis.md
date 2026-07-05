@@ -37,6 +37,7 @@ The teacher wants to create examinations and define grading rubrics before evalu
 - Evaluation Notes
 
 1.6 The system shall save examinations as Draft or Published.
+1.7 Techer can also upload rubrics as pdf.
 
 ---
 
@@ -51,6 +52,8 @@ The teacher wants to create examinations and define grading rubrics before evalu
 4. The system shall store examination information.
 
 5. The system shall allow editing examinations before publication.
+
+6.  The system shall allow uploading rubrics.
 
 ---
 
@@ -146,7 +149,7 @@ The student wants to view examination results and AI-generated feedback.
 - Marks
 - Teacher Remarks
 - AI Feedback
-- Question-wise Marks
+- Question-wise Marks (With screensshot)
 
 1.4 Students shall be able to download result reports.
 
