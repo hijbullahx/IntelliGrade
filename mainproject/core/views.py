@@ -48,16 +48,69 @@ def student_dashboard(request):
     return render(request, 'core/dashboard_student.html', context)
 
 
-def admin_dashboard(request):
-    """Dashboard view for System Administrators."""
+def exam_controller_login(request):
+    """Login view specifically for the Exam Controller."""
+    if request.method == 'POST':
+        messages.success(request, "Exam Controller authenticated successfully!")
+        return redirect('exam_controller_dashboard')
+    
+    return render(request, 'core/exam_controller_login.html')
+
+
+def exam_controller_dashboard(request):
+    """Main control portal for the Exam Controller."""
     stats = {
-        'total_users': Profile.objects.count() or 340,
-        'total_departments': Department.objects.count() or 6,
-        'total_courses': Course.objects.count() or 24,
-        'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 9,
+        'total_faculty': 24,
+        'total_students': 1420,
+        'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
+        'pending_rechecks': 5,
     }
     departments = Department.objects.all()[:5]
-    return render(request, 'core/dashboard_admin.html', {'stats': stats, 'departments': departments})
+    recheck_tickets = [
+        {'id': 1, 'student': 'Rahim Ahmed (201002014)', 'course': 'CSE 411 - Software Engineering', 'reason': 'Missing marks for component interaction diagram in Q1a', 'ai_score': 8.5, 'requested': 10.0, 'status': 'Pending Review'},
+        {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
+    ]
+    return render(request, 'core/dashboard_exam_controller.html', {
+        'stats': stats,
+        'departments': departments,
+        'recheck_tickets': recheck_tickets,
+    })
+
+
+def admin_dashboard(request):
+    """Alias / Redirect to Exam Controller Dashboard."""
+    return redirect('exam_controller_dashboard')
+
+
+def add_faculty(request):
+    """Interface for Exam Controller to add new Faculty members."""
+    if request.method == 'POST':
+        messages.success(request, "Faculty member added successfully!")
+        return redirect('exam_controller_dashboard')
+    
+    departments = Department.objects.all()
+    return render(request, 'core/add_faculty.html', {'departments': departments})
+
+
+def add_student(request):
+    """Interface for Exam Controller to register new Students."""
+    if request.method == 'POST':
+        messages.success(request, "Student profile registered successfully!")
+        return redirect('exam_controller_dashboard')
+    
+    departments = Department.objects.all()
+    courses = Course.objects.all()
+    return render(request, 'core/add_student.html', {'departments': departments, 'courses': courses})
+
+
+def rechecks_list(request):
+    """Interface to manage student recheck and re-evaluation requests."""
+    recheck_tickets = [
+        {'id': 1, 'student': 'Rahim Ahmed (201002014)', 'course': 'CSE 411 - Software Engineering', 'reason': 'Missing marks for component interaction diagram in Q1a', 'ai_score': 8.5, 'requested': 10.0, 'status': 'Pending Review'},
+        {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
+        {'id': 3, 'student': 'Nusrat Jahan (201002105)', 'course': 'CSE 211 - Data Structures', 'reason': 'Graph BFS vs DFS answer evaluation inquiry', 'ai_score': 7.5, 'requested': 9.0, 'status': 'Resolved'},
+    ]
+    return render(request, 'core/rechecks_list.html', {'recheck_tickets': recheck_tickets})
 
 
 def dept_head_dashboard(request):
@@ -95,7 +148,6 @@ def script_upload(request):
 
 def grading_workbench(request, script_id=1):
     """Split-screen AI Grading Review Workbench for Teachers."""
-    # Attempt to load answer script or present realistic interactive mock workbench
     script = AnswerScript.objects.filter(id=script_id).first()
     
     context = {
