@@ -6,17 +6,17 @@
 <div class="space-y-8">
     
     <!-- Student Header Banner -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl border border-slate-800">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
         <div>
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold mb-2">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold mb-2">
                 <i data-lucide="user-check" class="w-3.5 h-3.5"></i> Student Portal
             </div>
-            <h1 class="text-2xl font-bold text-white tracking-tight">Welcome, Rahim Ahmed</h1>
-            <p class="text-slate-400 text-sm mt-1">View published exam results, detailed rubric feedback, and performance breakdowns.</p>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Welcome, Rahim Ahmed</h1>
+            <p class="theme-text-muted text-sm mt-1">View published exam results, detailed rubric feedback, and performance breakdowns.</p>
         </div>
         <div class="flex items-center gap-3">
-            <span class="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 font-mono">
-                Student ID: <span class="text-emerald-400 font-bold">201002014</span>
+            <span class="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs theme-text-secondary font-mono">
+                Student ID: <span class="text-emerald-500 dark:text-emerald-400 font-bold">201002014</span>
             </span>
         </div>
     </div>
@@ -24,76 +24,76 @@
     <!-- Metrics -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Enrolled Courses</span>
+            <span class="text-xs font-medium theme-text-muted">Enrolled Courses</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-white">{{ stats.enrolled_courses }}</span>
-                <i data-lucide="book" class="w-6 h-6 text-emerald-400"></i>
+                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.enrolled_courses }}</span>
+                <i data-lucide="book" class="w-6 h-6 text-emerald-500"></i>
             </div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Evaluated Exams</span>
+            <span class="text-xs font-medium theme-text-muted">Evaluated Exams</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-white">{{ stats.completed_exams }}</span>
-                <i data-lucide="check-circle" class="w-6 h-6 text-brand-400"></i>
+                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.completed_exams }}</span>
+                <i data-lucide="check-circle" class="w-6 h-6 text-brand-500"></i>
             </div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Cumulative GPA</span>
+            <span class="text-xs font-medium theme-text-muted">Cumulative GPA</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-emerald-400">{{ stats.gpa_avg }}</span>
-                <i data-lucide="award" class="w-6 h-6 text-amber-400"></i>
+                <span class="text-3xl font-extrabold text-emerald-500 dark:text-emerald-400">{{ stats.gpa_avg }}</span>
+                <i data-lucide="award" class="w-6 h-6 text-amber-500"></i>
             </div>
         </div>
 
         <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Class Standing</span>
+            <span class="text-xs font-medium theme-text-muted">Class Standing</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-cyan-400">{{ stats.rank }}</span>
-                <i data-lucide="trending-up" class="w-6 h-6 text-cyan-400"></i>
+                <span class="text-3xl font-extrabold text-cyan-500 dark:text-cyan-400">{{ stats.rank }}</span>
+                <i data-lucide="trending-up" class="w-6 h-6 text-cyan-500"></i>
             </div>
         </div>
     </div>
 
     <!-- Exam Results Table & AI Feedback -->
     <div class="space-y-4">
-        <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-400"></i> Published Examination Results
+        <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-500"></i> Published Examination Results
         </h2>
 
-        <div class="glass-card rounded-2xl overflow-hidden border border-slate-800 space-y-4 p-6">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div class="glass-card rounded-2xl overflow-hidden space-y-4 p-6">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                    <h3 class="text-base font-bold text-white">CSE 411: Software Engineering Final Exam</h3>
-                    <p class="text-xs text-slate-400">Evaluated on Jul 20, 2026 &bull; Evaluator: Prof. Dr. Al-Amin</p>
+                    <h3 class="text-base font-bold theme-text-primary">CSE 411: Software Engineering Final Exam</h3>
+                    <p class="text-xs theme-text-muted">Evaluated on Jul 20, 2026 &bull; Evaluator: Prof. Dr. Al-Amin</p>
                 </div>
                 <div class="text-right">
-                    <span class="text-2xl font-black text-emerald-400">88.5 <span class="text-sm font-normal text-slate-400">/ 100</span></span>
-                    <span class="block text-xs font-bold text-emerald-400">Grade: A</span>
+                    <span class="text-2xl font-black text-emerald-500 dark:text-emerald-400">88.5 <span class="text-sm font-normal theme-text-muted">/ 100</span></span>
+                    <span class="block text-xs font-bold text-emerald-500 dark:text-emerald-400">Grade: A</span>
                 </div>
             </div>
 
             <!-- Question Breakdown Cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-2">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-brand-300">Question 1 (a) - Software Architecture</span>
-                        <span class="text-xs font-bold text-emerald-400">8.5 / 10.0</span>
+                        <span class="text-xs font-bold text-brand-600 dark:text-brand-300">Question 1 (a) - Software Architecture</span>
+                        <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">8.5 / 10.0</span>
                     </div>
-                    <p class="text-xs text-slate-300">"Microservices architecture breaks an application into small, independent services..."</p>
-                    <div class="p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-[11px] text-brand-200">
+                    <p class="text-xs theme-text-secondary">"Microservices architecture breaks an application into small, independent services..."</p>
+                    <div class="p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-[11px] text-brand-700 dark:text-brand-200">
                         <strong>AI & Instructor Feedback:</strong> Excellent definition of Microservices and Monoliths. Missed full component interaction diagram.
                     </div>
                 </div>
 
-                <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-2">
                     <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-brand-300">Question 1 (b) - Design Patterns</span>
-                        <span class="text-xs font-bold text-emerald-400">10.0 / 10.0</span>
+                        <span class="text-xs font-bold text-brand-600 dark:text-brand-300">Question 1 (b) - Design Patterns</span>
+                        <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">10.0 / 10.0</span>
                     </div>
-                    <p class="text-xs text-slate-300">"Singleton pattern ensures a class has only one instance and provides a global access point..."</p>
-                    <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-200">
+                    <p class="text-xs theme-text-secondary">"Singleton pattern ensures a class has only one instance and provides a global access point..."</p>
+                    <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-200">
                         <strong>AI & Instructor Feedback:</strong> Perfect code sample and thread-safety explanation provided!
                     </div>
                 </div>
