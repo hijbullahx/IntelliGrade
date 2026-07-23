@@ -200,12 +200,6 @@
 
                 <!-- Right Actions & Quick Navigation -->
                 <div class="flex items-center gap-3">
-                    <a href="{% url 'exam_create' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-600/20 transition-all hover:scale-105">
-                        <i data-lucide="plus" class="w-3.5 h-3.5"></i> Create Exam
-                    </a>
-                    <a href="{% url 'script_upload' %}" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary border border-slate-300 dark:border-slate-700 transition-all">
-                        <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i> Upload Scripts
-                    </a>
 
                     <!-- User Profile & Sign Out Dropdown -->
                     {% if request.user.is_authenticated %}
