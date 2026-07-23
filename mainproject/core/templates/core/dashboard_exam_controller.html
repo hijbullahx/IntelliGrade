@@ -9,14 +9,14 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
         <div>
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold mb-2">
-                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Ultimate Administration & Controller Portal
+                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Chief Exam Controller Office & System Control
             </div>
-            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Chief Exam Controller Office</h1>
-            <p class="theme-text-muted text-sm mt-1">Manage system departments, register faculty & student rosters, publish examinations, and audit recheck requests.</p>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Central Examination & System Portal</h1>
+            <p class="theme-text-muted text-sm mt-1">Unified administrative control center for department management, course rosters, exam creation, and recheck audits.</p>
         </div>
         <div class="flex items-center gap-3">
-            <a href="/admin/" target="_blank" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl border border-slate-300 dark:border-slate-700 transition-all flex items-center gap-2">
-                <i data-lucide="database" class="w-4 h-4 text-amber-500"></i> Django System DB
+            <a href="{% url 'exam_create' %}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center gap-2">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Create Exam & Rubric
             </a>
         </div>
     </div>
@@ -58,7 +58,7 @@
 
     <!-- Controller Quick Operations Grid -->
     <div class="space-y-3">
-        <h2 class="text-xs font-bold uppercase tracking-wider theme-text-muted">Controller Management Actions</h2>
+        <h2 class="text-xs font-bold uppercase tracking-wider theme-text-muted">Exam Controller Core Tools</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             
             <!-- 1. Add Faculty -->
@@ -161,11 +161,16 @@
         </div>
     </div>
 
-    <!-- Department Summary Table -->
+    <!-- Integrated Department Management Section -->
     <div class="space-y-4">
-        <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
-            <i data-lucide="building-2" class="w-5 h-5 text-amber-500"></i> Department Overview
-        </h2>
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="building-2" class="w-5 h-5 text-amber-500"></i> System Department Management
+            </h2>
+            <a href="{% url 'add_faculty' %}" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-semibold flex items-center gap-1">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Department / Faculty
+            </a>
+        </div>
 
         <div class="glass-card rounded-2xl overflow-hidden">
             <table class="w-full text-left text-xs">
@@ -173,25 +178,28 @@
                     <tr>
                         <th class="px-5 py-4">Department Name</th>
                         <th class="px-5 py-4">Code</th>
+                        <th class="px-5 py-4">Assigned Courses</th>
                         <th class="px-5 py-4">Status</th>
-                        <th class="px-5 py-4 text-right">Actions</th>
+                        <th class="px-5 py-4 text-right">Controller Controls</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
                     <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
                         <td class="px-5 py-4 font-bold theme-text-primary">Computer Science & Engineering</td>
                         <td class="px-5 py-4"><span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-brand-600 dark:text-brand-300 font-mono text-[11px]">CSE</span></td>
+                        <td class="px-5 py-4 font-mono">14 Active Courses</td>
                         <td class="px-5 py-4"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">Active</span></td>
-                        <td class="px-5 py-4 text-right">
-                            <a href="/admin/core/department/" target="_blank" class="text-brand-500 hover:underline">Manage</a>
+                        <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
+                            <a href="{% url 'add_faculty' %}" class="px-2.5 py-1 bg-brand-500/10 text-brand-500 hover:bg-brand-500/20 rounded-md font-semibold">Assign Faculty</a>
                         </td>
                     </tr>
                     <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
                         <td class="px-5 py-4 font-bold theme-text-primary">Electrical & Electronic Engineering</td>
                         <td class="px-5 py-4"><span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-brand-600 dark:text-brand-300 font-mono text-[11px]">EEE</span></td>
+                        <td class="px-5 py-4 font-mono">10 Active Courses</td>
                         <td class="px-5 py-4"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">Active</span></td>
-                        <td class="px-5 py-4 text-right">
-                            <a href="/admin/core/department/" target="_blank" class="text-brand-500 hover:underline">Manage</a>
+                        <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
+                            <a href="{% url 'add_faculty' %}" class="px-2.5 py-1 bg-brand-500/10 text-brand-500 hover:bg-brand-500/20 rounded-md font-semibold">Assign Faculty</a>
                         </td>
                     </tr>
                 </tbody>
