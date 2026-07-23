@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Examination & Rubric | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+    
+    <!-- Title -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+                <i data-lucide="plus-circle" class="w-6 h-6 text-brand-400"></i> Create Examination & Rubric
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">Configure exam parameters, individual questions, and detailed grading criteria for AI scoring.</p>
+        </div>
+        <a href="{% url 'teacher_dashboard' %}" class="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors">
+            &larr; Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Exam Form Card -->
+    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl border border-slate-800 space-y-6">
+        {% csrf_token %}
+        
+        <!-- General Details Section -->
+        <div class="space-y-4 border-b border-slate-800 pb-6">
+            <h3 class="text-sm font-bold text-brand-400 uppercase tracking-wider flex items-center gap-2">
+                <i data-lucide="file-text" class="w-4 h-4"></i> 1. Examination Details
+            </h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Course</label>
+                    <select name="course" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:ring-2 focus:ring-brand-500 outline-none">
+                        <option value="">Select Course...</option>
+                        <option value="1" selected>CSE 411 - Software Engineering</option>
+                        <option value="2">CSE 312 - Database Systems</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Exam Title</label>
+                    <input type="text" name="title" value="Final Semester Examination - Spring 2026" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:ring-2 focus:ring-brand-500 outline-none" required>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Exam Date</label>
+                    <input type="date" name="exam_date" value="2026-07-20" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:ring-2 focus:ring-brand-500 outline-none" required>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Total Marks</label>
+                    <input type="number" step="0.01" name="total_marks" value="100.00" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:ring-2 focus:ring-brand-500 outline-none" required>
+                </div>
+            </div>
+        </div>
+
+        <!-- Question & Rubric Builder -->
+        <div class="space-y-4">
+            <h3 class="text-sm font-bold text-brand-400 uppercase tracking-wider flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4"></i> 2. Questions & AI Rubric Rules
+            </h3>
+
+            <!-- Question Card 1 -->
+            <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-white flex items-center gap-2">
+                        <span class="w-5 h-5 rounded-full bg-brand-500/20 text-brand-400 flex items-center justify-center text-[10px]">1</span> Question #1
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono">Max Marks: 10.0</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">Question Number</label>
+                        <input type="text" value="Q1 (a)" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-[11px] text-slate-400 mb-1">Question Prompt Text</label>
+                        <input type="text" value="Explain Microservices Architecture vs Monolithic Architecture with advantages." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">AI Rubric Grading Criteria (Key Points Expected)</label>
+                    <textarea rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200" placeholder="1. Microservices definition & API communication (4 marks)&#10;2. Monolith contrast (3 marks)&#10;3. Scalability / Deployment advantage details (3 marks)">1. Microservices definition & API communication (4 marks)&#10;2. Monolith contrast (3 marks)&#10;3. Scalability / Deployment advantage details (3 marks)</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-4 flex items-center justify-end gap-3">
+            <button type="button" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl">Add Question</button>
+            <button type="submit" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all">Save & Publish Examination</button>
+        </div>
+    </form>
+
+</div>
+{% endblock %}
