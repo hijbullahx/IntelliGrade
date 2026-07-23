@@ -207,12 +207,48 @@
                         <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i> Upload Scripts
                     </a>
 
-                    <!-- User Profile Quick Badge -->
-                    <div class="flex items-center gap-2 pl-2 border-l border-slate-300 dark:border-slate-800">
-                        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center text-xs font-bold text-brand-500">
-                            {% if request.user.is_authenticated %}{{ request.user.username|slice:":2"|upper }}{% else %}IG{% endif %}
+                    <!-- User Profile & Sign Out Dropdown -->
+                    {% if request.user.is_authenticated %}
+                    <div class="relative group pl-2 border-l border-slate-300 dark:border-slate-800">
+                        <button type="button" class="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white flex items-center justify-center text-xs font-extrabold shadow-sm">
+                                {{ request.user.username|slice:":2"|upper }}
+                            </div>
+                            <div class="hidden md:block text-left">
+                                <span class="block text-xs font-bold theme-text-primary leading-tight">{{ request.user.get_full_name|default:request.user.username }}</span>
+                                <span class="block text-[10px] text-emerald-500 dark:text-emerald-400 font-semibold leading-tight flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    {% if request.user.is_superuser %}Admin / Controller{% else %}Active User{% endif %}
+                                </span>
+                            </div>
+                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 theme-text-muted group-hover:rotate-180 transition-transform"></i>
+                        </button>
+                        
+                        <!-- Dropdown Menu -->
+                        <div class="absolute right-0 top-full mt-2 w-52 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800">
+                            <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 mb-1">
+                                <span class="block text-xs font-bold theme-text-primary">{{ request.user.username }}</span>
+                                <span class="block text-[10px] theme-text-muted truncate">{{ request.user.email|default:"Authenticated User" }}</span>
+                            </div>
+                            <a href="{% url 'exam_controller_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <i data-lucide="layout-dashboard" class="w-4 h-4 text-brand-500"></i> Controller Dashboard
+                            </a>
+                            <a href="/admin/" target="_blank" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <i data-lucide="database" class="w-4 h-4 text-amber-500"></i> Django Admin Portal
+                            </a>
+                            <div class="border-t border-slate-200 dark:border-slate-800 my-1"></div>
+                            <a href="{% url 'logout' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+                            </a>
                         </div>
                     </div>
+                    {% else %}
+                    <div class="pl-2 border-l border-slate-300 dark:border-slate-800">
+                        <a href="{% url 'exam_controller_login' %}" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                            <i data-lucide="log-in" class="w-3.5 h-3.5"></i> Sign In
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
 
             </div>

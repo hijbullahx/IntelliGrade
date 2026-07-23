@@ -1,5 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
+from django.contrib.auth.models import User
 from .models import (
     Examination, Course, AnswerScript, AnswerSegment, Evaluation,
     Department, Profile
@@ -49,19 +51,38 @@ def student_dashboard(request):
 
 
 def exam_controller_login(request):
-    """Login view specifically for the Exam Controller."""
-    if request.method == 'POST':
-        messages.success(request, "Exam Controller authenticated successfully!")
+    """Login view for Exam Controller (Ultimate Admin)."""
+    if request.user.is_authenticated:
         return redirect('exam_controller_dashboard')
+
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Authenticated as Exam Controller.")
+            return redirect('exam_controller_dashboard')
+        else:
+            messages.error(request, "Invalid username or password. Please check your credentials.")
     
     return render(request, 'core/exam_controller_login.html')
 
 
+def logout_view(request):
+    """Logs out the user and redirects to landing page."""
+    auth_logout(request)
+    messages.success(request, "You have been signed out successfully.")
+    return redirect('landing_page')
+
+
 def exam_controller_dashboard(request):
-    """Main control portal for the Exam Controller."""
+    """Unified Control Portal for Exam Controller (Ultimate Admin)."""
     stats = {
-        'total_faculty': 24,
-        'total_students': 1420,
+        'total_users': Profile.objects.count() or 340,
+        'total_departments': Department.objects.count() or 6,
+        'total_courses': Course.objects.count() or 24,
         'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
         'pending_rechecks': 5,
     }
@@ -78,7 +99,7 @@ def exam_controller_dashboard(request):
 
 
 def admin_dashboard(request):
-    """Alias / Redirect to Exam Controller Dashboard."""
+    """Unified Redirect to Exam Controller Dashboard."""
     return redirect('exam_controller_dashboard')
 
 
