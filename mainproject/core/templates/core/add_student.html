@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Student | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-8">
+    
+    <!-- Title -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
+                <i data-lucide="graduation-cap" class="w-6 h-6 text-emerald-500"></i> Register Student Roster
+            </h1>
+            <p class="theme-text-muted text-sm mt-1">Enroll new student accounts, assign student IDs, and link active course rosters.</p>
+        </div>
+        <a href="{% url 'exam_controller_dashboard' %}" class="text-xs theme-text-muted hover:text-emerald-500 flex items-center gap-1 transition-colors">
+            &larr; Back to Controller Portal
+        </a>
+    </div>
+
+    <!-- Form Card -->
+    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
+        {% csrf_token %}
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Student Full Name</label>
+                <input type="text" name="full_name" placeholder="e.g. Rahim Ahmed" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none" required>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Student ID Number</label>
+                <input type="text" name="student_id" placeholder="201002014" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none font-mono" required>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Email Address</label>
+                <input type="email" name="email" placeholder="rahim.student@iubat.edu" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none" required>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Batch / Semester</label>
+                <input type="text" name="batch" value="Spring 2026 (Batch 45)" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Department Assignment</label>
+                <select name="department" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <option value="CSE" selected>Computer Science & Engineering (CSE)</option>
+                    <option value="EEE">Electrical & Electronic Engineering (EEE)</option>
+                    <option value="BBA">Business Administration (BBA)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-3">
+            <a href="{% url 'exam_controller_dashboard' %}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl">Cancel</a>
+            <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2">
+                <i data-lucide="check" class="w-4 h-4"></i> Enroll Student Account
+            </button>
+        </div>
+    </form>
+
+</div>
+{% endblock %}

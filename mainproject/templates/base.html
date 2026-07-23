@@ -1,0 +1,338 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-full font-sans antialiased dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- SEO & Metadata -->
+    <title>{% block title %}IntelliGrade - AI Examination Evaluation Platform{% endblock %}</title>
+    <meta name="description" content="IntelliGrade is an AI-assisted examination evaluation system empowering instructors with intelligent rubric-based grading.">
+    
+    <!-- Inline Theme Script to Prevent Flash -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        },
+                        accent: {
+                            cyan: '#06b6d4',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            rose: '#f43f5e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-panel: rgba(255, 255, 255, 0.85);
+            --bg-card: rgba(255, 255, 255, 0.95);
+            --border-card: rgba(226, 232, 240, 0.9);
+            --border-hover: rgba(99, 102, 241, 0.4);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --bg-nav-pill: rgba(241, 245, 249, 0.9);
+            --border-nav-pill: #e2e8f0;
+            --bg-table-head: #f1f5f9;
+            --bg-table-row: #ffffff;
+            --bg-input: #ffffff;
+            --border-input: #cbd5e1;
+            --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 10px rgba(0,0,0,0.02);
+        }
+
+        html.dark {
+            --bg-main: #030712;
+            --bg-panel: rgba(15, 23, 42, 0.8);
+            --bg-card: rgba(30, 41, 59, 0.6);
+            --border-card: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(99, 102, 241, 0.4);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --bg-nav-pill: rgba(15, 23, 42, 0.8);
+            --border-nav-pill: rgba(51, 65, 85, 0.8);
+            --bg-table-head: rgba(15, 23, 42, 0.9);
+            --bg-table-row: rgba(30, 41, 59, 0.4);
+            --bg-input: #0f172a;
+            --border-input: #334155;
+            --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.3), 0 0 20px rgba(99, 102, 241, 0.05);
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .glass-panel {
+            background: var(--bg-panel);
+            backdrop-filter: blur(16px);
+            border-color: var(--border-card);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-card);
+            box-shadow: var(--shadow-card);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glass-card:hover {
+            border-color: var(--border-hover);
+        }
+
+        .theme-text-primary { color: var(--text-primary) !important; }
+        .theme-text-secondary { color: var(--text-secondary) !important; }
+        .theme-text-muted { color: var(--text-muted) !important; }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Wave Theme Toggle Button Styles */
+        @keyframes themeWave {
+            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6); }
+            70% { box-shadow: 0 0 0 18px rgba(99, 102, 241, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        }
+
+        .theme-wave-btn {
+            animation: themeWave 3s infinite;
+        }
+        .theme-wave-btn:hover {
+            animation: none;
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.6);
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+        ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full flex flex-col selection:bg-brand-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-200 dark:border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                
+                <!-- Logo & Brand -->
+                <div class="flex items-center gap-3">
+                    <a href="{% url 'landing_page' %}" class="flex items-center gap-2.5 group">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-400 p-0.5 shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform duration-200">
+                            <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+                                <i data-lucide="sparkles" class="w-5 h-5 text-brand-400"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-xl font-bold tracking-tight theme-text-primary flex items-center gap-1.5">
+                                Intelli<span class="gradient-text">Grade</span>
+                            </span>
+                            <span class="text-[10px] tracking-wider uppercase font-semibold theme-text-muted block -mt-1">AI Evaluation Engine</span>
+                        </div>
+                    </a>
+                </div>
+
+                <!-- Central Navigation Links -->
+                <nav class="hidden md:flex items-center gap-1 p-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-900/80">
+                    <a href="{% url 'landing_page' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="home" class="w-3.5 h-3.5"></i> Home
+                    </a>
+                    <a href="{% url 'teacher_dashboard' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="award" class="w-3.5 h-3.5 text-brand-500"></i> Teacher
+                    </a>
+                    <a href="{% url 'student_dashboard' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="user-check" class="w-3.5 h-3.5 text-emerald-500"></i> Student
+                    </a>
+                    <a href="{% url 'dept_head_dashboard' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-cyan-500"></i> Dept Head
+                    </a>
+                    <a href="{% url 'exam_controller_login' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-500"></i> Exam Controller
+                    </a>
+                </nav>
+
+                <!-- Right Actions & Quick Navigation -->
+                <div class="flex items-center gap-3">
+
+                    <!-- User Profile & Sign Out Dropdown -->
+                    {% if request.user.is_authenticated %}
+                    <div class="relative group pl-2 border-l border-slate-300 dark:border-slate-800">
+                        <button type="button" class="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white flex items-center justify-center text-xs font-extrabold shadow-sm">
+                                {{ request.user.username|slice:":2"|upper }}
+                            </div>
+                            <div class="hidden md:block text-left">
+                                <span class="block text-xs font-bold theme-text-primary leading-tight">{{ request.user.get_full_name|default:request.user.username }}</span>
+                                <span class="block text-[10px] text-emerald-500 dark:text-emerald-400 font-semibold leading-tight flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    {% if request.user.is_superuser %}Admin / Controller{% else %}Active User{% endif %}
+                                </span>
+                            </div>
+                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 theme-text-muted group-hover:rotate-180 transition-transform"></i>
+                        </button>
+                        
+                        <!-- Dropdown Menu -->
+                        <div class="absolute right-0 top-full mt-2 w-52 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800">
+                            <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 mb-1">
+                                <span class="block text-xs font-bold theme-text-primary">{{ request.user.username }}</span>
+                                <span class="block text-[10px] theme-text-muted truncate">{{ request.user.email|default:"Authenticated User" }}</span>
+                            </div>
+                            <a href="{% url 'exam_controller_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <i data-lucide="layout-dashboard" class="w-4 h-4 text-brand-500"></i> Controller Portal
+                            </a>
+                            <div class="border-t border-slate-200 dark:border-slate-800 my-1"></div>
+                            <a href="{% url 'logout' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                                <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+                            </a>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="relative group pl-2 border-l border-slate-300 dark:border-slate-800">
+                        <button type="button" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                            <i data-lucide="log-in" class="w-3.5 h-3.5"></i> Sign In
+                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 group-hover:rotate-180 transition-transform"></i>
+                        </button>
+
+                        <!-- Role Sign In Selection Dropdown -->
+                        <div class="absolute right-0 top-full mt-2 w-56 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800 space-y-1">
+                            <div class="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider theme-text-muted border-b border-slate-200 dark:border-slate-800">
+                                Select Portal Sign In
+                            </div>
+                            <a href="{% url 'exam_controller_login' %}" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl theme-text-primary hover:bg-amber-500/10 hover:text-amber-500 transition-colors">
+                                <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i> Exam Controller Sign In
+                            </a>
+                            <a href="{% url 'teacher_dashboard' %}" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-brand-500/10 hover:text-brand-500 transition-colors">
+                                <i data-lucide="award" class="w-4 h-4 text-brand-500"></i> Faculty / Examiner Portal
+                            </a>
+                            <a href="{% url 'student_dashboard' %}" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors">
+                                <i data-lucide="user-check" class="w-4 h-4 text-emerald-500"></i> Student Portal
+                            </a>
+                            <a href="{% url 'dept_head_dashboard' %}" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-cyan-500/10 hover:text-cyan-500 transition-colors">
+                                <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-500"></i> Dept Head Portal
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <!-- Global Toast / Alert Messages -->
+    {% if messages %}
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        {% for message in messages %}
+        <div class="p-4 rounded-xl border flex items-center justify-between gap-3 text-sm {% if message.tags == 'error' %}bg-rose-900/20 dark:bg-rose-950/80 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-200{% elif message.tags == 'success' %}bg-emerald-900/20 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200{% else %}bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 theme-text-primary{% endif %}">
+            <div class="flex items-center gap-2.5">
+                <i data-lucide="info" class="w-4 h-4"></i>
+                <span>{{ message }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- App Footer -->
+    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800/80 glass-panel py-6 text-xs theme-text-muted">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2">
+                <i data-lucide="shield" class="w-4 h-4 text-brand-500"></i>
+                <span>IntelliGrade Evaluation Platform &copy; 2026. Software Engineering Practicum - IUBAT.</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Floating Wave Theme Switcher Button (Lower Right Corner) -->
+    <button id="themeToggleBtn" onclick="toggleTheme()" type="button" title="Switch Theme (Dark / Light)" class="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-r from-brand-600 via-brand-500 to-cyan-500 hover:from-brand-500 hover:to-cyan-400 text-white shadow-2xl theme-wave-btn flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 border-2 border-white/30 focus:outline-none">
+        <span id="themeBtnIcon">
+            <i data-lucide="sun" class="w-5 h-5 text-amber-300 animate-spin-slow"></i>
+        </span>
+    </button>
+
+    <!-- Initialize Lucide Icons & Theme Controller Script -->
+    <script>
+        lucide.createIcons();
+
+        function updateThemeIcon() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const iconContainer = document.getElementById('themeBtnIcon');
+            if (isDark) {
+                iconContainer.innerHTML = '<i data-lucide="sun" class="w-5 h-5 text-amber-300"></i>';
+            } else {
+                iconContainer.innerHTML = '<i data-lucide="moon" class="w-5 h-5 text-slate-100"></i>';
+            }
+            lucide.createIcons();
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.contains('dark');
+            if (isDark) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            updateThemeIcon();
+        }
+
+        // Ensure icon is synced on load
+        document.addEventListener('DOMContentLoaded', updateThemeIcon);
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
