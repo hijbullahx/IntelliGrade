@@ -105,8 +105,7 @@ def student_login(request):
 def student_register(request):
     """Self-registration view for Students."""
     if request.method == 'POST':
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip()
         student_id = request.POST.get('student_id', '').strip()
         password = request.POST.get('password', '')
@@ -120,8 +119,8 @@ def student_register(request):
             username=student_id,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name
+            first_name=full_name,
+            last_name=''
         )
 
         dept_obj = Department.objects.filter(code=dept_code).first()
@@ -134,7 +133,7 @@ def student_register(request):
             }
         )
 
-        messages.success(request, f"Registration submitted for Student '{first_name} {last_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
+        messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
         return redirect('student_login')
 
     departments = Department.objects.all()
@@ -286,8 +285,7 @@ def admin_dashboard(request):
 def add_faculty(request):
     """Interface for Exam Controller to add new Faculty members with credentials."""
     if request.method == 'POST':
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip()
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -301,8 +299,8 @@ def add_faculty(request):
             username=username,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name
+            first_name=full_name,
+            last_name=''
         )
 
         dept_obj = Department.objects.filter(code=dept_code).first()
@@ -314,7 +312,7 @@ def add_faculty(request):
             }
         )
 
-        messages.success(request, f"Faculty member '{first_name} {last_name}' ({username}) registered successfully! Credentials activated.")
+        messages.success(request, f"Faculty member '{full_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
 
     departments = Department.objects.all()
@@ -324,8 +322,7 @@ def add_faculty(request):
 def add_student(request):
     """Interface for Exam Controller to register new Students with credentials & simulated email."""
     if request.method == 'POST':
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip()
         student_id = request.POST.get('student_id', '').strip()
         password = request.POST.get('password', '')
@@ -339,8 +336,8 @@ def add_student(request):
             username=student_id,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name
+            first_name=full_name,
+            last_name=''
         )
 
         dept_obj = Department.objects.filter(code=dept_code).first()
@@ -357,9 +354,9 @@ def add_student(request):
         print(f"\n[EMAIL SYSTEM SIMULATION]")
         print(f"To: {email}")
         print(f"Subject: Welcome to IntelliGrade - Student Access Credentials")
-        print(f"Body: Hello {first_name} {last_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
+        print(f"Body: Hello {full_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
 
-        messages.success(request, f"Student '{first_name} {last_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
+        messages.success(request, f"Student '{full_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
 
     departments = Department.objects.all()
@@ -413,8 +410,7 @@ def rechecks_list(request):
 def add_dept_head(request):
     """Interface for Exam Controller to add new Department Heads with credentials."""
     if request.method == 'POST':
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip()
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -428,8 +424,8 @@ def add_dept_head(request):
             username=username,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name
+            first_name=full_name,
+            last_name=''
         )
 
         dept_obj = Department.objects.filter(code=dept_code).first()
@@ -441,7 +437,7 @@ def add_dept_head(request):
             }
         )
 
-        messages.success(request, f"Department Head '{first_name} {last_name}' ({username}) registered successfully! Credentials activated.")
+        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
 
     departments = Department.objects.all()

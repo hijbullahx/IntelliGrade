@@ -23,14 +23,9 @@
         {% csrf_token %}
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">First Name</label>
-                <input type="text" name="first_name" placeholder="e.g. Prof. Dr. Mahfuz" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none" required>
-            </div>
-
-            <div>
-                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Last Name</label>
-                <input type="text" name="last_name" placeholder="e.g. Rahman" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none" required>
+            <div class="md:col-span-2">
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Full Name</label>
+                <input type="text" name="full_name" placeholder="e.g. Prof. Dr. Mahfuz Rahman" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none" required>
             </div>
 
             <div>
