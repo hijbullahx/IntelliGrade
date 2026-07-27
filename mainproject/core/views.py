@@ -426,6 +426,51 @@ def toggle_department_status(request, dept_id):
     return redirect('exam_controller_dashboard')
 
 
+def toggle_user_status(request, user_id):
+    """Toggles active/blocked status for a User account (Student, Faculty, or Dept Head)."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    target_user.is_active = not target_user.is_active
+    target_user.save()
+
+    profile = getattr(target_user, 'profile', None)
+    if profile and profile.role == Profile.Role.STUDENT:
+        profile.is_approved = target_user.is_active
+        profile.save()
+
+    status_str = "Active / Approved" if target_user.is_active else "Blocked / Deactivated"
+    messages.success(request, f"User account '{target_user.get_full_name() or target_user.username}' status updated to {status_str}.")
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    return redirect('exam_controller_dashboard')
+
+
+def toggle_exam_status(request, exam_id):
+    """Toggles status of an Examination between PUBLISHED (Active) and DRAFT (Frozen)."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    if exam.status == Examination.Status.PUBLISHED:
+        exam.status = Examination.Status.DRAFT
+    else:
+        exam.status = Examination.Status.PUBLISHED
+    exam.save()
+
+    messages.success(request, f"Examination '{exam.title}' status updated to {exam.status}.")
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    return redirect('exams_list')
+
+
 def delete_department(request, dept_id):
     """Deletes a Department from the system."""
     if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):

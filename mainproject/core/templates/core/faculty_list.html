@@ -33,6 +33,7 @@
                     <th class="px-5 py-4">Employee ID / Username</th>
                     <th class="px-5 py-4">Email Address</th>
                     <th class="px-5 py-4">Department</th>
+                    <th class="px-5 py-4">Status</th>
                     <th class="px-5 py-4 text-right">Actions</th>
                 </tr>
             </thead>
@@ -52,6 +53,19 @@
                         <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 theme-text-primary text-[11px] font-semibold">{{ prof.department.name }} ({{ prof.department.code }})</span>
                         {% else %}
                         <span class="text-slate-400 italic">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-4">
+                        {% if prof.user.is_active %}
+                        <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Freeze / Deactivate Faculty Member" class="px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold text-[11px] inline-flex items-center gap-1 transition-all group">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Active <i data-lucide="power" class="w-3 h-3 ml-0.5 opacity-60 group-hover:opacity-100"></i>
+                        </a>
+                        {% else %}
+                        <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Activate Faculty Member" class="px-2.5 py-1 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-bold text-[11px] inline-flex items-center gap-1 transition-all group">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            Blocked / Frozen <i data-lucide="power" class="w-3 h-3 ml-0.5 opacity-60 group-hover:opacity-100"></i>
+                        </a>
                         {% endif %}
                     </td>
                     <td class="px-5 py-4 text-right flex items-center justify-end gap-2">

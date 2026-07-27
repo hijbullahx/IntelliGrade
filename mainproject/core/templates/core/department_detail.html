@@ -127,7 +127,7 @@
                         <th class="px-4 py-3">Full Name</th>
                         <th class="px-4 py-3">Employee ID / Username</th>
                         <th class="px-4 py-3">Email Address</th>
-                        <th class="px-4 py-3">Role</th>
+                        <th class="px-4 py-3">Status</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary">
@@ -136,7 +136,17 @@
                         <td class="px-4 py-3 font-bold theme-text-primary">{{ prof.user.get_full_name|default:prof.user.username }}</td>
                         <td class="px-4 py-3 font-mono text-brand-600 dark:text-brand-400 font-bold">{{ prof.user.username }}</td>
                         <td class="px-4 py-3">{{ prof.user.email }}</td>
-                        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-500 text-[10px] font-bold">Faculty Member</span></td>
+                        <td class="px-4 py-3">
+                            {% if prof.user.is_active %}
+                            <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Freeze / Deactivate Faculty Member" class="px-2 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                            </a>
+                            {% else %}
+                            <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Activate Faculty Member" class="px-2 py-0.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Blocked / Frozen
+                            </a>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -174,10 +184,14 @@
                         <td class="px-4 py-3 font-mono text-emerald-600 dark:text-emerald-400 font-bold">{{ prof.user.username }}</td>
                         <td class="px-4 py-3">{{ prof.user.email }}</td>
                         <td class="px-4 py-3">
-                            {% if prof.is_approved %}
-                            <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">Approved</span>
+                            {% if prof.user.is_active and prof.is_approved %}
+                            <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Freeze / Deactivate Student" class="px-2 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Approved / Active
+                            </a>
                             {% else %}
-                            <span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-bold">Pending Approval</span>
+                            <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Approve & Activate Student" class="px-2 py-0.5 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[10px] font-bold inline-flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Blocked / Unapproved
+                            </a>
                             {% endif %}
                         </td>
                     </tr>
@@ -233,8 +247,14 @@
                         <span class="text-xs font-bold theme-text-primary">{{ exam.title }}</span>
                         <span class="block text-[10px] theme-text-muted mt-0.5">Course: {{ exam.course.code }} &bull; Max Marks: {{ exam.total_marks }}</span>
                     </div>
-                    <span class="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold">{{ exam.status }}</span>
+                    {% if exam.status == 'PUBLISHED' %}
+                    <a href="{% url 'toggle_exam_status' exam.id %}" title="Click to Freeze / Revert to Draft" class="px-2 py-0.5 rounded-full bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/20 text-[10px] font-bold">Published (Active)</a>
+                    {% else %}
+                    <a href="{% url 'toggle_exam_status' exam.id %}" title="Click to Publish Examination" class="px-2 py-0.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold">Draft (Frozen)</a>
+                    {% endif %}
                 </div>
+                {% endfor %}
+            </div>
                 {% endfor %}
             </div>
             {% else %}

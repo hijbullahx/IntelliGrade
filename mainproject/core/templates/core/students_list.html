@@ -56,10 +56,16 @@
                         {% endif %}
                     </td>
                     <td class="px-5 py-4">
-                        {% if prof.is_approved %}
-                        <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold">Approved</span>
+                        {% if prof.user.is_active and prof.is_approved %}
+                        <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Freeze / Deactivate Student" class="px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold text-[11px] inline-flex items-center gap-1 transition-all group">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Active / Approved <i data-lucide="power" class="w-3 h-3 ml-0.5 opacity-60 group-hover:opacity-100"></i>
+                        </a>
                         {% else %}
-                        <span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">Pending Approval</span>
+                        <a href="{% url 'toggle_user_status' prof.user.id %}" title="Click to Approve & Activate Student" class="px-2.5 py-1 rounded-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-bold text-[11px] inline-flex items-center gap-1 transition-all group">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            Blocked / Unapproved <i data-lucide="power" class="w-3 h-3 ml-0.5 opacity-60 group-hover:opacity-100"></i>
+                        </a>
                         {% endif %}
                     </td>
                     <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
