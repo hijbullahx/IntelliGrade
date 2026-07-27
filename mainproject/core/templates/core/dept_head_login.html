@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+
+{% block title %}Department Head Sign In | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto py-12">
+    
+    <!-- Login Card -->
+    <div class="glass-card p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-600 via-cyan-500 to-brand-500 p-0.5 mx-auto shadow-lg shadow-cyan-500/20 flex items-center justify-center">
+                <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                    <i data-lucide="bar-chart-3" class="w-7 h-7 text-cyan-400"></i>
+                </div>
+            </div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Department Head Portal</h1>
+            <p class="theme-text-muted text-xs">Sign in with your Department Head credentials created by the Chief Exam Controller.</p>
+        </div>
+
+        <!-- Form -->
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Username / Head ID</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                        <i data-lucide="user" class="w-4 h-4"></i>
+                    </span>
+                    <input type="text" name="username" placeholder="e.g. head_cse" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none" required>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Password</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                        <i data-lucide="lock" class="w-4 h-4"></i>
+                    </span>
+                    <input type="password" name="password" placeholder="••••••••••••" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none" required>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs pt-1">
+                <label class="flex items-center gap-2 theme-text-muted cursor-pointer">
+                    <input type="checkbox" checked class="rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500"> Remember Session
+                </label>
+                <a href="#" class="text-cyan-600 dark:text-cyan-400 hover:underline">Forgot Key?</a>
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-brand-600 hover:from-cyan-500 hover:to-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-cyan-600/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i> Sign In to Dept Head Portal
+            </button>
+        </form>
+
+        <div class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-[11px] text-cyan-700 dark:text-cyan-300 flex items-center gap-2.5">
+            <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+            <span>Only Department Head accounts created via the Chief Exam Controller panel can sign in here.</span>
+        </div>
+
+        <div class="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
+            <a href="{% url 'exam_controller_login' %}" class="text-xs font-semibold theme-text-secondary hover:text-amber-500 transition-colors">
+                Are you the Chief Exam Controller? Sign in to Controller Portal &rarr;
+            </a>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

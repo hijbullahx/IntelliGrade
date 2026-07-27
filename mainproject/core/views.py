@@ -18,12 +18,23 @@ def teacher_dashboard(request):
         messages.warning(request, "Please sign in to access the Faculty Workspace.")
         return redirect('teacher_login')
 
-    # Redirect Exam Controller / Admin away to their own control portal
+    # Redirect Chief Exam Controller / Admin away to their own control portal
     if request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN):
         messages.info(request, "Chief Exam Controllers are managed via the Exam Controller Portal.")
         return redirect('exam_controller_dashboard')
 
     profile = getattr(request.user, 'profile', None)
+
+    # Reject Student accounts attempting to enter Faculty Workspace
+    if profile and profile.role == Profile.Role.STUDENT:
+        messages.error(request, "Access Denied: The Faculty Workspace is restricted to instructors and examiners.")
+        return redirect('student_dashboard')
+
+    # Redirect Dept Head accounts to their own portal
+    if profile and profile.role == Profile.Role.DEPARTMENT_HEAD:
+        messages.info(request, "Department Heads are managed via the Department Head Portal.")
+        return redirect('dept_head_dashboard')
+
     teacher_name = request.user.get_full_name() or request.user.username
     dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
 
@@ -31,9 +42,9 @@ def teacher_dashboard(request):
     pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
     stats = {
-        'total_exams': Examination.objects.count() or 12,
-        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count() or 8,
-        'total_scripts': AnswerScript.objects.count() or 145,
+        'total_exams': Examination.objects.count(),
+        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count(),
+        'total_scripts': AnswerScript.objects.count(),
         'avg_confidence': '94.2%',
     }
     
@@ -49,20 +60,95 @@ def teacher_dashboard(request):
 
 def student_dashboard(request):
     """Dashboard view tailored for Students."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Student Portal.")
+        return redirect('student_login')
+
+    profile = getattr(request.user, 'profile', None)
+    if not profile or profile.role != Profile.Role.STUDENT:
+        messages.error(request, "Access Denied: The Student Portal is restricted to enrolled students.")
+        return redirect('landing_page')
+
+    if not profile.is_approved:
+        messages.warning(request, "Your self-registration request is pending approval by the Chief Exam Controller.")
+        auth_logout(request)
+        return redirect('student_login')
+
     evaluations = Evaluation.objects.select_related('segment__script', 'segment__question').all()[:5]
-    
     stats = {
-        'enrolled_courses': Course.objects.count() or 4,
-        'completed_exams': 3,
-        'gpa_avg': '3.85',
-        'rank': 'Top 5%',
+        'student_name': request.user.get_full_name() or request.user.username,
+        'student_id': request.user.username,
+        'dept_name': profile.department.name if profile.department else "Academic Faculty Department",
+        'enrolled_courses': Course.objects.filter(department=profile.department).count() if profile.department else Course.objects.count(),
+        'completed_exams': 0,
+        'gpa_avg': 'N/A',
+        'rank': 'Enrolled',
     }
-    
-    context = {
-        'evaluations': evaluations,
-        'stats': stats,
-    }
-    return render(request, 'core/dashboard_student.html', context)
+    return render(request, 'core/dashboard_student.html', {'evaluations': evaluations, 'stats': stats})
+
+
+def student_login(request):
+    """Login view dedicated for Students."""
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            profile = getattr(user, 'profile', None)
+            if not profile or profile.role != Profile.Role.STUDENT:
+                messages.error(request, "Access Denied: Only Student accounts can sign in to the Student Portal.")
+                return render(request, 'core/student_login.html')
+
+            if not profile.is_approved:
+                messages.warning(request, f"Your registration request (Student ID: {username}) is pending approval by the Chief Exam Controller.")
+                return render(request, 'core/student_login.html')
+
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Student Portal.")
+            return redirect('student_dashboard')
+        else:
+            messages.error(request, "Invalid Student ID or Password. Please try again or contact your Chief Exam Controller.")
+
+    return render(request, 'core/student_login.html')
+
+
+def student_register(request):
+    """Self-registration view for Students."""
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        student_id = request.POST.get('student_id', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=student_id).exists():
+            messages.error(request, f"Student ID / Username '{student_id}' is already registered.")
+            return redirect('student_register')
+
+        user = User.objects.create_user(
+            username=student_id,
+            email=email,
+            password=password,
+            first_name=full_name,
+            last_name=''
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.STUDENT,
+                'department': dept_obj,
+                'is_approved': False
+            }
+        )
+
+        messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
+        return redirect('student_login')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/student_register.html', {'departments': departments})
 
 
 def exam_controller_login(request):
@@ -105,13 +191,16 @@ def exam_controller_dashboard(request):
         return redirect('teacher_dashboard')
 
     stats = {
-        'total_users': Profile.objects.count() or 340,
+        'total_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=True).count(),
+        'pending_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=False).count(),
+        'total_faculty': Profile.objects.filter(role=Profile.Role.TEACHER).count(),
+        'total_dept_heads': Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).count(),
         'total_colleges': College.objects.count(),
         'total_schools': School.objects.count(),
-        'total_departments': Department.objects.count() or 6,
-        'total_courses': Course.objects.count() or 24,
-        'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
-        'pending_rechecks': 5,
+        'total_departments': Department.objects.filter(is_active=True).count(),
+        'total_courses': Course.objects.count(),
+        'active_exams': Examination.objects.count(),
+        'pending_rechecks': 0,
     }
     
     colleges = College.objects.prefetch_related('schools__departments', 'departments').all()
@@ -210,8 +299,7 @@ def admin_dashboard(request):
 def add_faculty(request):
     """Interface for Exam Controller to add new Faculty members with credentials."""
     if request.method == 'POST':
-        first_name = request.POST.get('first_name', '').strip()
-        last_name = request.POST.get('last_name', '').strip()
+        full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip()
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -225,11 +313,11 @@ def add_faculty(request):
             username=username,
             email=email,
             password=password,
-            first_name=first_name,
-            last_name=last_name
+            first_name=full_name,
+            last_name=''
         )
 
-        dept_obj = Department.objects.filter(code=dept_code).first()
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
         Profile.objects.update_or_create(
             user=user,
             defaults={
@@ -238,22 +326,187 @@ def add_faculty(request):
             }
         )
 
-        messages.success(request, f"Faculty member '{first_name} {last_name}' ({username}) registered successfully! Credentials activated.")
+        messages.success(request, f"Faculty member '{full_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
 
-    departments = Department.objects.all()
+    departments = Department.objects.filter(is_active=True)
     return render(request, 'core/add_faculty.html', {'departments': departments})
 
 
 def add_student(request):
-    """Interface for Exam Controller to register new Students."""
+    """Interface for Exam Controller to register new Students with credentials & simulated email."""
     if request.method == 'POST':
-        messages.success(request, "Student profile registered successfully!")
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        student_id = request.POST.get('student_id', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=student_id).exists():
+            messages.error(request, f"Student ID / Username '{student_id}' already exists.")
+            return redirect('add_student')
+
+        user = User.objects.create_user(
+            username=student_id,
+            email=email,
+            password=password,
+            first_name=full_name,
+            last_name=''
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.STUDENT,
+                'department': dept_obj,
+                'is_approved': True
+            }
+        )
+
+        # Console Simulation of Sending Welcome Email with Credentials
+        print(f"\n[EMAIL SYSTEM SIMULATION]")
+        print(f"To: {email}")
+        print(f"Subject: Welcome to IntelliGrade - Student Access Credentials")
+        print(f"Body: Hello {full_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
+
+        messages.success(request, f"Student '{full_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/add_student.html', {'departments': departments})
+
+
+def pending_students(request):
+    """Interface for Exam Controller to review self-registered student requests."""
+    pending_profiles = Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=False).select_related('user', 'department')
+    return render(request, 'core/pending_students.html', {'pending_profiles': pending_profiles})
+
+
+def approve_student(request, profile_id):
+    """Approves a pending self-registered student and sends simulated welcome email."""
+    profile = Profile.objects.filter(id=profile_id).first()
+    if profile:
+        profile.is_approved = True
+        profile.save()
+
+        # Console Simulation of Sending Approval Email
+        print(f"\n[EMAIL SYSTEM SIMULATION]")
+        print(f"To: {profile.user.email}")
+        print(f"Subject: Account Approved - IntelliGrade Student Portal Access")
+        print(f"Body: Hello {profile.user.first_name},\nYour self-registration request for Student ID {profile.user.username} has been approved by the Chief Exam Controller.\nYou can now log in at http://127.0.0.1:8000/student/login/\n")
+
+        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated!")
+    return redirect('pending_students')
+
+
+def reject_student(request, profile_id):
+    """Rejects and removes a pending student registration request."""
+    profile = Profile.objects.filter(id=profile_id).first()
+    if profile:
+        user = profile.user
+        username = user.username
+        user.delete()
+        messages.warning(request, f"Registration request for Student ID '{username}' was rejected and removed.")
+    return redirect('pending_students')
+
+
+def toggle_department_status(request, dept_id):
+    """Toggles active/inactive status of a Department."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Only Chief Exam Controller can modify department status.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
+    department.is_active = not department.is_active
+    department.save()
+
+    status_str = "Active" if department.is_active else "Inactive"
+    messages.success(request, f"Department '{department.name}' ({department.code}) status updated to {status_str}.")
+    return redirect('exam_controller_dashboard')
+
+
+def toggle_user_status(request, user_id):
+    """Toggles active/blocked status for a User account (Student, Faculty, or Dept Head)."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    target_user.is_active = not target_user.is_active
+    target_user.save()
+
+    profile = getattr(target_user, 'profile', None)
+    if profile and profile.role == Profile.Role.STUDENT:
+        profile.is_approved = target_user.is_active
+        profile.save()
+
+    status_str = "Active / Approved" if target_user.is_active else "Blocked / Deactivated"
+    messages.success(request, f"User account '{target_user.get_full_name() or target_user.username}' status updated to {status_str}.")
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    return redirect('exam_controller_dashboard')
+
+
+def toggle_exam_status(request, exam_id):
+    """Toggles status of an Examination between PUBLISHED (Active) and DRAFT (Frozen)."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    if exam.status == Examination.Status.PUBLISHED:
+        exam.status = Examination.Status.DRAFT
+    else:
+        exam.status = Examination.Status.PUBLISHED
+    exam.save()
+
+    messages.success(request, f"Examination '{exam.title}' status updated to {exam.status}.")
+
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    return redirect('exams_list')
+
+
+def delete_department(request, dept_id):
+    """Deletes a Department from the system."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Only Chief Exam Controller can delete departments.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
+    dept_name = department.name
+    department.delete()
+    messages.success(request, f"Department '{dept_name}' deleted successfully!")
+    return redirect('exam_controller_dashboard')
+
+
+def department_detail(request, dept_id):
+    """Comprehensive detail view showing all Faculty, Head, Students, Courses & Exams for a Department."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to view department details.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
     
-    departments = Department.objects.all()
-    courses = Course.objects.all()
-    return render(request, 'core/add_student.html', {'departments': departments, 'courses': courses})
+    dept_head_profile = Profile.objects.filter(department=department, role=Profile.Role.DEPARTMENT_HEAD).select_related('user').first()
+    faculty_profiles = Profile.objects.filter(department=department, role=Profile.Role.TEACHER).select_related('user')
+    student_profiles = Profile.objects.filter(department=department, role=Profile.Role.STUDENT).select_related('user')
+    courses = Course.objects.filter(department=department)
+    exams = Examination.objects.filter(course__department=department).select_related('course')
+
+    context = {
+        'department': department,
+        'dept_head_profile': dept_head_profile,
+        'faculty_profiles': faculty_profiles,
+        'student_profiles': student_profiles,
+        'courses': courses,
+        'exams': exams,
+    }
+    return render(request, 'core/department_detail.html', context)
 
 
 def rechecks_list(request):
@@ -266,17 +519,86 @@ def rechecks_list(request):
     return render(request, 'core/rechecks_list.html', {'recheck_tickets': recheck_tickets})
 
 
+def add_dept_head(request):
+    """Interface for Exam Controller to add new Department Heads with credentials."""
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"User with ID / Username '{username}' already exists.")
+            return redirect('add_dept_head')
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=full_name,
+            last_name=''
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.DEPARTMENT_HEAD,
+                'department': dept_obj
+            }
+        )
+
+        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated.")
+        return redirect('exam_controller_dashboard')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/add_dept_head.html', {'departments': departments})
+
+
+def dept_head_login(request):
+    """Login view dedicated for Department Heads."""
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            profile = getattr(user, 'profile', None)
+            if not profile or profile.role != Profile.Role.DEPARTMENT_HEAD:
+                messages.error(request, "Access Denied: Only Department Head accounts created via the Chief Exam Controller panel can sign in here.")
+                return render(request, 'core/dept_head_login.html')
+
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Department Head Portal.")
+            return redirect('dept_head_dashboard')
+        else:
+            messages.error(request, "Invalid Username or Password. Please try again or contact your Chief Exam Controller.")
+
+    return render(request, 'core/dept_head_login.html')
+
+
 def dept_head_dashboard(request):
     """Dashboard view for Department Heads."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Department Head Portal.")
+        return redirect('dept_head_login')
+
+    profile = getattr(request.user, 'profile', None)
+    if not profile or profile.role != Profile.Role.DEPARTMENT_HEAD:
+        messages.error(request, "Access Denied: The Department Head Portal is restricted to assigned Department Heads.")
+        return redirect('landing_page')
+
+    dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
     stats = {
-        'dept_name': 'Computer Science & Engineering',
-        'faculty_count': 18,
-        'active_courses': 14,
-        'pass_rate': '91.8%',
-        'ai_approval_rate': '96.4%',
+        'dept_name': dept_name,
+        'faculty_count': Profile.objects.filter(role=Profile.Role.TEACHER, department=profile.department).count() if (profile and profile.department) else 0,
+        'active_courses': Course.objects.filter(department=profile.department).count() if (profile and profile.department) else 0,
+        'pass_rate': 'N/A',
+        'ai_approval_rate': 'N/A',
     }
-    courses = Course.objects.all()[:5]
-    return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses})
+    courses = Course.objects.filter(department=profile.department)[:5] if (profile and profile.department) else Course.objects.all()[:5]
+    return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
 
 
 def exam_create(request):
@@ -326,3 +648,308 @@ def grading_workbench(request, script_id=1):
         return redirect('teacher_dashboard')
 
     return render(request, 'core/grading_workbench.html', context)
+
+
+# ==========================================
+# Student & Faculty List / Edit / Delete Views
+# ==========================================
+
+def students_list(request):
+    """View listing all enrolled/registered Students for the Exam Controller."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    student_profiles = Profile.objects.filter(role=Profile.Role.STUDENT).select_related('user', 'department')
+    return render(request, 'core/students_list.html', {'student_profiles': student_profiles})
+
+
+def edit_student(request, user_id):
+    """Interface to edit student information."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    profile = get_object_or_404(Profile, user=target_user, role=Profile.Role.STUDENT)
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        dept_code = request.POST.get('department', '').strip()
+        password = request.POST.get('password', '').strip()
+
+        target_user.first_name = full_name
+        target_user.email = email
+        if password:
+            target_user.set_password(password)
+        target_user.save()
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        profile.department = dept_obj
+        profile.save()
+
+        messages.success(request, f"Student '{full_name}' ({target_user.username}) updated successfully!")
+        return redirect('students_list')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/edit_student.html', {
+        'target_user': target_user,
+        'profile': profile,
+        'departments': departments,
+    })
+
+
+def delete_student(request, user_id):
+    """Deletes a student account."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    username = target_user.username
+    target_user.delete()
+    messages.success(request, f"Student account '{username}' deleted successfully.")
+    return redirect('students_list')
+
+
+def faculty_list(request):
+    """View listing all registered Faculty Teachers for the Exam Controller."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    faculty_profiles = Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department')
+    return render(request, 'core/faculty_list.html', {'faculty_profiles': faculty_profiles})
+
+
+def edit_faculty(request, user_id):
+    """Interface to edit faculty member information."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    profile = get_object_or_404(Profile, user=target_user, role=Profile.Role.TEACHER)
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        dept_code = request.POST.get('department', '').strip()
+        password = request.POST.get('password', '').strip()
+
+        target_user.first_name = full_name
+        target_user.email = email
+        if password:
+            target_user.set_password(password)
+        target_user.save()
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        profile.department = dept_obj
+        profile.save()
+
+        messages.success(request, f"Faculty member '{full_name}' ({target_user.username}) updated successfully!")
+        return redirect('faculty_list')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/edit_faculty.html', {
+        'target_user': target_user,
+        'profile': profile,
+        'departments': departments,
+    })
+
+
+def delete_faculty(request, user_id):
+    """Deletes a faculty teacher account."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    username = target_user.username
+    target_user.delete()
+    messages.success(request, f"Faculty account '{username}' deleted successfully.")
+    return redirect('faculty_list')
+
+
+# ==========================================
+# Dept Heads, Courses & Exams Management Views
+# ==========================================
+
+def dept_heads_list(request):
+    """View listing all registered Department Heads for the Exam Controller."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    dept_head_profiles = Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).select_related('user', 'department')
+    return render(request, 'core/dept_heads_list.html', {'dept_head_profiles': dept_head_profiles})
+
+
+def edit_dept_head(request, user_id):
+    """Interface to edit Department Head information."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    profile = get_object_or_404(Profile, user=target_user, role=Profile.Role.DEPARTMENT_HEAD)
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        dept_code = request.POST.get('department', '').strip()
+        password = request.POST.get('password', '').strip()
+
+        target_user.first_name = full_name
+        target_user.email = email
+        if password:
+            target_user.set_password(password)
+        target_user.save()
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        profile.department = dept_obj
+        profile.save()
+
+        messages.success(request, f"Department Head '{full_name}' ({target_user.username}) updated successfully!")
+        return redirect('dept_heads_list')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/edit_dept_head.html', {
+        'target_user': target_user,
+        'profile': profile,
+        'departments': departments,
+    })
+
+
+def delete_dept_head(request, user_id):
+    """Deletes a Department Head account."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    target_user = get_object_or_404(User, id=user_id)
+    username = target_user.username
+    target_user.delete()
+    messages.success(request, f"Department Head account '{username}' deleted successfully.")
+    return redirect('dept_heads_list')
+
+
+def courses_list(request):
+    """View listing all registered Courses for the Exam Controller."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    courses = Course.objects.select_related('department').all()
+    return render(request, 'core/courses_list.html', {'courses': courses})
+
+
+def add_course(request):
+    """Interface to create a new Course module."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        code = request.POST.get('code', '').strip()
+        dept_code = request.POST.get('department', '').strip()
+
+        if Course.objects.filter(code=code).exists():
+            messages.error(request, f"Course code '{code}' already exists.")
+            return redirect('add_course')
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Course.objects.create(title=title, code=code, department=dept_obj)
+        messages.success(request, f"Course '{title}' ({code}) registered successfully!")
+        return redirect('courses_list')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/add_course.html', {'departments': departments})
+
+
+def edit_course(request, course_id):
+    """Interface to edit Course module info."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    course = get_object_or_404(Course, id=course_id)
+
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        code = request.POST.get('code', '').strip()
+        dept_code = request.POST.get('department', '').strip()
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        course.title = title
+        course.code = code
+        course.department = dept_obj
+        course.save()
+
+        messages.success(request, f"Course '{title}' ({code}) updated successfully!")
+        return redirect('courses_list')
+
+    departments = Department.objects.filter(is_active=True)
+    return render(request, 'core/edit_course.html', {'course': course, 'departments': departments})
+
+
+def delete_course(request, course_id):
+    """Deletes a Course module."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    course = get_object_or_404(Course, id=course_id)
+    code = course.code
+    course.delete()
+    messages.success(request, f"Course '{code}' deleted successfully.")
+    return redirect('courses_list')
+
+
+def exams_list(request):
+    """View listing all Examinations for the Exam Controller."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    exams = Examination.objects.select_related('course').all()
+    return render(request, 'core/exams_list.html', {'exams': exams})
+
+
+def edit_exam(request, exam_id):
+    """Interface to edit Examination setup."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        total_marks = request.POST.get('total_marks', 100)
+        status = request.POST.get('status', 'PUBLISHED')
+
+        exam.title = title
+        exam.total_marks = total_marks
+        exam.status = status
+        exam.save()
+
+        messages.success(request, f"Examination '{title}' updated successfully!")
+        return redirect('exams_list')
+
+    return render(request, 'core/edit_exam.html', {'exam': exam})
+
+
+def delete_exam(request, exam_id):
+    """Deletes an Examination."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied.")
+        return redirect('landing_page')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    title = exam.title
+    exam.delete()
+    messages.success(request, f"Examination '{title}' deleted successfully.")
+    return redirect('exams_list')

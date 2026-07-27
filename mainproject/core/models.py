@@ -12,6 +12,7 @@ class Profile(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.TEACHER)
     department = models.ForeignKey('Department', on_delete=models.SET_NULL, null=True, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
+    is_approved = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.user.get_full_name() or self.user.username} ({self.get_role_display()})"
@@ -44,6 +45,7 @@ class Department(models.Model):
     code = models.CharField(max_length=30, unique=True)
     school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
     college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
