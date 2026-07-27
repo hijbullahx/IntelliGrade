@@ -120,6 +120,20 @@
                 </div>
             </a>
 
+            <!-- 5. Pending Student Approvals -->
+            <a href="{% url 'pending_students' %}" class="glass-card p-5 rounded-2xl group hover:border-amber-500 transition-all">
+                <div class="flex items-center justify-between">
+                    <div class="p-3 rounded-xl bg-amber-500/10 text-amber-500 group-hover:scale-110 transition-transform">
+                        <i data-lucide="clock" class="w-6 h-6"></i>
+                    </div>
+                    <i data-lucide="arrow-right" class="w-4 h-4 theme-text-muted group-hover:text-amber-500 transition-colors"></i>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-bold theme-text-primary">Pending Approvals</h3>
+                    <p class="text-xs theme-text-muted mt-0.5">Review & approve self-registered student requests.</p>
+                </div>
+            </a>
+
             <!-- 4. Create Exam -->
             <a href="{% url 'exam_create' %}" class="glass-card p-5 rounded-2xl group hover:border-cyan-500 transition-all">
                 <div class="flex items-center justify-between">

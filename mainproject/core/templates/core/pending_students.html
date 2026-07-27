@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Pending Student Approvals | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+    
+    <!-- Title -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
+                <i data-lucide="clock" class="w-6 h-6 text-amber-500"></i> Pending Student Registrations
+            </h1>
+            <p class="theme-text-muted text-sm mt-1">Review self-registered student requests, verify credentials, and approve roster access.</p>
+        </div>
+        <a href="{% url 'exam_controller_dashboard' %}" class="text-xs theme-text-muted hover:text-amber-500 flex items-center gap-1 transition-colors">
+            &larr; Back to Controller Portal
+        </a>
+    </div>
+
+    <!-- Table Card -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Student ID / Name</th>
+                        <th class="px-5 py-4">Email</th>
+                        <th class="px-5 py-4">Department</th>
+                        <th class="px-5 py-4">Status</th>
+                        <th class="px-5 py-4 text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for profile in pending_profiles %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-bold theme-text-primary">
+                            <span class="block text-brand-600 dark:text-brand-400 font-mono text-[11px]">{{ profile.user.username }}</span>
+                            <span>{{ profile.user.get_full_name|default:profile.user.username }}</span>
+                        </td>
+                        <td class="px-5 py-4 theme-text-muted">{{ profile.user.email }}</td>
+                        <td class="px-5 py-4"><span class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 font-semibold">{{ profile.department.code|default:"General" }}</span></td>
+                        <td class="px-5 py-4">
+                            <span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                                Pending Approval
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-right space-x-2">
+                            <form method="POST" action="{% url 'approve_student' profile.id %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-bold inline-flex items-center gap-1">
+                                    <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Approve
+                                </button>
+                            </form>
+                            <form method="POST" action="{% url 'reject_student' profile.id %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="px-3 py-1.5 bg-rose-600/20 hover:bg-rose-600 text-rose-500 hover:text-white rounded-lg transition-colors font-bold inline-flex items-center gap-1">
+                                    <i data-lucide="x-circle" class="w-3.5 h-3.5"></i> Reject
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-5 py-8 text-center theme-text-muted">
+                            <i data-lucide="check-check" class="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-60"></i>
+                            <p class="font-semibold text-sm">No pending student registration requests!</p>
+                            <p class="text-xs">All self-registered students have been processed and approved.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

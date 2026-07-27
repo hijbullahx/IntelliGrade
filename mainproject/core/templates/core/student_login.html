@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Portal Sign In | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto py-12">
+    
+    <!-- Login Card -->
+    <div class="glass-card p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-cyan-500 p-0.5 mx-auto shadow-lg shadow-emerald-500/20 flex items-center justify-center">
+                <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                    <i data-lucide="user-check" class="w-7 h-7 text-emerald-400"></i>
+                </div>
+            </div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Student Sign In</h1>
+            <p class="theme-text-muted text-xs">Enter your Student ID and password to access your result evaluations and rechecks.</p>
+        </div>
+
+        <!-- Form -->
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Student ID Number</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                        <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                    </span>
+                    <input type="text" name="username" placeholder="e.g. 201002014" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none font-mono" required>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Password</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 pointer-events-none">
+                        <i data-lucide="lock" class="w-4 h-4"></i>
+                    </span>
+                    <input type="password" name="password" placeholder="••••••••••••" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none" required>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between text-xs pt-1">
+                <label class="flex items-center gap-2 theme-text-muted cursor-pointer">
+                    <input type="checkbox" checked class="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500"> Remember Me
+                </label>
+                <a href="#" class="text-emerald-600 dark:text-emerald-400 hover:underline">Forgot Key?</a>
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i> Sign In to Student Portal
+            </button>
+        </form>
+
+        <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+            <span class="flex items-center gap-2">
+                <i data-lucide="user-plus" class="w-4 h-4 shrink-0"></i> Don't have an account?
+            </span>
+            <a href="{% url 'student_register' %}" class="font-bold underline hover:text-emerald-400">Self-Register Here &rarr;</a>
+        </div>
+
+        <div class="text-center pt-2 border-t border-slate-200 dark:border-slate-800">
+            <a href="{% url 'exam_controller_login' %}" class="text-xs font-semibold theme-text-secondary hover:text-amber-500 transition-colors">
+                Are you the Chief Exam Controller? Sign in here &rarr;
+            </a>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

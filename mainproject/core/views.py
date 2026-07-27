@@ -49,20 +49,96 @@ def teacher_dashboard(request):
 
 def student_dashboard(request):
     """Dashboard view tailored for Students."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Student Portal.")
+        return redirect('student_login')
+
+    profile = getattr(request.user, 'profile', None)
+    if not profile or profile.role != Profile.Role.STUDENT:
+        messages.error(request, "Access Denied: The Student Portal is restricted to enrolled students.")
+        return redirect('landing_page')
+
+    if not profile.is_approved:
+        messages.warning(request, "Your self-registration request is pending approval by the Chief Exam Controller.")
+        auth_logout(request)
+        return redirect('student_login')
+
     evaluations = Evaluation.objects.select_related('segment__script', 'segment__question').all()[:5]
-    
     stats = {
+        'student_name': request.user.get_full_name() or request.user.username,
+        'student_id': request.user.username,
+        'dept_name': profile.department.name if profile.department else "Computer Science & Engineering",
         'enrolled_courses': Course.objects.count() or 4,
         'completed_exams': 3,
         'gpa_avg': '3.85',
         'rank': 'Top 5%',
     }
-    
-    context = {
-        'evaluations': evaluations,
-        'stats': stats,
-    }
-    return render(request, 'core/dashboard_student.html', context)
+    return render(request, 'core/dashboard_student.html', {'evaluations': evaluations, 'stats': stats})
+
+
+def student_login(request):
+    """Login view dedicated for Students."""
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            profile = getattr(user, 'profile', None)
+            if not profile or profile.role != Profile.Role.STUDENT:
+                messages.error(request, "Access Denied: Only Student accounts can sign in to the Student Portal.")
+                return render(request, 'core/student_login.html')
+
+            if not profile.is_approved:
+                messages.warning(request, f"Your registration request (Student ID: {username}) is pending approval by the Chief Exam Controller.")
+                return render(request, 'core/student_login.html')
+
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Student Portal.")
+            return redirect('student_dashboard')
+        else:
+            messages.error(request, "Invalid Student ID or Password. Please try again or contact your Chief Exam Controller.")
+
+    return render(request, 'core/student_login.html')
+
+
+def student_register(request):
+    """Self-registration view for Students."""
+    if request.method == 'POST':
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        student_id = request.POST.get('student_id', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=student_id).exists():
+            messages.error(request, f"Student ID / Username '{student_id}' is already registered.")
+            return redirect('student_register')
+
+        user = User.objects.create_user(
+            username=student_id,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.STUDENT,
+                'department': dept_obj,
+                'is_approved': False
+            }
+        )
+
+        messages.success(request, f"Registration submitted for Student '{first_name} {last_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
+        return redirect('student_login')
+
+    departments = Department.objects.all()
+    return render(request, 'core/student_register.html', {'departments': departments})
 
 
 def exam_controller_login(request):
@@ -246,14 +322,82 @@ def add_faculty(request):
 
 
 def add_student(request):
-    """Interface for Exam Controller to register new Students."""
+    """Interface for Exam Controller to register new Students with credentials & simulated email."""
     if request.method == 'POST':
-        messages.success(request, "Student profile registered successfully!")
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        student_id = request.POST.get('student_id', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=student_id).exists():
+            messages.error(request, f"Student ID / Username '{student_id}' already exists.")
+            return redirect('add_student')
+
+        user = User.objects.create_user(
+            username=student_id,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.STUDENT,
+                'department': dept_obj,
+                'is_approved': True
+            }
+        )
+
+        # Console Simulation of Sending Welcome Email with Credentials
+        print(f"\n[EMAIL SYSTEM SIMULATION]")
+        print(f"To: {email}")
+        print(f"Subject: Welcome to IntelliGrade - Student Access Credentials")
+        print(f"Body: Hello {first_name} {last_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
+
+        messages.success(request, f"Student '{first_name} {last_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
-    
+
     departments = Department.objects.all()
-    courses = Course.objects.all()
-    return render(request, 'core/add_student.html', {'departments': departments, 'courses': courses})
+    return render(request, 'core/add_student.html', {'departments': departments})
+
+
+def pending_students(request):
+    """Interface for Exam Controller to review self-registered student requests."""
+    pending_profiles = Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=False).select_related('user', 'department')
+    return render(request, 'core/pending_students.html', {'pending_profiles': pending_profiles})
+
+
+def approve_student(request, profile_id):
+    """Approves a pending self-registered student and sends simulated welcome email."""
+    profile = Profile.objects.filter(id=profile_id).first()
+    if profile:
+        profile.is_approved = True
+        profile.save()
+
+        # Console Simulation of Sending Approval Email
+        print(f"\n[EMAIL SYSTEM SIMULATION]")
+        print(f"To: {profile.user.email}")
+        print(f"Subject: Account Approved - IntelliGrade Student Portal Access")
+        print(f"Body: Hello {profile.user.first_name},\nYour self-registration request for Student ID {profile.user.username} has been approved by the Chief Exam Controller.\nYou can now log in at http://127.0.0.1:8000/student/login/\n")
+
+        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated!")
+    return redirect('pending_students')
+
+
+def reject_student(request, profile_id):
+    """Rejects and removes a pending student registration request."""
+    profile = Profile.objects.filter(id=profile_id).first()
+    if profile:
+        user = profile.user
+        username = user.username
+        user.delete()
+        messages.warning(request, f"Registration request for Student ID '{username}' was rejected and removed.")
+    return redirect('pending_students')
 
 
 def rechecks_list(request):
