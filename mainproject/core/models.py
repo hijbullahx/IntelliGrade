@@ -17,13 +17,38 @@ class Profile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} ({self.get_role_display()})"
 
 
-class Department(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=20, unique=True)
+class College(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    code = models.CharField(max_length=30, unique=True)
+    description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.name} ({self.code})"
+
+
+class School(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    code = models.CharField(max_length=30, unique=True)
+    college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True, related_name='schools')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        if self.college:
+            return f"{self.name} [{self.college.code}]"
+        return f"{self.name} ({self.code})"
+
+
+class Department(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    code = models.CharField(max_length=30, unique=True)
+    school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
+    college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
 
 
 class Course(models.Model):

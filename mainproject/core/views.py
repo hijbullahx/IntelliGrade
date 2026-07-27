@@ -3,8 +3,8 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from .models import (
-    Examination, Course, AnswerScript, AnswerSegment, Evaluation,
-    Department, Profile
+    College, School, Department, Course, Examination, AnswerScript,
+    AnswerSegment, Evaluation, Profile
 )
 
 def landing_page(request):
@@ -81,20 +81,76 @@ def exam_controller_dashboard(request):
     """Unified Control Portal for Exam Controller (Ultimate Admin)."""
     stats = {
         'total_users': Profile.objects.count() or 340,
+        'total_colleges': College.objects.count(),
+        'total_schools': School.objects.count(),
         'total_departments': Department.objects.count() or 6,
         'total_courses': Course.objects.count() or 24,
         'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
         'pending_rechecks': 5,
     }
-    departments = Department.objects.all()[:5]
+    
+    colleges = College.objects.prefetch_related('schools__departments', 'departments').all()
+    schools = School.objects.filter(college__isnull=True).prefetch_related('departments').all()
+    standalone_departments = Department.objects.filter(school__isnull=True, college__isnull=True).all()
+    
     recheck_tickets = [
         {'id': 1, 'student': 'Rahim Ahmed (201002014)', 'course': 'CSE 411 - Software Engineering', 'reason': 'Missing marks for component interaction diagram in Q1a', 'ai_score': 8.5, 'requested': 10.0, 'status': 'Pending Review'},
         {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
     ]
+    
     return render(request, 'core/dashboard_exam_controller.html', {
         'stats': stats,
-        'departments': departments,
+        'colleges': colleges,
+        'schools': schools,
+        'standalone_departments': standalone_departments,
+        'departments': Department.objects.all(),
         'recheck_tickets': recheck_tickets,
+    })
+
+
+def add_structure(request):
+    """Interface for Exam Controller to add Colleges, Schools, and Departments."""
+    if request.method == 'POST':
+        entity_type = request.POST.get('entity_type')
+        name = request.POST.get('name', '').strip()
+        code = request.POST.get('code', '').strip().upper()
+        description = request.POST.get('description', '').strip()
+
+        if entity_type == 'COLLEGE':
+            college, created = College.objects.get_or_create(code=code, defaults={'name': name, 'description': description})
+            if created:
+                messages.success(request, f"College '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"College with code '{code}' already exists.")
+
+        elif entity_type == 'SCHOOL':
+            college_id = request.POST.get('college')
+            college = College.objects.filter(id=college_id).first() if college_id else None
+            school, created = School.objects.get_or_create(code=code, defaults={'name': name, 'college': college})
+            if created:
+                messages.success(request, f"School '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"School with code '{code}' already exists.")
+
+        elif entity_type == 'DEPARTMENT':
+            school_id = request.POST.get('school')
+            college_id = request.POST.get('college')
+            school = School.objects.filter(id=school_id).first() if school_id else None
+            college = College.objects.filter(id=college_id).first() if college_id else (school.college if school else None)
+            
+            dept, created = Department.objects.get_or_create(code=code, defaults={'name': name, 'school': school, 'college': college})
+            if created:
+                messages.success(request, f"Department '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"Department with code '{code}' already exists.")
+
+        return redirect('exam_controller_dashboard')
+
+    colleges = College.objects.all()
+    schools = School.objects.all()
+    return render(request, 'core/add_structure.html', {
+        'colleges': colleges,
+        'schools': schools,
     })
 
 

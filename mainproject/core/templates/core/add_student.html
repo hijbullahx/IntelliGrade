@@ -46,9 +46,13 @@
             <div class="md:col-span-2">
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Department Assignment</label>
                 <select name="department" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="CSE" selected>Computer Science & Engineering (CSE)</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.code }}">{{ dept.name }} ({{ dept.code }})</option>
+                    {% empty %}
+                    <option value="CSE">Computer Science & Engineering (CSE)</option>
                     <option value="EEE">Electrical & Electronic Engineering (EEE)</option>
-                    <option value="BBA">Business Administration (BBA)</option>
+                    <option value="CE">Civil Engineering (CE)</option>
+                    {% endfor %}
                 </select>
             </div>
         </div>
