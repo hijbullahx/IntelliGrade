@@ -17,6 +17,7 @@ urlpatterns = [
     path('controller/pending-students/', views.pending_students, name='pending_students'),
     path('controller/approve-student/<int:profile_id>/', views.approve_student, name='approve_student'),
     path('controller/reject-student/<int:profile_id>/', views.reject_student, name='reject_student'),
+    path('controller/toggle-department/<int:dept_id>/', views.toggle_department_status, name='toggle_department_status'),
     path('controller/rechecks/', views.rechecks_list, name='rechecks_list'),
     path('dashboard/teacher/', views.teacher_dashboard, name='teacher_dashboard'),
     path('dashboard/student/', views.student_dashboard, name='student_dashboard'),

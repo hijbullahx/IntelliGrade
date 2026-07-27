@@ -45,6 +45,7 @@ class Department(models.Model):
     code = models.CharField(max_length=30, unique=True)
     school = models.ForeignKey(School, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
     college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True, related_name='departments')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

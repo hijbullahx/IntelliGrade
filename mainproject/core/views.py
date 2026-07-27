@@ -147,7 +147,7 @@ def student_register(request):
         messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
         return redirect('student_login')
 
-    departments = Department.objects.all()
+    departments = Department.objects.filter(is_active=True)
     return render(request, 'core/student_register.html', {'departments': departments})
 
 
@@ -197,7 +197,7 @@ def exam_controller_dashboard(request):
         'total_dept_heads': Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).count() or 6,
         'total_colleges': College.objects.count() or 1,
         'total_schools': School.objects.count() or 3,
-        'total_departments': Department.objects.count() or 6,
+        'total_departments': Department.objects.filter(is_active=True).count(),
         'total_courses': Course.objects.count() or 18,
         'active_exams': Examination.objects.count() or 12,
         'pending_rechecks': 5,
@@ -317,7 +317,7 @@ def add_faculty(request):
             last_name=''
         )
 
-        dept_obj = Department.objects.filter(code=dept_code).first()
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
         Profile.objects.update_or_create(
             user=user,
             defaults={
@@ -329,7 +329,7 @@ def add_faculty(request):
         messages.success(request, f"Faculty member '{full_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
 
-    departments = Department.objects.all()
+    departments = Department.objects.filter(is_active=True)
     return render(request, 'core/add_faculty.html', {'departments': departments})
 
 
@@ -354,7 +354,7 @@ def add_student(request):
             last_name=''
         )
 
-        dept_obj = Department.objects.filter(code=dept_code).first()
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
         Profile.objects.update_or_create(
             user=user,
             defaults={
@@ -373,7 +373,7 @@ def add_student(request):
         messages.success(request, f"Student '{full_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
 
-    departments = Department.objects.all()
+    departments = Department.objects.filter(is_active=True)
     return render(request, 'core/add_student.html', {'departments': departments})
 
 
@@ -411,6 +411,21 @@ def reject_student(request, profile_id):
     return redirect('pending_students')
 
 
+def toggle_department_status(request, dept_id):
+    """Toggles active/inactive status of a Department."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Only Chief Exam Controller can modify department status.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
+    department.is_active = not department.is_active
+    department.save()
+
+    status_str = "Active" if department.is_active else "Inactive"
+    messages.success(request, f"Department '{department.name}' ({department.code}) status updated to {status_str}.")
+    return redirect('exam_controller_dashboard')
+
+
 def rechecks_list(request):
     """Interface to manage student recheck and re-evaluation requests."""
     recheck_tickets = [
@@ -442,7 +457,7 @@ def add_dept_head(request):
             last_name=''
         )
 
-        dept_obj = Department.objects.filter(code=dept_code).first()
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
         Profile.objects.update_or_create(
             user=user,
             defaults={
@@ -454,7 +469,7 @@ def add_dept_head(request):
         messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
 
-    departments = Department.objects.all()
+    departments = Department.objects.filter(is_active=True)
     return render(request, 'core/add_dept_head.html', {'departments': departments})
 
 
