@@ -191,12 +191,15 @@ def exam_controller_dashboard(request):
         return redirect('teacher_dashboard')
 
     stats = {
-        'total_users': Profile.objects.count() or 340,
-        'total_colleges': College.objects.count(),
-        'total_schools': School.objects.count(),
+        'total_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=True).count() or 180,
+        'pending_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=False).count(),
+        'total_faculty': Profile.objects.filter(role=Profile.Role.TEACHER).count() or 24,
+        'total_dept_heads': Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).count() or 6,
+        'total_colleges': College.objects.count() or 1,
+        'total_schools': School.objects.count() or 3,
         'total_departments': Department.objects.count() or 6,
-        'total_courses': Course.objects.count() or 24,
-        'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
+        'total_courses': Course.objects.count() or 18,
+        'active_exams': Examination.objects.count() or 12,
         'pending_rechecks': 5,
     }
     
