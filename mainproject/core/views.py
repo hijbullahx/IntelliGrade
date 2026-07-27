@@ -18,12 +18,23 @@ def teacher_dashboard(request):
         messages.warning(request, "Please sign in to access the Faculty Workspace.")
         return redirect('teacher_login')
 
-    # Redirect Exam Controller / Admin away to their own control portal
+    # Redirect Chief Exam Controller / Admin away to their own control portal
     if request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN):
         messages.info(request, "Chief Exam Controllers are managed via the Exam Controller Portal.")
         return redirect('exam_controller_dashboard')
 
     profile = getattr(request.user, 'profile', None)
+
+    # Reject Student accounts attempting to enter Faculty Workspace
+    if profile and profile.role == Profile.Role.STUDENT:
+        messages.error(request, "Access Denied: The Faculty Workspace is restricted to instructors and examiners.")
+        return redirect('student_dashboard')
+
+    # Redirect Dept Head accounts to their own portal
+    if profile and profile.role == Profile.Role.DEPARTMENT_HEAD:
+        messages.info(request, "Department Heads are managed via the Department Head Portal.")
+        return redirect('dept_head_dashboard')
+
     teacher_name = request.user.get_full_name() or request.user.username
     dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
 
