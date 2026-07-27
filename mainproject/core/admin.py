@@ -1,19 +1,26 @@
 from django.contrib import admin
 from .models import (
-    Profile, Department, Course, Examination,
+    Profile, College, School, Department, Course, Examination,
     Question, Rubric, AnswerScript, AnswerSegment, Evaluation
 )
 
-@admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'department', 'phone_number')
-    list_filter = ('role', 'department')
-    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'user__email')
+@admin.register(College)
+class CollegeAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'created_at')
+    search_fields = ('name', 'code')
+
+@admin.register(School)
+class SchoolAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'college', 'created_at')
+    list_filter = ('college',)
+    search_fields = ('name', 'code')
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'created_at')
+    list_display = ('name', 'code', 'school', 'college', 'created_at')
+    list_filter = ('school', 'college')
     search_fields = ('name', 'code')
+
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):

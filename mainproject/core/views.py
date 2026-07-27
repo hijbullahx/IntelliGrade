@@ -3,8 +3,8 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from .models import (
-    Examination, Course, AnswerScript, AnswerSegment, Evaluation,
-    Department, Profile
+    College, School, Department, Course, Examination, AnswerScript,
+    AnswerSegment, Evaluation, Profile
 )
 
 def landing_page(request):
@@ -14,6 +14,19 @@ def landing_page(request):
 
 def teacher_dashboard(request):
     """Dashboard view tailored for Teachers / Examiners."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Faculty Workspace.")
+        return redirect('teacher_login')
+
+    # Redirect Exam Controller / Admin away to their own control portal
+    if request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN):
+        messages.info(request, "Chief Exam Controllers are managed via the Exam Controller Portal.")
+        return redirect('exam_controller_dashboard')
+
+    profile = getattr(request.user, 'profile', None)
+    teacher_name = request.user.get_full_name() or request.user.username
+    dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
+
     exams = Examination.objects.all().select_related('course')[:5]
     pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
@@ -25,6 +38,8 @@ def teacher_dashboard(request):
     }
     
     context = {
+        'teacher_name': teacher_name,
+        'dept_name': dept_name,
         'exams': exams,
         'pending_scripts': pending_scripts,
         'stats': stats,
@@ -51,21 +66,23 @@ def student_dashboard(request):
 
 
 def exam_controller_login(request):
-    """Login view for Exam Controller (Ultimate Admin)."""
-    if request.user.is_authenticated:
-        return redirect('exam_controller_dashboard')
-
+    """Login view dedicated for Chief Exam Controller (Admin)."""
     if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
         
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            auth_login(request, user)
-            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Authenticated as Exam Controller.")
-            return redirect('exam_controller_dashboard')
+            # Check if user is Exam Controller / Admin
+            if user.is_superuser or (hasattr(user, 'profile') and user.profile.role == Profile.Role.ADMIN):
+                auth_login(request, user)
+                messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Authenticated as Chief Exam Controller.")
+                return redirect('exam_controller_dashboard')
+            else:
+                messages.error(request, "Access Denied: Faculty / Teacher accounts cannot sign in as Chief Exam Controller. Please use the Faculty Sign In portal.")
+                return render(request, 'core/exam_controller_login.html')
         else:
-            messages.error(request, "Invalid username or password. Please check your credentials.")
+            messages.error(request, "Invalid Controller username or password. Please verify your credentials.")
     
     return render(request, 'core/exam_controller_login.html')
 
@@ -79,23 +96,110 @@ def logout_view(request):
 
 def exam_controller_dashboard(request):
     """Unified Control Portal for Exam Controller (Ultimate Admin)."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Chief Exam Controller Control Portal.")
+        return redirect('exam_controller_login')
+        
+    if not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: The Chief Exam Controller Portal is restricted to Administrator accounts.")
+        return redirect('teacher_dashboard')
+
     stats = {
         'total_users': Profile.objects.count() or 340,
+        'total_colleges': College.objects.count(),
+        'total_schools': School.objects.count(),
         'total_departments': Department.objects.count() or 6,
         'total_courses': Course.objects.count() or 24,
         'active_exams': Examination.objects.filter(status='PUBLISHED').count() or 14,
         'pending_rechecks': 5,
     }
-    departments = Department.objects.all()[:5]
+    
+    colleges = College.objects.prefetch_related('schools__departments', 'departments').all()
+    schools = School.objects.filter(college__isnull=True).prefetch_related('departments').all()
+    standalone_departments = Department.objects.filter(school__isnull=True, college__isnull=True).all()
+    
     recheck_tickets = [
         {'id': 1, 'student': 'Rahim Ahmed (201002014)', 'course': 'CSE 411 - Software Engineering', 'reason': 'Missing marks for component interaction diagram in Q1a', 'ai_score': 8.5, 'requested': 10.0, 'status': 'Pending Review'},
         {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
     ]
+    
     return render(request, 'core/dashboard_exam_controller.html', {
         'stats': stats,
-        'departments': departments,
+        'colleges': colleges,
+        'schools': schools,
+        'standalone_departments': standalone_departments,
+        'departments': Department.objects.all(),
         'recheck_tickets': recheck_tickets,
     })
+
+
+def add_structure(request):
+    """Interface for Exam Controller to add Colleges, Schools, and Departments."""
+    if request.method == 'POST':
+        entity_type = request.POST.get('entity_type')
+        name = request.POST.get('name', '').strip()
+        code = request.POST.get('code', '').strip().upper()
+        description = request.POST.get('description', '').strip()
+
+        if entity_type == 'COLLEGE':
+            college, created = College.objects.get_or_create(code=code, defaults={'name': name, 'description': description})
+            if created:
+                messages.success(request, f"College '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"College with code '{code}' already exists.")
+
+        elif entity_type == 'SCHOOL':
+            college_id = request.POST.get('college')
+            college = College.objects.filter(id=college_id).first() if college_id else None
+            school, created = School.objects.get_or_create(code=code, defaults={'name': name, 'college': college})
+            if created:
+                messages.success(request, f"School '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"School with code '{code}' already exists.")
+
+        elif entity_type == 'DEPARTMENT':
+            school_id = request.POST.get('school')
+            college_id = request.POST.get('college')
+            school = School.objects.filter(id=school_id).first() if school_id else None
+            college = College.objects.filter(id=college_id).first() if college_id else (school.college if school else None)
+            
+            dept, created = Department.objects.get_or_create(code=code, defaults={'name': name, 'school': school, 'college': college})
+            if created:
+                messages.success(request, f"Department '{name} ({code})' created successfully!")
+            else:
+                messages.warning(request, f"Department with code '{code}' already exists.")
+
+        return redirect('exam_controller_dashboard')
+
+    colleges = College.objects.all()
+    schools = School.objects.all()
+    return render(request, 'core/add_structure.html', {
+        'colleges': colleges,
+        'schools': schools,
+    })
+
+
+def teacher_login(request):
+    """Login view dedicated for Faculty Members & Teachers."""
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            # Reject Superuser / Admin accounts from logging in as Faculty!
+            if user.is_superuser or (hasattr(user, 'profile') and user.profile.role == Profile.Role.ADMIN):
+                messages.error(request, "Access Denied: Superuser / Chief Exam Controller credentials cannot log in to the Faculty Workspace. Please log in with a Faculty account created via the Add Faculty panel.")
+                return render(request, 'core/teacher_login.html')
+
+            # Login as Faculty user (replaces any previous session)
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Faculty Workspace.")
+            return redirect('teacher_dashboard')
+        else:
+            messages.error(request, "Invalid Employee ID / Username or Password. Please try again or contact your Chief Exam Controller.")
+
+    return render(request, 'core/teacher_login.html')
 
 
 def admin_dashboard(request):
@@ -104,11 +208,39 @@ def admin_dashboard(request):
 
 
 def add_faculty(request):
-    """Interface for Exam Controller to add new Faculty members."""
+    """Interface for Exam Controller to add new Faculty members with credentials."""
     if request.method == 'POST':
-        messages.success(request, "Faculty member added successfully!")
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"User with Employee ID / Username '{username}' already exists.")
+            return redirect('add_faculty')
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.TEACHER,
+                'department': dept_obj
+            }
+        )
+
+        messages.success(request, f"Faculty member '{first_name} {last_name}' ({username}) registered successfully! Credentials activated.")
         return redirect('exam_controller_dashboard')
-    
+
     departments = Department.objects.all()
     return render(request, 'core/add_faculty.html', {'departments': departments})
 
