@@ -426,6 +426,44 @@ def toggle_department_status(request, dept_id):
     return redirect('exam_controller_dashboard')
 
 
+def delete_department(request, dept_id):
+    """Deletes a Department from the system."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Only Chief Exam Controller can delete departments.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
+    dept_name = department.name
+    department.delete()
+    messages.success(request, f"Department '{dept_name}' deleted successfully!")
+    return redirect('exam_controller_dashboard')
+
+
+def department_detail(request, dept_id):
+    """Comprehensive detail view showing all Faculty, Head, Students, Courses & Exams for a Department."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to view department details.")
+        return redirect('landing_page')
+
+    department = get_object_or_404(Department, id=dept_id)
+    
+    dept_head_profile = Profile.objects.filter(department=department, role=Profile.Role.DEPARTMENT_HEAD).select_related('user').first()
+    faculty_profiles = Profile.objects.filter(department=department, role=Profile.Role.TEACHER).select_related('user')
+    student_profiles = Profile.objects.filter(department=department, role=Profile.Role.STUDENT).select_related('user')
+    courses = Course.objects.filter(department=department)
+    exams = Examination.objects.filter(course__department=department).select_related('course')
+
+    context = {
+        'department': department,
+        'dept_head_profile': dept_head_profile,
+        'faculty_profiles': faculty_profiles,
+        'student_profiles': student_profiles,
+        'courses': courses,
+        'exams': exams,
+    }
+    return render(request, 'core/department_detail.html', context)
+
+
 def rechecks_list(request):
     """Interface to manage student recheck and re-evaluation requests."""
     recheck_tickets = [
