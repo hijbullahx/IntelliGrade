@@ -42,9 +42,9 @@ def teacher_dashboard(request):
     pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
     stats = {
-        'total_exams': Examination.objects.count() or 12,
-        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count() or 8,
-        'total_scripts': AnswerScript.objects.count() or 145,
+        'total_exams': Examination.objects.count(),
+        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count(),
+        'total_scripts': AnswerScript.objects.count(),
         'avg_confidence': '94.2%',
     }
     
@@ -78,11 +78,11 @@ def student_dashboard(request):
     stats = {
         'student_name': request.user.get_full_name() or request.user.username,
         'student_id': request.user.username,
-        'dept_name': profile.department.name if profile.department else "Computer Science & Engineering",
-        'enrolled_courses': Course.objects.count() or 4,
-        'completed_exams': 3,
-        'gpa_avg': '3.85',
-        'rank': 'Top 5%',
+        'dept_name': profile.department.name if profile.department else "Academic Faculty Department",
+        'enrolled_courses': Course.objects.filter(department=profile.department).count() if profile.department else Course.objects.count(),
+        'completed_exams': 0,
+        'gpa_avg': 'N/A',
+        'rank': 'Enrolled',
     }
     return render(request, 'core/dashboard_student.html', {'evaluations': evaluations, 'stats': stats})
 
@@ -191,16 +191,16 @@ def exam_controller_dashboard(request):
         return redirect('teacher_dashboard')
 
     stats = {
-        'total_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=True).count() or 180,
+        'total_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=True).count(),
         'pending_students': Profile.objects.filter(role=Profile.Role.STUDENT, is_approved=False).count(),
-        'total_faculty': Profile.objects.filter(role=Profile.Role.TEACHER).count() or 24,
-        'total_dept_heads': Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).count() or 6,
-        'total_colleges': College.objects.count() or 1,
-        'total_schools': School.objects.count() or 3,
+        'total_faculty': Profile.objects.filter(role=Profile.Role.TEACHER).count(),
+        'total_dept_heads': Profile.objects.filter(role=Profile.Role.DEPARTMENT_HEAD).count(),
+        'total_colleges': College.objects.count(),
+        'total_schools': School.objects.count(),
         'total_departments': Department.objects.filter(is_active=True).count(),
-        'total_courses': Course.objects.count() or 18,
-        'active_exams': Examination.objects.count() or 12,
-        'pending_rechecks': 5,
+        'total_courses': Course.objects.count(),
+        'active_exams': Examination.objects.count(),
+        'pending_rechecks': 0,
     }
     
     colleges = College.objects.prefetch_related('schools__departments', 'departments').all()
@@ -544,13 +544,13 @@ def dept_head_dashboard(request):
         messages.error(request, "Access Denied: The Department Head Portal is restricted to assigned Department Heads.")
         return redirect('landing_page')
 
-    dept_name = profile.department.name if (profile and profile.department) else "Computer Science & Engineering"
+    dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
     stats = {
         'dept_name': dept_name,
-        'faculty_count': Profile.objects.filter(role=Profile.Role.TEACHER, department=profile.department).count() or 18 if (profile and profile.department) else 18,
-        'active_courses': Course.objects.filter(department=profile.department).count() or 14 if (profile and profile.department) else 14,
-        'pass_rate': '91.8%',
-        'ai_approval_rate': '96.4%',
+        'faculty_count': Profile.objects.filter(role=Profile.Role.TEACHER, department=profile.department).count() if (profile and profile.department) else 0,
+        'active_courses': Course.objects.filter(department=profile.department).count() if (profile and profile.department) else 0,
+        'pass_rate': 'N/A',
+        'ai_approval_rate': 'N/A',
     }
     courses = Course.objects.filter(department=profile.department)[:5] if (profile and profile.department) else Course.objects.all()[:5]
     return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
