@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Examination Setup | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div class="flex items-center gap-2">
+        <a href="{% url 'exams_list' %}" class="text-xs font-semibold theme-text-muted hover:theme-text-primary transition-colors flex items-center gap-1">
+            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back to Examinations List
+        </a>
+    </div>
+
+    <div class="glass-card p-8 rounded-2xl space-y-6 shadow-xl">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4">
+            <h1 class="text-xl font-bold theme-text-primary">Edit Examination Setup</h1>
+            <p class="theme-text-muted text-xs mt-1">Update examination title, total marks, and status for course: <span class="font-mono text-purple-500 font-bold">{{ exam.course.code }}</span></p>
+        </div>
+
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Examination Title</label>
+                <input type="text" name="title" value="{{ exam.title }}" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Total Max Marks</label>
+                <input type="number" step="0.5" name="total_marks" value="{{ exam.total_marks }}" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500 font-mono">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Status</label>
+                <select name="status" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500">
+                    <option value="DRAFT" {% if exam.status == 'DRAFT' %}selected{% endif %}>DRAFT</option>
+                    <option value="PUBLISHED" {% if exam.status == 'PUBLISHED' %}selected{% endif %}>PUBLISHED</option>
+                    <option value="ARCHIVED" {% if exam.status == 'ARCHIVED' %}selected{% endif %}>ARCHIVED</option>
+                </select>
+            </div>
+
+            <div class="pt-4 flex items-center justify-end gap-3">
+                <a href="{% url 'exams_list' %}" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-bold rounded-xl transition-all">Cancel</a>
+                <button type="submit" class="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/25 transition-all">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
