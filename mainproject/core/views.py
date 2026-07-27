@@ -266,17 +266,87 @@ def rechecks_list(request):
     return render(request, 'core/rechecks_list.html', {'recheck_tickets': recheck_tickets})
 
 
+def add_dept_head(request):
+    """Interface for Exam Controller to add new Department Heads with credentials."""
+    if request.method == 'POST':
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"User with ID / Username '{username}' already exists.")
+            return redirect('add_dept_head')
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.DEPARTMENT_HEAD,
+                'department': dept_obj
+            }
+        )
+
+        messages.success(request, f"Department Head '{first_name} {last_name}' ({username}) registered successfully! Credentials activated.")
+        return redirect('exam_controller_dashboard')
+
+    departments = Department.objects.all()
+    return render(request, 'core/add_dept_head.html', {'departments': departments})
+
+
+def dept_head_login(request):
+    """Login view dedicated for Department Heads."""
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            profile = getattr(user, 'profile', None)
+            if not profile or profile.role != Profile.Role.DEPARTMENT_HEAD:
+                messages.error(request, "Access Denied: Only Department Head accounts created via the Chief Exam Controller panel can sign in here.")
+                return render(request, 'core/dept_head_login.html')
+
+            auth_login(request, user)
+            messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Department Head Portal.")
+            return redirect('dept_head_dashboard')
+        else:
+            messages.error(request, "Invalid Username or Password. Please try again or contact your Chief Exam Controller.")
+
+    return render(request, 'core/dept_head_login.html')
+
+
 def dept_head_dashboard(request):
     """Dashboard view for Department Heads."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Department Head Portal.")
+        return redirect('dept_head_login')
+
+    profile = getattr(request.user, 'profile', None)
+    if not profile or profile.role != Profile.Role.DEPARTMENT_HEAD:
+        messages.error(request, "Access Denied: The Department Head Portal is restricted to assigned Department Heads.")
+        return redirect('landing_page')
+
+    dept_name = profile.department.name if (profile and profile.department) else "Computer Science & Engineering"
     stats = {
-        'dept_name': 'Computer Science & Engineering',
-        'faculty_count': 18,
-        'active_courses': 14,
+        'dept_name': dept_name,
+        'faculty_count': Profile.objects.filter(role=Profile.Role.TEACHER, department=profile.department).count() or 18 if (profile and profile.department) else 18,
+        'active_courses': Course.objects.filter(department=profile.department).count() or 14 if (profile and profile.department) else 14,
         'pass_rate': '91.8%',
         'ai_approval_rate': '96.4%',
     }
-    courses = Course.objects.all()[:5]
-    return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses})
+    courses = Course.objects.filter(department=profile.department)[:5] if (profile and profile.department) else Course.objects.all()[:5]
+    return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
 
 
 def exam_create(request):

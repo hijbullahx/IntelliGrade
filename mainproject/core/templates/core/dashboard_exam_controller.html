@@ -92,7 +92,21 @@
                 </div>
             </a>
 
-            <!-- 3. Add Student -->
+            <!-- 3. Add Dept Head -->
+            <a href="{% url 'add_dept_head' %}" class="glass-card p-5 rounded-2xl group hover:border-cyan-500 transition-all">
+                <div class="flex items-center justify-between">
+                    <div class="p-3 rounded-xl bg-cyan-500/10 text-cyan-500 group-hover:scale-110 transition-transform">
+                        <i data-lucide="user-check" class="w-6 h-6"></i>
+                    </div>
+                    <i data-lucide="arrow-right" class="w-4 h-4 theme-text-muted group-hover:text-cyan-500 transition-colors"></i>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-bold theme-text-primary">Add Dept Head</h3>
+                    <p class="text-xs theme-text-muted mt-0.5">Register Department Head accounts and initial passwords.</p>
+                </div>
+            </a>
+
+            <!-- 4. Add Student -->
             <a href="{% url 'add_student' %}" class="glass-card p-5 rounded-2xl group hover:border-emerald-500 transition-all">
                 <div class="flex items-center justify-between">
                     <div class="p-3 rounded-xl bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform">
