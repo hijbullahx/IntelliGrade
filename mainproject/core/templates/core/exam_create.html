@@ -95,16 +95,13 @@
                 </div>
 
                 <!-- Exam Date -->
-                <div>
+                <div class="md:col-span-2">
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Exam Date</label>
                     <input type="date" name="exam_date" id="examDate" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
 
-                <!-- Total Marks -->
-                <div class="md:col-span-2">
-                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Total Max Marks</label>
-                    <input type="number" step="0.01" name="total_marks" id="totalMarks" value="100.00" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
-                </div>
+                <!-- Hidden Total Marks default -->
+                <input type="hidden" name="total_marks" id="totalMarks" value="100.00">
 
             </div>
         </div>
