@@ -893,6 +893,17 @@ def scan_routine_ai(request):
                         faculty_user = prof.user
                         break
 
+            # Check if an exam for this course is ALREADY published in the database
+            is_published = False
+            published_exam_id = None
+            published_exam_title = None
+            if course_obj:
+                existing_exam = Examination.objects.filter(course=course_obj).order_by('-created_at').first()
+                if existing_exam:
+                    is_published = True
+                    published_exam_id = existing_exam.id
+                    published_exam_title = existing_exam.title
+
             routine_items.append({
                 'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
                 'course_title': course_obj.title if course_obj else (c_title or ''),
@@ -904,6 +915,9 @@ def scan_routine_ai(request):
                 'course_id': course_obj.id if course_obj else None,
                 'faculty_found': bool(faculty_user),
                 'faculty_id': faculty_user.id if faculty_user else None,
+                'is_published': is_published,
+                'published_exam_id': published_exam_id,
+                'published_exam_title': published_exam_title,
             })
 
         first_item = routine_items[0] if routine_items else {}
