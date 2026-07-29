@@ -51,4 +51,8 @@ urlpatterns = [
     path('evaluation/review/', views.grading_workbench, name='grading_workbench_default'),
     path('api/courses-and-faculty/', views.api_get_courses_and_faculty, name='api_courses_and_faculty'),
     path('api/publish-exam/', views.api_publish_exam, name='api_publish_exam'),
+    path('teacher/questions-rubric/', views.question_rubric_manage, name='question_rubric_manage_default'),
+    path('teacher/exam/<int:exam_id>/questions-rubric/', views.question_rubric_manage, name='question_rubric_manage'),
+    path('teacher/delete-question/<int:question_id>/', views.delete_question, name='delete_question'),
+    path('api/generate-ai-rubric/', views.api_generate_ai_rubric, name='api_generate_ai_rubric'),
 ]

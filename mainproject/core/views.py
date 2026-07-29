@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, login as auth_login, logout as aut
 from django.contrib.auth.models import User
 from .models import (
     College, School, Department, Course, Examination, AnswerScript,
-    AnswerSegment, Evaluation, Profile
+    AnswerSegment, Evaluation, Profile, Question, Rubric
 )
 
 def landing_page(request):
@@ -1394,4 +1394,133 @@ def api_publish_exam(request):
             'exam_id': exam.id,
             'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
         })
+    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+
+
+def question_rubric_manage(request, exam_id=None):
+    """Faculty & Examiner view to create and manage questions and rubrics ONLY for assigned examinations."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Faculty Workspace.")
+        return redirect('teacher_login')
+
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    # Filter examinations assigned strictly by Admin to this faculty examiner
+    if is_admin:
+        assigned_exams = Examination.objects.all().select_related('course', 'assigned_faculty')
+    else:
+        assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course', 'assigned_faculty')
+
+    selected_exam = None
+    if exam_id:
+        selected_exam = get_object_or_404(Examination, id=exam_id)
+        # Security Enforcement: Faculty can ONLY access exams assigned to them
+        if not is_admin and selected_exam.assigned_faculty != request.user:
+            messages.error(request, "Permission Denied: You can only manage questions and rubrics for examinations assigned to you by the Chief Exam Controller.")
+            return redirect('teacher_dashboard')
+    elif assigned_exams.exists():
+        selected_exam = assigned_exams.first()
+
+    questions = []
+    if selected_exam:
+        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').order_by('question_number')
+
+    if request.method == 'POST':
+        target_exam_id = request.POST.get('examination_id')
+        question_number = request.POST.get('question_number', '').strip()
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = request.POST.get('max_marks', '10.0')
+        criteria = request.POST.get('criteria', '').strip()
+        ideal_answer = request.POST.get('ideal_answer', '').strip()
+
+        target_exam = get_object_or_404(Examination, id=target_exam_id)
+
+        # Security Enforcement on Save
+        if not is_admin and target_exam.assigned_faculty != request.user:
+            messages.error(request, "Permission Denied: You can only create questions for examinations assigned to you by the Chief Exam Controller.")
+            return redirect('teacher_dashboard')
+
+        if not question_number or not prompt_text:
+            messages.error(request, "Question Number and Question Prompt Text are required.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+
+        try:
+            q_obj, _ = Question.objects.update_or_create(
+                examination=target_exam,
+                question_number=question_number,
+                defaults={
+                    'prompt_text': prompt_text,
+                    'max_marks': float(max_marks) if max_marks else 10.0
+                }
+            )
+
+            Rubric.objects.update_or_create(
+                question=q_obj,
+                defaults={
+                    'criteria': criteria,
+                    'ideal_answer': ideal_answer
+                }
+            )
+
+            messages.success(request, f"Question {q_obj.question_number} and Grading Rubric saved successfully for {target_exam.course.code}!")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        except Exception as e:
+            messages.error(request, f"Error saving question: {str(e)}")
+
+    return render(request, 'core/question_rubric_manage.html', {
+        'assigned_exams': assigned_exams,
+        'selected_exam': selected_exam,
+        'questions': questions,
+    })
+
+
+def delete_question(request, question_id):
+    """Allows Faculty to delete a question from their assigned exam."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    q_obj = get_object_or_404(Question, id=question_id)
+    exam = q_obj.examination
+
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Permission Denied: You cannot delete questions from exams not assigned to you.")
+        return redirect('teacher_dashboard')
+
+    q_num = q_obj.question_number
+    q_obj.delete()
+    messages.success(request, f"Question {q_num} deleted successfully.")
+    return redirect('question_rubric_manage', exam_id=exam.id)
+
+
+def api_generate_ai_rubric(request):
+    """AJAX endpoint for AI-assisted rubric creation using active LLM provider."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        sample_answer = request.POST.get('ideal_answer', '').strip()
+
+        if not prompt_text:
+            return JsonResponse({'error': 'Question prompt text is required.'}, status=400)
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'generate_rubric'):
+                rubric_data = provider.generate_rubric(prompt_text, max_marks, sample_answer=sample_answer)
+            else:
+                rubric_data = {
+                    "criteria": "1. Accurate understanding of key design concepts.\n2. Logical explanation and structure.\n3. Detailed examples or diagrams.",
+                    "ideal_answer": "Model Answer: The student response clearly covers all core rubric concepts.",
+                }
+            return JsonResponse({'success': True, 'rubric': rubric_data})
+        except Exception as e:
+            return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
+
     return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
