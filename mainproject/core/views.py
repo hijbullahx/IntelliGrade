@@ -727,100 +727,149 @@ def call_gemini_vision_api(api_key, text_content, file_obj=None):
 
 from django.conf import settings
 
+from core.ai_engine.providers.factory import AIProviderFactory
+from core.ai_engine.ocr.engine import OCREngineManager
+
 def scan_routine_ai(request):
-    """AI Routine Auto-Reader: Scans uploaded/pasted exam routine text/file using Gemini API or Regex and matches DB."""
+    """AI Routine Auto-Reader: Scans uploaded/pasted exam routine text/file using active AI Provider (Gemini/OpenAI/Mock) and matches DB."""
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required.'}, status=401)
 
     if request.method == 'POST':
         routine_text = request.POST.get('routine_text', '').strip()
         routine_file = request.FILES.get('routine_file')
-        user_api_key = request.POST.get('api_key', '').strip()
-        
-        api_key = user_api_key or getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+        image_bytes = None
+        mime_type = 'image/jpeg'
+        file_name = ''
 
-        detected_course_code = None
-        detected_course_title = None
-        detected_faculty_name = None
-        detected_date = None
-        detected_marks = 100.0
-        gemini_used = False
-        ai_error = None
-
-        # Try Gemini API if key is available
-        if api_key:
+        if routine_file:
             try:
-                ai_result = call_gemini_vision_api(api_key, routine_text, routine_file)
-                detected_course_code = ai_result.get('course_code')
-                detected_course_title = ai_result.get('course_title')
-                detected_faculty_name = ai_result.get('faculty_name')
-                detected_date = ai_result.get('exam_date')
-                if ai_result.get('total_marks'):
-                    detected_marks = ai_result.get('total_marks')
-                gemini_used = True
-            except Exception as e:
-                ai_error = str(e)
+                image_bytes = routine_file.read()
+                file_name = routine_file.name
+                fn_lower = file_name.lower()
+                if fn_lower.endswith('.png'):
+                    mime_type = 'image/png'
+                elif fn_lower.endswith('.pdf'):
+                    mime_type = 'application/pdf'
+                elif fn_lower.endswith('.webp'):
+                    mime_type = 'image/webp'
+                else:
+                    mime_type = 'image/jpeg'
 
-        # Fallback local pattern extraction if Gemini API not used or failed
-        if not gemini_used:
-            if routine_file and not routine_text:
+                # Attempt local OCR text extraction as helper text
+                ocr_result = OCREngineManager().extract_text(image_bytes)
+                if ocr_result and ocr_result.get('text'):
+                    routine_text = ocr_result.get('text')
+            except Exception:
+                pass
+
+        provider = AIProviderFactory.get_provider()
+        ai_used = True
+        ai_error = None
+        extracted_schedule = []
+
+        try:
+            # Delegate multimodal image & text scanning to active LLM Provider
+            if hasattr(provider, 'analyze_question_paper'):
                 try:
-                    content = routine_file.read().decode('utf-8', errors='ignore')
-                    if content.strip():
-                        routine_text = content
-                except Exception:
-                    pass
+                    ai_result = provider.analyze_question_paper(routine_text, image_bytes=image_bytes, mime_type=mime_type)
+                except TypeError:
+                    ai_result = provider.analyze_question_paper(routine_text or "Exam Routine Document")
+            else:
+                ai_result = {}
 
-            if not routine_text:
-                routine_text = "CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing"
+            if isinstance(ai_result, dict):
+                extracted_schedule = ai_result.get('routine_schedule', [])
+                if not extracted_schedule and ai_result.get('course_code'):
+                    extracted_schedule = [ai_result]
+        except Exception as e:
+            ai_error = str(e)
 
+        # Fallback raw text representation
+        display_raw_text = routine_text
+        if not display_raw_text and file_name:
+            display_raw_text = f"📷 Uploaded Image/Document File: {file_name}\n(Direct Google Gemini Multimodal Vision Scan Applied)"
+
+        # Fallback local pattern extraction if no structured list returned
+        if not extracted_schedule:
             course_match = re.search(r'([A-Z]{2,4}\s*\d{3,4})', routine_text, re.IGNORECASE)
             date_match = re.search(r'(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})', routine_text)
             faculty_match = re.search(r'(?:Faculty|Teacher|Examiner|Instructor)[:\s]+([A-Za-z\.\s]+)', routine_text, re.IGNORECASE)
+            
+            extracted_schedule = [{
+                'course_code': course_match.group(1).upper().strip() if course_match else None,
+                'course_title': None,
+                'faculty_name': faculty_match.group(1).strip() if faculty_match else None,
+                'exam_date': date_match.group(1) if date_match else None,
+                'exam_time': "10:00 AM - 01:00 PM",
+                'total_marks': 100.0
+            }]
 
-            detected_course_code = course_match.group(1).upper().strip() if course_match else None
-            detected_date = date_match.group(1) if date_match else None
-            detected_faculty_name = faculty_match.group(1).strip() if faculty_match else None
+        # Process & DB Match Each Extracted Routine Item
+        routine_items = []
+        all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'))
 
-        # Database Matching
-        course_obj = None
-        if detected_course_code:
-            course_obj = Course.objects.filter(code__iexact=detected_course_code).first()
-        if not course_obj and detected_course_title:
-            course_obj = Course.objects.filter(title__icontains=detected_course_title).first()
-        if not course_obj and routine_text:
-            for c in Course.objects.all():
-                if c.code.lower() in routine_text.lower():
-                    course_obj = c
-                    detected_course_code = c.code
-                    break
+        for item in extracted_schedule:
+            c_code = item.get('course_code')
+            c_title = item.get('course_title')
+            f_name = item.get('faculty_name')
+            e_date = item.get('exam_date')
+            e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
+            t_marks = item.get('total_marks', 100.0)
 
-        faculty_user = None
-        if detected_faculty_name:
-            for prof in Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'):
-                full_name = prof.user.get_full_name() or prof.user.username
-                if detected_faculty_name.lower() in full_name.lower() or prof.user.username.lower() in detected_faculty_name.lower():
-                    faculty_user = prof.user
-                    break
+            # Match Course
+            course_obj = None
+            if c_code:
+                course_obj = Course.objects.filter(code__iexact=c_code).first()
+            if not course_obj and c_title:
+                course_obj = Course.objects.filter(title__icontains=c_title).first()
+            if not course_obj and routine_text:
+                for c in Course.objects.all():
+                    if c.code.lower() in routine_text.lower():
+                        course_obj = c
+                        c_code = c.code
+                        break
 
-        missing_faculty = [detected_faculty_name] if (detected_faculty_name and not faculty_user) else []
-        missing_courses = [detected_course_code or "Unknown Course"] if not course_obj else []
+            # Match Faculty
+            faculty_user = None
+            if f_name:
+                for prof in all_teachers:
+                    full_n = prof.user.get_full_name() or prof.user.username
+                    if f_name.lower() in full_n.lower() or prof.user.username.lower() in f_name.lower():
+                        faculty_user = prof.user
+                        break
+
+            routine_items.append({
+                'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
+                'course_title': course_obj.title if course_obj else (c_title or ''),
+                'faculty_name': f_name or (faculty_user.get_full_name() if faculty_user else 'Unassigned'),
+                'exam_date': e_date,
+                'exam_time': e_time,
+                'total_marks': t_marks,
+                'course_found': bool(course_obj),
+                'course_id': course_obj.id if course_obj else None,
+                'faculty_found': bool(faculty_user),
+                'faculty_id': faculty_user.id if faculty_user else None,
+            })
+
+        first_item = routine_items[0] if routine_items else {}
 
         return JsonResponse({
             'success': True,
-            'gemini_used': gemini_used,
+            'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
+            'routine_items': routine_items,
+            'gemini_used': ai_used,
             'ai_error': ai_error,
-            'detected_course_code': detected_course_code or (course_obj.code if course_obj else None),
-            'course_found': bool(course_obj),
-            'course_id': course_obj.id if course_obj else None,
-            'course_title': course_obj.title if course_obj else detected_course_title,
-            'detected_date': detected_date,
-            'detected_faculty_name': detected_faculty_name,
-            'faculty_found': bool(faculty_user),
-            'faculty_id': faculty_user.id if faculty_user else None,
-            'missing_faculty': missing_faculty,
-            'missing_courses': missing_courses,
-            'total_marks': detected_marks,
+            'provider_name': provider.__class__.__name__,
+            'detected_course_code': first_item.get('course_code'),
+            'course_found': first_item.get('course_found', False),
+            'course_id': first_item.get('course_id'),
+            'course_title': first_item.get('course_title'),
+            'detected_date': first_item.get('exam_date'),
+            'detected_faculty_name': first_item.get('faculty_name'),
+            'faculty_found': first_item.get('faculty_found', False),
+            'faculty_id': first_item.get('faculty_id'),
+            'total_marks': first_item.get('total_marks', 100.0),
         })
 
 

@@ -338,9 +338,9 @@
 <script>
 const modelsMap = {
     'GEMINI': [
-        { value: 'gemini-1.5-flash', label: 'gemini-1.5-flash (Fast & Free)' },
+        { value: 'gemini-flash-latest', label: 'gemini-flash-latest (Recommended Production Model)' },
         { value: 'gemini-2.0-flash', label: 'gemini-2.0-flash (Next Gen Multimodal)' },
-        { value: 'gemini-1.5-pro', label: 'gemini-1.5-pro (Complex Reasoning)' }
+        { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash (Complex Multimodal)' }
     ],
     'OPENAI': [
         { value: 'gpt-4o-mini', label: 'gpt-4o-mini (Fast & Cost-Effective)' },
@@ -352,7 +352,7 @@ const modelsMap = {
     ]
 };
 
-const currentGeminiModel = "{{ ai_config.gemini_model_name|default:'gemini-1.5-flash' }}";
+const currentGeminiModel = "{{ ai_config.gemini_model_name|default:'gemini-flash-latest' }}";
 const currentOpenAIModel = "{{ ai_config.openai_model_name|default:'gpt-4o-mini' }}";
 
 function updateModelDropdown() {

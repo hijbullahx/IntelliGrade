@@ -176,7 +176,7 @@ class AIConfiguration(models.Model):
         AUTO = 'AUTO', 'Auto-Detect Hybrid'
 
     provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.GEMINI)
-    gemini_model_name = models.CharField(max_length=50, default='gemini-1.5-flash')
+    gemini_model_name = models.CharField(max_length=50, default='gemini-flash-latest')
     openai_model_name = models.CharField(max_length=50, default='gpt-4o-mini')
     ocr_engine = models.CharField(max_length=20, choices=OCREngine.choices, default=OCREngine.AUTO)
     preprocess_image = models.BooleanField(default=True, help_text="Enable deskewing, noise removal, and contrast enhancement.")

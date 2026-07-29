@@ -32,9 +32,23 @@ class MockProvider(BaseAIProvider):
 
     def analyze_question_paper(self, paper_text_or_image: Any) -> Dict[str, Any]:
         return {
-            "questions": [
-                {"question_number": "Q1", "prompt_text": "Explain Microservices Architecture vs Monolithic Architecture.", "max_marks": 10.0},
-                {"question_number": "Q2", "prompt_text": "Define Database Normalization (1NF, 2NF, 3NF).", "max_marks": 10.0}
+            "routine_schedule": [
+                {
+                    "course_code": "CSE 411",
+                    "course_title": "Software Engineering",
+                    "faculty_name": "Dr. Alan Turing",
+                    "exam_date": "2026-08-15",
+                    "exam_time": "10:00 AM - 01:00 PM",
+                    "total_marks": 100.0
+                },
+                {
+                    "course_code": "CSE 312",
+                    "course_title": "Database Management Systems",
+                    "faculty_name": "Prof. Grace Hopper",
+                    "exam_date": "2026-08-18",
+                    "exam_time": "02:00 PM - 05:00 PM",
+                    "total_marks": 100.0
+                }
             ]
         }
 

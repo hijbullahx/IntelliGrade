@@ -20,7 +20,7 @@ class AIProviderFactory:
 
         if provider_type == AIConfiguration.Provider.GEMINI:
             api_key = getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
-            model_name = config.gemini_model_name or 'gemini-1.5-flash'
+            model_name = config.gemini_model_name or 'gemini-flash-latest'
             if not api_key:
                 # Fallback gracefully to Mock if API Key is not set
                 return MockProvider()
