@@ -78,6 +78,12 @@ class Examination(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     assigned_faculty = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_examinations')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_exams')
+    
+    # Uploaded Reference Documents
+    question_paper_file = models.FileField(upload_to='exam_questions/%Y/%m/', blank=True, null=True, help_text="Uploaded Question Paper document or image.")
+    rubric_file = models.FileField(upload_to='exam_rubrics/%Y/%m/', blank=True, null=True, help_text="Uploaded Grading Rubric document or image.")
+    course_outline_file = models.FileField(upload_to='course_outlines/%Y/%m/', blank=True, null=True, help_text="Uploaded Course Syllabus / Outline document.")
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

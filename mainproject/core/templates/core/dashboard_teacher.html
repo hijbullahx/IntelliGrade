@@ -130,7 +130,12 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="px-5 py-6 text-center theme-text-muted">No examinations assigned yet.</td>
+                                <td colspan="5" class="px-5 py-8 text-center theme-text-muted">
+                                    <div class="space-y-1">
+                                        <p class="font-bold text-xs theme-text-primary">No examinations assigned to your faculty account yet.</p>
+                                        <p class="text-[11px] theme-text-muted">The Chief Exam Controller has not published or assigned an exam routine to you yet.</p>
+                                    </div>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

@@ -38,17 +38,15 @@ def teacher_dashboard(request):
     teacher_name = request.user.get_full_name() or request.user.username
     dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
 
-    # Fetch examinations assigned to this specific faculty examiner
+    # Fetch examinations assigned strictly to this specific faculty examiner
     assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course')
-    if not assigned_exams.exists():
-        assigned_exams = Examination.objects.all().select_related('course')[:5]
 
-    pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
+    pending_scripts = AnswerScript.objects.filter(examination__assigned_faculty=request.user, status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
     stats = {
-        'total_exams': assigned_exams.count() if hasattr(assigned_exams, 'count') else len(assigned_exams),
-        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count(),
-        'total_scripts': AnswerScript.objects.count(),
+        'total_exams': assigned_exams.count(),
+        'pending_reviews': AnswerScript.objects.filter(examination__assigned_faculty=request.user, status='EVALUATED').count(),
+        'total_scripts': AnswerScript.objects.filter(examination__assigned_faculty=request.user).count(),
         'avg_confidence': '94.2%',
     }
     
@@ -1440,6 +1438,25 @@ def question_rubric_manage(request, exam_id=None):
         if not is_admin and target_exam.assigned_faculty != request.user:
             messages.error(request, "Permission Denied: You can only create questions for examinations assigned to you by the Chief Exam Controller.")
             return redirect('teacher_dashboard')
+
+        # Handle 3 Document Upload Options (Question Paper, Rubric File, Course Outline)
+        qp_file = request.FILES.get('question_paper_file')
+        rf_file = request.FILES.get('rubric_file')
+        co_file = request.FILES.get('course_outline_file')
+
+        if qp_file:
+            target_exam.question_paper_file = qp_file
+        if rf_file:
+            target_exam.rubric_file = rf_file
+        if co_file:
+            target_exam.course_outline_file = co_file
+
+        if qp_file or rf_file or co_file:
+            target_exam.save()
+            messages.success(request, f"Reference document(s) uploaded successfully for {target_exam.course.code}!")
+
+        if not question_number and not prompt_text:
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
 
         if not question_number or not prompt_text:
             messages.error(request, "Question Number and Question Prompt Text are required.")
