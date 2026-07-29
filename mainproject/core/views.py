@@ -814,11 +814,6 @@ def scan_routine_ai(request):
                     mime_type = 'image/webp'
                 else:
                     mime_type = 'image/jpeg'
-
-                # Attempt local OCR text extraction as helper text
-                ocr_result = OCREngineManager().extract_text(image_bytes)
-                if ocr_result and ocr_result.get('text'):
-                    routine_text = ocr_result.get('text')
             except Exception:
                 pass
 
