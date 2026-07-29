@@ -76,6 +76,7 @@ class Examination(models.Model):
     exam_date = models.DateField()
     total_marks = models.DecimalField(max_digits=5, decimal_places=2, default=100.00)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    assigned_faculty = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_examinations')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='created_exams')
     created_at = models.DateTimeField(auto_now_add=True)
 

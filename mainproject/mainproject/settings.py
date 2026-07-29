@@ -27,6 +27,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['.pythonanywhere.com', 'localhost', '127.0.0.1', '*']
 
+# Gemini AI Configuration
+import os
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
 
 
 # Application definition

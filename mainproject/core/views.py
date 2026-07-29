@@ -601,14 +601,193 @@ def dept_head_dashboard(request):
     return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
 
 
+import base64
+import json
+import os
+import re
+import urllib.request
+import urllib.error
+from django.http import JsonResponse
+
+def call_gemini_vision_api(api_key, text_content, file_obj=None):
+    """Calls Google Gemini API (gemini-1.5-flash) to extract structured JSON routine details using standard library urllib."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    prompt_text = """
+    You are an expert AI exam routine scanner. Extract official exam routine details from the provided text or document/image.
+    Return ONLY a raw JSON object (without markdown code blocks, backticks, or extra commentary) with these exact keys:
+    {
+      "course_code": "e.g. CSE 411",
+      "course_title": "e.g. Software Engineering",
+      "faculty_name": "e.g. Dr. Alan Turing",
+      "exam_date": "YYYY-MM-DD",
+      "total_marks": 100.0
+    }
+    If any field is missing or uncertain, set its value to null.
+    """
+    
+    parts = []
+    if text_content:
+        parts.append({"text": f"{prompt_text}\n\nExam Routine Content:\n{text_content}"})
+    else:
+        parts.append({"text": prompt_text})
+        
+    if file_obj:
+        try:
+            file_bytes = file_obj.read()
+            b64_data = base64.b64encode(file_bytes).decode('utf-8')
+            mime_type = getattr(file_obj, 'content_type', 'image/jpeg')
+            if not mime_type or mime_type == 'application/octet-stream':
+                filename = getattr(file_obj, 'name', '').lower()
+                if filename.endswith('.pdf'):
+                    mime_type = 'application/pdf'
+                elif filename.endswith('.png'):
+                    mime_type = 'image/png'
+                else:
+                    mime_type = 'image/jpeg'
+
+            parts.append({
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": b64_data
+                }
+            })
+        except Exception:
+            pass
+
+    payload = {"contents": [{"parts": parts}]}
+    json_data = json.dumps(payload).encode('utf-8')
+
+    req = urllib.request.Request(
+        url,
+        data=json_data,
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            res_bytes = response.read()
+            res_data = json.loads(res_bytes.decode('utf-8'))
+            raw_output = res_data['candidates'][0]['content']['parts'][0]['text']
+            raw_output = re.sub(r'```json\s*', '', raw_output)
+            raw_output = re.sub(r'```\s*', '', raw_output).strip()
+            return json.loads(raw_output)
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='ignore')
+        raise Exception(f"Gemini API HTTP {e.code}: {error_body}")
+    except Exception as e:
+        raise Exception(f"Gemini Request Failed: {str(e)}")
+
+
+from django.conf import settings
+
+def scan_routine_ai(request):
+    """AI Routine Auto-Reader: Scans uploaded/pasted exam routine text/file using Gemini API or Regex and matches DB."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        routine_text = request.POST.get('routine_text', '').strip()
+        routine_file = request.FILES.get('routine_file')
+        user_api_key = request.POST.get('api_key', '').strip()
+        
+        api_key = user_api_key or getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
+
+        detected_course_code = None
+        detected_course_title = None
+        detected_faculty_name = None
+        detected_date = None
+        detected_marks = 100.0
+        gemini_used = False
+        ai_error = None
+
+        # Try Gemini API if key is available
+        if api_key:
+            try:
+                ai_result = call_gemini_vision_api(api_key, routine_text, routine_file)
+                detected_course_code = ai_result.get('course_code')
+                detected_course_title = ai_result.get('course_title')
+                detected_faculty_name = ai_result.get('faculty_name')
+                detected_date = ai_result.get('exam_date')
+                if ai_result.get('total_marks'):
+                    detected_marks = ai_result.get('total_marks')
+                gemini_used = True
+            except Exception as e:
+                ai_error = str(e)
+
+        # Fallback local pattern extraction if Gemini API not used or failed
+        if not gemini_used:
+            if routine_file and not routine_text:
+                try:
+                    content = routine_file.read().decode('utf-8', errors='ignore')
+                    if content.strip():
+                        routine_text = content
+                except Exception:
+                    pass
+
+            if not routine_text:
+                routine_text = "CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing"
+
+            course_match = re.search(r'([A-Z]{2,4}\s*\d{3,4})', routine_text, re.IGNORECASE)
+            date_match = re.search(r'(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})', routine_text)
+            faculty_match = re.search(r'(?:Faculty|Teacher|Examiner|Instructor)[:\s]+([A-Za-z\.\s]+)', routine_text, re.IGNORECASE)
+
+            detected_course_code = course_match.group(1).upper().strip() if course_match else None
+            detected_date = date_match.group(1) if date_match else None
+            detected_faculty_name = faculty_match.group(1).strip() if faculty_match else None
+
+        # Database Matching
+        course_obj = None
+        if detected_course_code:
+            course_obj = Course.objects.filter(code__iexact=detected_course_code).first()
+        if not course_obj and detected_course_title:
+            course_obj = Course.objects.filter(title__icontains=detected_course_title).first()
+        if not course_obj and routine_text:
+            for c in Course.objects.all():
+                if c.code.lower() in routine_text.lower():
+                    course_obj = c
+                    detected_course_code = c.code
+                    break
+
+        faculty_user = None
+        if detected_faculty_name:
+            for prof in Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'):
+                full_name = prof.user.get_full_name() or prof.user.username
+                if detected_faculty_name.lower() in full_name.lower() or prof.user.username.lower() in detected_faculty_name.lower():
+                    faculty_user = prof.user
+                    break
+
+        missing_faculty = [detected_faculty_name] if (detected_faculty_name and not faculty_user) else []
+        missing_courses = [detected_course_code or "Unknown Course"] if not course_obj else []
+
+        return JsonResponse({
+            'success': True,
+            'gemini_used': gemini_used,
+            'ai_error': ai_error,
+            'detected_course_code': detected_course_code or (course_obj.code if course_obj else None),
+            'course_found': bool(course_obj),
+            'course_id': course_obj.id if course_obj else None,
+            'course_title': course_obj.title if course_obj else detected_course_title,
+            'detected_date': detected_date,
+            'detected_faculty_name': detected_faculty_name,
+            'faculty_found': bool(faculty_user),
+            'faculty_id': faculty_user.id if faculty_user else None,
+            'missing_faculty': missing_faculty,
+            'missing_courses': missing_courses,
+            'total_marks': detected_marks,
+        })
+
+
 def exam_create(request):
-    """Interface to create examinations and define rubrics."""
+    """Interface to create examinations and assign faculty examiners."""
     if not request.user.is_authenticated:
         messages.warning(request, "Please sign in to create examinations.")
         return redirect('landing_page')
 
     if request.method == 'POST':
         course_id = request.POST.get('course')
+        assigned_faculty_id = request.POST.get('assigned_faculty')
         title = request.POST.get('title', '').strip()
         exam_date = request.POST.get('exam_date')
         total_marks = request.POST.get('total_marks', 100.00)
@@ -618,15 +797,20 @@ def exam_create(request):
             return redirect('exam_create')
 
         course = get_object_or_404(Course, id=course_id)
+        assigned_faculty = User.objects.filter(id=assigned_faculty_id).first() if assigned_faculty_id else None
+
         exam = Examination.objects.create(
             course=course,
             title=title if title else f"Examination for {course.code}",
             exam_date=exam_date if exam_date else '2026-07-20',
             total_marks=total_marks,
             status=Examination.Status.PUBLISHED,
+            assigned_faculty=assigned_faculty,
             created_by=request.user
         )
-        messages.success(request, f"Examination '{exam.title}' for {course.code} created and published successfully!")
+
+        faculty_str = f" (Assigned Examiner: {assigned_faculty.get_full_name() or assigned_faculty.username})" if assigned_faculty else ""
+        messages.success(request, f"Examination '{exam.title}' for {course.code} created successfully!{faculty_str}")
 
         profile = getattr(request.user, 'profile', None)
         if (profile and profile.role == Profile.Role.ADMIN) or request.user.is_superuser:
@@ -634,7 +818,11 @@ def exam_create(request):
         return redirect('teacher_dashboard')
 
     courses = Course.objects.select_related('department').all()
-    return render(request, 'core/exam_create.html', {'courses': courses})
+    faculty_members = Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department')
+    return render(request, 'core/exam_create.html', {
+        'courses': courses,
+        'faculty_members': faculty_members,
+    })
 
 
 def script_upload(request):

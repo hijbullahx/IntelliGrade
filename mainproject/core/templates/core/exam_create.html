@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Create Examination & Rubric | IntelliGrade{% endblock %}
+{% block title %}Create Examination & Assign Faculty | IntelliGrade{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-8">
@@ -9,93 +9,204 @@
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
-                <i data-lucide="plus-circle" class="w-6 h-6 text-brand-500"></i> Create Examination & Rubric
+                <i data-lucide="plus-circle" class="w-6 h-6 text-brand-500"></i> Create Examination & Assign Faculty
             </h1>
-            <p class="theme-text-muted text-sm mt-1">Configure exam parameters, individual questions, and detailed grading criteria for AI scoring.</p>
+            <p class="theme-text-muted text-sm mt-1">Configure exam parameters, select course modules, and assign registered faculty examiners.</p>
         </div>
         <a href="{% url 'teacher_dashboard' %}" class="text-xs theme-text-muted hover:text-brand-500 flex items-center gap-1 transition-colors">
             &larr; Back to Dashboard
         </a>
     </div>
 
+    <!-- AI Routine Auto-Reader Panel -->
+    <div class="glass-card p-6 rounded-2xl border-l-4 border-l-purple-500 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="sparkles" class="w-4 h-4 text-purple-500"></i> AI Exam Routine Auto-Reader & Vision OCR
+            </h2>
+            <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold border border-purple-500/20">Gemini AI Integrated</span>
+        </div>
+        <p class="text-xs theme-text-muted">Paste your official exam routine text or upload a routine document/image below. The native AI scanner will auto-detect the Course, Exam Date, and Examiner Faculty, verifying if they exist in your system database.</p>
+
+        <form id="routineScanForm" class="space-y-3">
+            {% csrf_token %}
+            
+            <div>
+                <textarea id="routineText" rows="3" placeholder="Paste routine schedule here (e.g. CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing)..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                    <label class="block text-[10px] theme-text-muted mb-0.5 font-bold">Upload Routine Document / Image (PDF, PNG, JPG)</label>
+                    <input type="file" id="routineFile" accept="image/*,.pdf,.txt" class="text-xs theme-text-muted">
+                </div>
+                <button type="button" id="scanBtn" onclick="runAIRoutineScan()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with Gemini AI
+                </button>
+            </div>
+        </form>
+
+        <!-- AI Routine Detection Result Alert -->
+        <div id="aiScanResult" class="hidden p-4 rounded-xl border transition-all text-xs"></div>
+    </div>
+
     <!-- Exam Form Card -->
-    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
+    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl">
         {% csrf_token %}
         
         <!-- General Details Section -->
         <div class="space-y-4 border-b border-slate-200 dark:border-slate-800 pb-6">
             <h3 class="text-sm font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider flex items-center gap-2">
-                <i data-lucide="file-text" class="w-4 h-4"></i> 1. Examination Details
+                <i data-lucide="file-text" class="w-4 h-4"></i> Examination & Examiner Assignment Details
             </h3>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <!-- Course Selection (Created Courses Only) -->
                 <div>
-                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Course</label>
-                    <select name="course" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Select Course</label>
+                    <select name="course" id="courseSelect" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
                         <option value="">Select Course...</option>
                         {% for course in courses %}
-                        <option value="{{ course.id }}">{{ course.code }} - {{ course.title }} ({{ course.department.name }})</option>
+                        <option value="{{ course.id }}" data-code="{{ course.code }}">{{ course.code }} - {{ course.title }} ({{ course.department.name }})</option>
                         {% empty %}
-                        <option value="" disabled>No courses created yet. Please add a course first.</option>
+                        <option value="" disabled>No courses created yet. Please create a course first.</option>
                         {% endfor %}
                     </select>
                 </div>
 
+                <!-- Assigned Faculty Examiner (Created Faculty Members Only) -->
+                <div>
+                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Assigned Examiner / Faculty Member</label>
+                    <select name="assigned_faculty" id="facultySelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                        <option value="">Select Assigned Examiner...</option>
+                        {% for prof in faculty_members %}
+                        <option value="{{ prof.user.id }}" data-name="{{ prof.user.get_full_name|default:prof.user.username }}">{{ prof.user.get_full_name|default:prof.user.username }} ({{ prof.user.username }}){% if prof.department %} - {{ prof.department.code }}{% endif %}</option>
+                        {% empty %}
+                        <option value="" disabled>No faculty members created yet. Please add faculty first.</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Exam Title -->
                 <div>
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Exam Title</label>
-                    <input type="text" name="title" placeholder="e.g. Final Semester Examination - Spring 2026" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                    <input type="text" name="title" id="examTitle" placeholder="e.g. Final Semester Examination - Spring 2026" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
 
+                <!-- Exam Date -->
                 <div>
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Exam Date</label>
-                    <input type="date" name="exam_date" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                    <input type="date" name="exam_date" id="examDate" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Total Marks</label>
-                    <input type="number" step="0.01" name="total_marks" value="100.00" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                <!-- Total Marks -->
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-medium theme-text-secondary mb-1.5">Total Max Marks</label>
+                    <input type="number" step="0.01" name="total_marks" id="totalMarks" value="100.00" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
+
             </div>
         </div>
 
-        <!-- Question & Rubric Builder -->
-        <div class="space-y-4">
-            <h3 class="text-sm font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wider flex items-center gap-2">
-                <i data-lucide="layers" class="w-4 h-4"></i> 2. Questions & AI Rubric Rules
-            </h3>
-
-            <!-- Question Card 1 -->
-            <div class="p-5 rounded-xl bg-slate-100/80 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-4">
-                <div class="flex items-center justify-between">
-                    <span class="text-xs font-bold theme-text-primary flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-brand-500/20 text-brand-600 dark:text-brand-400 flex items-center justify-center text-[10px]">1</span> Question #1
-                    </span>
-                    <span class="text-xs theme-text-muted font-mono">Max Marks: 10.0</span>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-[11px] theme-text-muted mb-1">Question Number</label>
-                        <input type="text" placeholder="e.g. Q1 (a)" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block text-[11px] theme-text-muted mb-1">Question Prompt Text</label>
-                        <input type="text" placeholder="e.g. Explain Microservices Architecture vs Monolithic Architecture with advantages." class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-[11px] theme-text-muted mb-1">AI Rubric Grading Criteria (Key Points Expected)</label>
-                    <textarea rows="3" placeholder="1. Definition & key concepts (4 marks)&#10;2. Contrast & examples (3 marks)&#10;3. Scalability details (3 marks)" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-3 text-xs theme-text-primary"></textarea>
-                </div>
-            </div>
-        </div>
-
-        <div class="pt-4 flex items-center justify-end gap-3">
-            <button type="button" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl">Add Question</button>
+        <div class="pt-2 flex items-center justify-end gap-3">
+            <a href="{% url 'teacher_dashboard' %}" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl">Cancel</a>
             <button type="submit" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all">Save & Publish Examination</button>
         </div>
     </form>
 
 </div>
+
+<script>
+function runAIRoutineScan() {
+    const routineText = document.getElementById('routineText').value;
+    const routineFile = document.getElementById('routineFile').files[0];
+    const resultBox = document.getElementById('aiScanResult');
+    const scanBtn = document.getElementById('scanBtn');
+
+    scanBtn.disabled = true;
+    scanBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Running Gemini AI Scan...`;
+
+    const formData = new FormData();
+    formData.append('routine_text', routineText);
+    if (routineFile) {
+        formData.append('routine_file', routineFile);
+    }
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch("{% url 'scan_routine_ai' %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        scanBtn.disabled = false;
+        scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with Gemini AI`;
+        lucide.createIcons();
+
+        resultBox.classList.remove('hidden');
+        let html = `<div class="space-y-3">`;
+
+        let statusHeader = data.gemini_used ? 
+            `<span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">✨ Native Gemini 1.5 AI Active</span>` :
+            `<span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">⚡ Native Pattern Engine</span>`;
+
+        html += `<div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+            <h4 class="font-bold text-sm theme-text-primary">AI Routine Scanner Results:</h4>
+            ${statusHeader}
+        </div>`;
+
+        // Course Status
+        if (data.course_found) {
+            html += `<div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-between">
+                <span>🟢 Matched Course: <strong>${data.detected_course_code}</strong> ${data.course_title ? '- ' + data.course_title : ''}</span>
+                <span class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-md">Found in DB</span>
+            </div>`;
+            document.getElementById('courseSelect').value = data.course_id;
+        } else {
+            let courseName = data.detected_course_code || "Detected Course";
+            html += `<div class="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold flex items-center justify-between">
+                <span>🔴 Course '${courseName}' is missing in your system database!</span>
+                <a href="{% url 'add_course' %}" target="_blank" class="px-3 py-1 bg-rose-600 text-white text-[11px] font-bold rounded-lg hover:bg-rose-500 flex items-center gap-1">+ Add Course</a>
+            </div>`;
+        }
+
+        // Faculty Status
+        if (data.faculty_found) {
+            html += `<div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-between">
+                <span>🟢 Matched Examiner Faculty: <strong>${data.detected_faculty_name}</strong></span>
+                <span class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-md">Found in DB</span>
+            </div>`;
+            document.getElementById('facultySelect').value = data.faculty_id;
+        } else if (data.detected_faculty_name) {
+            html += `<div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold flex items-center justify-between">
+                <span>⚠️ Faculty '${data.detected_faculty_name}' detected in routine is not registered in system database!</span>
+                <a href="{% url 'add_faculty' %}" target="_blank" class="px-3 py-1 bg-amber-600 text-white text-[11px] font-bold rounded-lg hover:bg-amber-500 flex items-center gap-1">+ Add Faculty Member</a>
+            </div>`;
+        } else {
+            html += `<div class="p-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 theme-text-muted">
+                <span>ℹ️ No specific faculty examiner detected in routine text/file. Select examiner manually below.</span>
+            </div>`;
+        }
+
+        // Date
+        if (data.detected_date) {
+            document.getElementById('examDate').value = data.detected_date;
+        }
+        if (data.total_marks) {
+            document.getElementById('totalMarks').value = data.total_marks;
+        }
+
+        html += `</div>`;
+        resultBox.innerHTML = html;
+        resultBox.className = "p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 transition-all text-xs";
+    })
+    .catch(err => {
+        scanBtn.disabled = false;
+        scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with Gemini AI`;
+        lucide.createIcons();
+        alert('Routine scanning failed. Please check your inputs.');
+    });
+}
+</script>
 {% endblock %}
