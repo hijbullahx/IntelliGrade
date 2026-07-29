@@ -212,6 +212,9 @@ def exam_controller_dashboard(request):
         {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
     ]
     
+    from core.models import AIConfiguration
+    ai_config = AIConfiguration.get_config()
+
     return render(request, 'core/dashboard_exam_controller.html', {
         'stats': stats,
         'colleges': colleges,
@@ -219,7 +222,44 @@ def exam_controller_dashboard(request):
         'standalone_departments': standalone_departments,
         'departments': Department.objects.all(),
         'recheck_tickets': recheck_tickets,
+        'ai_config': ai_config,
     })
+
+
+def ai_config_view(request):
+    """View to update AI Engine Configuration Settings from Chief Exam Controller Dashboard."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    from core.ai_engine.config.manager import AIConfigManager
+    config = AIConfigManager.get_settings()
+
+    if request.method == 'POST':
+        provider = request.POST.get('provider')
+        gemini_model = request.POST.get('gemini_model', '').strip()
+        openai_model = request.POST.get('openai_model', '').strip()
+        ocr_engine = request.POST.get('ocr_engine')
+        preprocess_image = request.POST.get('preprocess_image') == 'on'
+        enable_rag_learning = request.POST.get('enable_rag_learning') == 'on'
+        confidence_threshold = float(request.POST.get('confidence_threshold', 0.75))
+        prompt_template = request.POST.get('prompt_template', '').strip()
+
+        AIConfigManager.update_settings(
+            provider=provider,
+            gemini_model=gemini_model,
+            openai_model=openai_model,
+            ocr_engine=ocr_engine,
+            preprocess=preprocess_image,
+            confidence_threshold=confidence_threshold,
+            enable_rag=enable_rag_learning,
+            prompt_template=prompt_template
+        )
+
+        messages.success(request, "AI Engine System Settings updated successfully!")
+        return redirect('exam_controller_dashboard')
+
+    return redirect('exam_controller_dashboard')
 
 
 def add_structure(request):

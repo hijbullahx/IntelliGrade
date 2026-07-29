@@ -39,6 +39,7 @@ urlpatterns = [
     path('controller/edit-exam/<int:exam_id>/', views.edit_exam, name='edit_exam'),
     path('controller/delete-exam/<int:exam_id>/', views.delete_exam, name='delete_exam'),
     path('controller/scan-routine-ai/', views.scan_routine_ai, name='scan_routine_ai'),
+    path('controller/ai-config/', views.ai_config_view, name='ai_config_view'),
     path('controller/rechecks/', views.rechecks_list, name='rechecks_list'),
     path('dashboard/teacher/', views.teacher_dashboard, name='teacher_dashboard'),
     path('dashboard/student/', views.student_dashboard, name='student_dashboard'),

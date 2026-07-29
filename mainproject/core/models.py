@@ -159,3 +159,66 @@ class Evaluation(models.Model):
     def __str__(self):
         return f"Eval Q{self.segment.question.question_number}: {self.get_effective_marks()}/{self.segment.question.max_marks}"
 
+
+# ==========================================
+# AI Engine Configuration, Memory & RAG Models
+# ==========================================
+
+class AIConfiguration(models.Model):
+    class Provider(models.TextChoices):
+        GEMINI = 'GEMINI', 'Google Gemini AI'
+        OPENAI = 'OPENAI', 'OpenAI GPT-4o'
+        MOCK = 'MOCK', 'Mock Testing Provider'
+
+    class OCREngine(models.TextChoices):
+        PADDLE = 'PADDLE', 'PaddleOCR Primary'
+        TESSERACT = 'TESSERACT', 'PyTesseract Fallback'
+        AUTO = 'AUTO', 'Auto-Detect Hybrid'
+
+    provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.GEMINI)
+    gemini_model_name = models.CharField(max_length=50, default='gemini-1.5-flash')
+    openai_model_name = models.CharField(max_length=50, default='gpt-4o-mini')
+    ocr_engine = models.CharField(max_length=20, choices=OCREngine.choices, default=OCREngine.AUTO)
+    preprocess_image = models.BooleanField(default=True, help_text="Enable deskewing, noise removal, and contrast enhancement.")
+    confidence_threshold = models.FloatField(default=0.75, help_text="Threshold below which AI marks require mandatory review.")
+    enable_rag_learning = models.BooleanField(default=True, help_text="Retrieve past teacher corrections as few-shot exemplars.")
+    prompt_template = models.TextField(blank=True, help_text="Custom prompt instructions for the evaluation engine.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"AI System Config ({self.get_provider_display()} - {self.get_ocr_engine_display()})"
+
+    @classmethod
+    def get_config(cls):
+        config, _ = cls.objects.get_or_create(id=1)
+        return config
+
+
+class FeedbackCorrection(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='feedback_corrections')
+    evaluation = models.OneToOneField(Evaluation, on_delete=models.CASCADE, related_name='correction', null=True, blank=True)
+    student_answer = models.TextField()
+    ai_suggested_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    teacher_final_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    correction_reason = models.TextField(blank=True, help_text="Explanation for why teacher adjusted AI score.")
+    embedding = models.JSONField(default=list, blank=True, help_text="Vector embedding for semantic similarity search.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Correction Q{self.question.question_number}: {self.ai_suggested_marks} -> {self.teacher_final_marks}"
+
+
+class AIMemoryLog(models.Model):
+    evaluation = models.ForeignKey(Evaluation, on_delete=models.CASCADE, related_name='ai_memory_logs', null=True, blank=True)
+    provider = models.CharField(max_length=50)
+    model_version = models.CharField(max_length=50)
+    prompt_snapshot = models.TextField()
+    raw_response_json = models.JSONField(default=dict)
+    confidence_score = models.FloatField(default=0.0)
+    latency_ms = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"AIMemoryLog [{self.provider}/{self.model_version}] - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
