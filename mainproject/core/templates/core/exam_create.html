@@ -31,21 +31,24 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Course</label>
-                    <select name="course" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    <select name="course" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
                         <option value="">Select Course...</option>
-                        <option value="1" selected>CSE 411 - Software Engineering</option>
-                        <option value="2">CSE 312 - Database Systems</option>
+                        {% for course in courses %}
+                        <option value="{{ course.id }}">{{ course.code }} - {{ course.title }} ({{ course.department.name }})</option>
+                        {% empty %}
+                        <option value="" disabled>No courses created yet. Please add a course first.</option>
+                        {% endfor %}
                     </select>
                 </div>
 
                 <div>
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Exam Title</label>
-                    <input type="text" name="title" value="Final Semester Examination - Spring 2026" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                    <input type="text" name="title" placeholder="e.g. Final Semester Examination - Spring 2026" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
 
                 <div>
                     <label class="block text-xs font-medium theme-text-secondary mb-1.5">Exam Date</label>
-                    <input type="date" name="exam_date" value="2026-07-20" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                    <input type="date" name="exam_date" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
                 </div>
 
                 <div>
@@ -73,17 +76,17 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                         <label class="block text-[11px] theme-text-muted mb-1">Question Number</label>
-                        <input type="text" value="Q1 (a)" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
+                        <input type="text" placeholder="e.g. Q1 (a)" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
                     </div>
                     <div class="md:col-span-2">
                         <label class="block text-[11px] theme-text-muted mb-1">Question Prompt Text</label>
-                        <input type="text" value="Explain Microservices Architecture vs Monolithic Architecture with advantages." class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
+                        <input type="text" placeholder="e.g. Explain Microservices Architecture vs Monolithic Architecture with advantages." class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg px-3 py-2 text-xs theme-text-primary">
                     </div>
                 </div>
 
                 <div>
                     <label class="block text-[11px] theme-text-muted mb-1">AI Rubric Grading Criteria (Key Points Expected)</label>
-                    <textarea rows="3" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-3 text-xs theme-text-primary">1. Microservices definition & API communication (4 marks)&#10;2. Monolith contrast (3 marks)&#10;3. Scalability / Deployment advantage details (3 marks)</textarea>
+                    <textarea rows="3" placeholder="1. Definition & key concepts (4 marks)&#10;2. Contrast & examples (3 marks)&#10;3. Scalability details (3 marks)" class="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-3 text-xs theme-text-primary"></textarea>
                 </div>
             </div>
         </div>

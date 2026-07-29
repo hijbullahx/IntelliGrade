@@ -603,11 +603,37 @@ def dept_head_dashboard(request):
 
 def exam_create(request):
     """Interface to create examinations and define rubrics."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to create examinations.")
+        return redirect('landing_page')
+
     if request.method == 'POST':
-        messages.success(request, "Examination and grading rubric created successfully!")
+        course_id = request.POST.get('course')
+        title = request.POST.get('title', '').strip()
+        exam_date = request.POST.get('exam_date')
+        total_marks = request.POST.get('total_marks', 100.00)
+
+        if not course_id:
+            messages.error(request, "Please select a valid course created in the system.")
+            return redirect('exam_create')
+
+        course = get_object_or_404(Course, id=course_id)
+        exam = Examination.objects.create(
+            course=course,
+            title=title if title else f"Examination for {course.code}",
+            exam_date=exam_date if exam_date else '2026-07-20',
+            total_marks=total_marks,
+            status=Examination.Status.PUBLISHED,
+            created_by=request.user
+        )
+        messages.success(request, f"Examination '{exam.title}' for {course.code} created and published successfully!")
+
+        profile = getattr(request.user, 'profile', None)
+        if (profile and profile.role == Profile.Role.ADMIN) or request.user.is_superuser:
+            return redirect('exams_list')
         return redirect('teacher_dashboard')
-    
-    courses = Course.objects.all()
+
+    courses = Course.objects.select_related('department').all()
     return render(request, 'core/exam_create.html', {'courses': courses})
 
 
