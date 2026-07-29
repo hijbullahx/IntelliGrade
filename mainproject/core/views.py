@@ -236,14 +236,20 @@ def ai_config_view(request):
     config = AIConfigManager.get_settings()
 
     if request.method == 'POST':
-        provider = request.POST.get('provider')
-        gemini_model = request.POST.get('gemini_model', '').strip()
-        openai_model = request.POST.get('openai_model', '').strip()
-        ocr_engine = request.POST.get('ocr_engine')
+        provider = request.POST.get('provider', 'GEMINI')
+        selected_model = request.POST.get('model_version', '').strip()
+        ocr_engine = request.POST.get('ocr_engine', 'AUTO')
         preprocess_image = request.POST.get('preprocess_image') == 'on'
         enable_rag_learning = request.POST.get('enable_rag_learning') == 'on'
-        confidence_threshold = float(request.POST.get('confidence_threshold', 0.75))
         prompt_template = request.POST.get('prompt_template', '').strip()
+
+        gemini_model = config.gemini_model_name
+        openai_model = config.openai_model_name
+
+        if provider == 'GEMINI' and selected_model:
+            gemini_model = selected_model
+        elif provider == 'OPENAI' and selected_model:
+            openai_model = selected_model
 
         AIConfigManager.update_settings(
             provider=provider,
@@ -251,12 +257,11 @@ def ai_config_view(request):
             openai_model=openai_model,
             ocr_engine=ocr_engine,
             preprocess=preprocess_image,
-            confidence_threshold=confidence_threshold,
             enable_rag=enable_rag_learning,
             prompt_template=prompt_template
         )
 
-        messages.success(request, "AI Engine System Settings updated successfully!")
+        messages.success(request, f"AI Engine Settings updated! Active Provider: {provider} ({selected_model or 'Default'}).")
         return redirect('exam_controller_dashboard')
 
     return redirect('exam_controller_dashboard')
