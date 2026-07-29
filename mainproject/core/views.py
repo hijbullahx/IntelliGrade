@@ -38,11 +38,15 @@ def teacher_dashboard(request):
     teacher_name = request.user.get_full_name() or request.user.username
     dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
 
-    exams = Examination.objects.all().select_related('course')[:5]
+    # Fetch examinations assigned to this specific faculty examiner
+    assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course')
+    if not assigned_exams.exists():
+        assigned_exams = Examination.objects.all().select_related('course')[:5]
+
     pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
     stats = {
-        'total_exams': Examination.objects.count(),
+        'total_exams': assigned_exams.count() if hasattr(assigned_exams, 'count') else len(assigned_exams),
         'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count(),
         'total_scripts': AnswerScript.objects.count(),
         'avg_confidence': '94.2%',
@@ -51,7 +55,8 @@ def teacher_dashboard(request):
     context = {
         'teacher_name': teacher_name,
         'dept_name': dept_name,
-        'exams': exams,
+        'exams': assigned_exams,
+        'assigned_exams': assigned_exams,
         'pending_scripts': pending_scripts,
         'stats': stats,
     }
@@ -562,6 +567,60 @@ def rechecks_list(request):
         {'id': 3, 'student': 'Nusrat Jahan (201002105)', 'course': 'CSE 211 - Data Structures', 'reason': 'Graph BFS vs DFS answer evaluation inquiry', 'ai_score': 7.5, 'requested': 9.0, 'status': 'Resolved'},
     ]
     return render(request, 'core/rechecks_list.html', {'recheck_tickets': recheck_tickets})
+
+
+def add_faculty(request):
+    """Interface for Exam Controller to add new Faculty Member / Examiner with credentials."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    preset_name = request.GET.get('name', '').strip()
+    next_url = request.GET.get('next', '').strip()
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+        redirect_after = request.POST.get('next', '').strip()
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"User with ID / Username '{username}' already exists.")
+            return redirect('add_faculty')
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=full_name,
+            last_name=''
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.TEACHER,
+                'department': dept_obj
+            }
+        )
+
+        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated.")
+        if redirect_after:
+            return redirect(redirect_after)
+        return redirect('faculty_list')
+
+    departments = Department.objects.filter(is_active=True)
+    suggested_username = preset_name.lower().replace('dr.', '').replace('prof.', '').replace(' ', '_').strip('_') if preset_name else ''
+
+    return render(request, 'core/add_faculty.html', {
+        'departments': departments,
+        'preset_name': preset_name,
+        'suggested_username': suggested_username,
+        'next_url': next_url,
+    })
 
 
 def add_dept_head(request):
@@ -1159,10 +1218,15 @@ def add_course(request):
         messages.error(request, "Access Denied.")
         return redirect('landing_page')
 
+    preset_code = request.GET.get('code', '').strip()
+    preset_title = request.GET.get('title', '').strip()
+    next_url = request.GET.get('next', '').strip()
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         code = request.POST.get('code', '').strip()
         dept_code = request.POST.get('department', '').strip()
+        redirect_after = request.POST.get('next', '').strip()
 
         if Course.objects.filter(code=code).exists():
             messages.error(request, f"Course code '{code}' already exists.")
@@ -1171,10 +1235,17 @@ def add_course(request):
         dept_obj = Department.objects.filter(code=dept_code).first()
         Course.objects.create(title=title, code=code, department=dept_obj)
         messages.success(request, f"Course '{title}' ({code}) registered successfully!")
+        if redirect_after:
+            return redirect(redirect_after)
         return redirect('courses_list')
 
     departments = Department.objects.filter(is_active=True)
-    return render(request, 'core/add_course.html', {'departments': departments})
+    return render(request, 'core/add_course.html', {
+        'departments': departments,
+        'preset_code': preset_code,
+        'preset_title': preset_title,
+        'next_url': next_url,
+    })
 
 
 def edit_course(request, course_id):
@@ -1261,3 +1332,57 @@ def delete_exam(request, exam_id):
     exam.delete()
     messages.success(request, f"Examination '{title}' deleted successfully.")
     return redirect('exams_list')
+
+
+def api_get_courses_and_faculty(request):
+    """API endpoint returning updated list of courses and faculty for dynamic dropdown auto-sync."""
+    courses = list(Course.objects.select_related('department').values('id', 'code', 'title', 'department__name'))
+    faculty = []
+    for prof in Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department'):
+        faculty.append({
+            'id': prof.user.id,
+            'name': prof.user.get_full_name() or prof.user.username,
+            'username': prof.user.username,
+            'dept_code': prof.department.code if prof.department else ''
+        })
+    return JsonResponse({'courses': courses, 'faculty': faculty})
+
+
+def api_publish_exam(request):
+    """AJAX endpoint to publish an examination instantly without page reload."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        course_id = request.POST.get('course_id')
+        faculty_id = request.POST.get('faculty_id')
+        exam_date = request.POST.get('exam_date')
+        total_marks = request.POST.get('total_marks', 100.0)
+        title = request.POST.get('title', '').strip()
+
+        course = Course.objects.filter(id=course_id).first()
+        faculty_user = User.objects.filter(id=faculty_id).first()
+
+        if not course:
+            return JsonResponse({'error': 'Invalid Course selected.'}, status=400)
+
+        exam_title = title if title else f"{course.code} Examination"
+        date_val = exam_date if (exam_date and exam_date != 'N/A') else '2026-08-15'
+
+        exam = Examination.objects.create(
+            course=course,
+            title=exam_title,
+            exam_date=date_val,
+            total_marks=float(total_marks) if total_marks else 100.0,
+            status=Examination.Status.PUBLISHED,
+            assigned_faculty=faculty_user,
+            created_by=request.user
+        )
+
+        faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
+        return JsonResponse({
+            'success': True,
+            'exam_id': exam.id,
+            'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
+        })
+    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)

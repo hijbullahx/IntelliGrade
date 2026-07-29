@@ -49,4 +49,6 @@ urlpatterns = [
     path('scripts/upload/', views.script_upload, name='script_upload'),
     path('evaluation/<int:script_id>/review/', views.grading_workbench, name='grading_workbench'),
     path('evaluation/review/', views.grading_workbench, name='grading_workbench_default'),
+    path('api/courses-and-faculty/', views.api_get_courses_and_faculty, name='api_courses_and_faculty'),
+    path('api/publish-exam/', views.api_publish_exam, name='api_publish_exam'),
 ]

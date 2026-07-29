@@ -51,7 +51,7 @@
     </div>
 
     <!-- Exam Form Card -->
-    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl">
+    <form id="examForm" method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl">
         {% csrf_token %}
         
         <!-- General Details Section -->
@@ -136,6 +136,7 @@ function runAIRoutineScan() {
 
     fetch("{% url 'scan_routine_ai' %}", {
         method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
         body: formData
     })
     .then(response => response.json())
@@ -144,97 +145,9 @@ function runAIRoutineScan() {
         scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
         lucide.createIcons();
 
-        resultBox.classList.remove('hidden');
-        let html = `<div class="space-y-4">`;
-
-        let statusHeader = `<span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">✨ Provider: ${data.provider_name || 'AI Engine'}</span>`;
-
-        html += `<div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-            <h4 class="font-bold text-sm theme-text-primary flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> AI Exam Routine Auto-Reader Summary:</h4>
-            ${statusHeader}
-        </div>`;
-
-        // Structured Extracted Routine Schedule Table (Courses, Faculty, Date, Time)
-        const items = data.routine_items || [];
-
-        if (items.length > 0) {
-            html += `<div class="space-y-3">
-                <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <span class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                        <i data-lucide="list-checks" class="w-4 h-4"></i> Extracted Routine Courses, Faculty Examiners, Date & Time:
-                    </span>
-                    <span class="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20">${items.length} Course Schedule(s) Found</span>
-                </div>
-                
-                <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                    <table class="w-full text-left text-xs">
-                        <thead class="bg-slate-100 dark:bg-slate-900/80 theme-text-muted font-bold border-b border-slate-200 dark:border-slate-800">
-                            <tr>
-                                <th class="px-4 py-2.5">Course Code & Title</th>
-                                <th class="px-4 py-2.5">Faculty Examiner</th>
-                                <th class="px-4 py-2.5">Exam Date & Time</th>
-                                <th class="px-4 py-2.5 text-right">System DB Match & Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-200 dark:divide-slate-800 font-medium">`;
-
-            items.forEach((item, index) => {
-                let courseBadge = item.course_found ? 
-                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
-                    `<a href="{% url 'add_course' %}" target="_blank" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1">+ Add Course</a>`;
-
-                let facultyBadge = item.faculty_found ?
-                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
-                    `<a href="{% url 'add_faculty' %}" target="_blank" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1">+ Add Faculty</a>`;
-
-                html += `<tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
-                    <td class="px-4 py-3 font-bold theme-text-primary">
-                        <div class="flex items-center gap-2">
-                            <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px]">${item.course_code}</span>
-                            <span>${item.course_title || ''}</span>
-                        </div>
-                    </td>
-                    <td class="px-4 py-3 theme-text-secondary font-semibold">
-                        <div class="flex items-center gap-2">
-                            <span><i data-lucide="user-check" class="w-3.5 h-3.5 inline text-brand-500 mr-1"></i>${item.faculty_name || 'Unassigned'}</span>
-                        </div>
-                    </td>
-                    <td class="px-4 py-3 theme-text-secondary">
-                        <div class="flex flex-col">
-                            <span class="font-bold text-slate-700 dark:text-slate-300"><i data-lucide="calendar" class="w-3 h-3 inline text-purple-500 mr-1"></i>${item.exam_date || 'N/A'}</span>
-                            <span class="text-[11px] theme-text-muted"><i data-lucide="clock" class="w-3 h-3 inline text-amber-500 mr-1"></i>${item.exam_time || '10:00 AM - 01:00 PM'}</span>
-                        </div>
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                        <div class="flex items-center justify-end gap-2">
-                            ${courseBadge}
-                            ${facultyBadge}
-                        </div>
-                    </td>
-                </tr>`;
-            });
-
-            html += `</tbody></table></div></div>`;
-        }
-
-        // Auto-select first item into form fields
-        if (data.course_found && data.course_id) {
-            document.getElementById('courseSelect').value = data.course_id;
-        }
-        if (data.faculty_found && data.faculty_id) {
-            document.getElementById('facultySelect').value = data.faculty_id;
-        }
-        if (data.detected_date) {
-            document.getElementById('examDate').value = data.detected_date;
-        }
-        if (data.total_marks) {
-            document.getElementById('totalMarks').value = data.total_marks;
-        }
-
-        html += `</div>`;
-        resultBox.innerHTML = html;
-        resultBox.innerHTML = html;
-        resultBox.className = "p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 transition-all text-xs";
+        // Store last scan data in window memory for zero-latency local re-matching
+        window.lastAIRoutineScanResult = data;
+        renderExtractedRoutineTable(data);
     })
     .catch(err => {
         scanBtn.disabled = false;
@@ -243,5 +156,240 @@ function runAIRoutineScan() {
         alert('Routine scanning failed. Please check your inputs.');
     });
 }
+
+function renderExtractedRoutineTable(data) {
+    const resultBox = document.getElementById('aiScanResult');
+    resultBox.classList.remove('hidden');
+    let html = `<div class="space-y-4">`;
+
+    let statusHeader = `<span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">✨ Provider: ${data.provider_name || 'AI Engine'}</span>`;
+
+    html += `<div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+        <h4 class="font-bold text-sm theme-text-primary flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> AI Exam Routine Auto-Reader Summary:</h4>
+        ${statusHeader}
+    </div>`;
+
+    const items = data.routine_items || [];
+
+    if (items.length > 0) {
+        html += `<div class="space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                    <i data-lucide="list-checks" class="w-4 h-4"></i> Extracted Routine Courses, Faculty Examiners, Date & Time:
+                </span>
+                <span class="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20">${items.length} Course Schedule(s) Found</span>
+            </div>
+            
+            <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-100 dark:bg-slate-900/80 theme-text-muted font-bold border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                            <th class="px-4 py-2.5">Course Code & Title</th>
+                            <th class="px-4 py-2.5">Faculty Examiner</th>
+                            <th class="px-4 py-2.5">Exam Date & Time</th>
+                            <th class="px-4 py-2.5 text-right">System DB Match & Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-800 font-medium">`;
+
+        items.forEach((item, index) => {
+            let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}`;
+            let addFacultyUrl = `{% url 'add_faculty' %}?name=${encodeURIComponent(item.faculty_name || '')}`;
+
+            let actionCellContent = '';
+
+            if (item.is_published) {
+                actionCellContent = `<span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
+                </span>`;
+            } else if (item.course_found && item.faculty_found) {
+                actionCellContent = `<button type="button" onclick="publishExamFromRow(this, ${item.course_id}, ${item.faculty_id}, '${item.exam_date || ''}', '${item.total_marks || 100}', '${item.course_code || ''}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all inline-flex items-center gap-1.5">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam
+                </button>`;
+            } else {
+                let courseBadge = item.course_found ? 
+                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
+                    `<a href="${addCourseUrl}" target="_blank" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${item.course_code}'</a>`;
+
+                let facultyBadge = item.faculty_found ?
+                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
+                    `<a href="${addFacultyUrl}" target="_blank" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${item.faculty_name || 'Faculty'}'</a>`;
+
+                actionCellContent = `<div class="flex items-center justify-end gap-2">${courseBadge} ${facultyBadge}</div>`;
+            }
+
+            html += `<tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                <td class="px-4 py-3 font-bold theme-text-primary">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px]">${item.course_code}</span>
+                        <span>${item.course_title || ''}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 theme-text-secondary font-semibold">
+                    <div class="flex items-center gap-2">
+                        <span><i data-lucide="user-check" class="w-3.5 h-3.5 inline text-brand-500 mr-1"></i>${item.faculty_name || 'Unassigned'}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 theme-text-secondary">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-700 dark:text-slate-300"><i data-lucide="calendar" class="w-3 h-3 inline text-purple-500 mr-1"></i>${item.exam_date || 'N/A'}</span>
+                        <span class="text-[11px] theme-text-muted"><i data-lucide="clock" class="w-3 h-3 inline text-amber-500 mr-1"></i>${item.exam_time || '10:00 AM - 01:00 PM'}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-right" id="action-cell-${index}">
+                    ${actionCellContent}
+                </td>
+            </tr>`;
+        });
+
+        html += `</tbody></table></div></div>`;
+    }
+
+    if (data.course_found && data.course_id) {
+        document.getElementById('courseSelect').value = data.course_id;
+    }
+    if (data.faculty_found && data.faculty_id) {
+        document.getElementById('facultySelect').value = data.faculty_id;
+    }
+    if (data.detected_date) {
+        document.getElementById('examDate').value = data.detected_date;
+    }
+    if (data.total_marks) {
+        document.getElementById('totalMarks').value = data.total_marks;
+    }
+
+    html += `</div>`;
+    resultBox.innerHTML = html;
+    resultBox.className = "p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 transition-all text-xs";
+    lucide.createIcons();
+}
+
+function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMarks, courseCode) {
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Publishing...`;
+    lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('course_id', courseId);
+    formData.append('faculty_id', facultyId);
+    formData.append('exam_date', examDate);
+    formData.append('total_marks', totalMarks);
+    formData.append('title', `${courseCode} Examination`);
+
+    fetch("{% url 'api_publish_exam' %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            btnElement.outerHTML = `<span class="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1.5">
+                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
+            </span>`;
+
+            // Mark item published in window memory
+            if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items) {
+                const matchedItem = window.lastAIRoutineScanResult.routine_items.find(i => i.course_id == courseId);
+                if (matchedItem) matchedItem.is_published = true;
+            }
+
+            // Show floating toast alert without leaving the page
+            const alertBox = document.createElement('div');
+            alertBox.className = "fixed bottom-5 right-5 z-50 p-4 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-2xl flex items-center gap-2.5 animate-bounce";
+            alertBox.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5"></i> ${data.message}`;
+            document.body.appendChild(alertBox);
+            lucide.createIcons();
+
+            setTimeout(() => { alertBox.remove(); }, 4000);
+        } else {
+            alert(data.error || 'Publishing failed.');
+            btnElement.disabled = false;
+            btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam`;
+            lucide.createIcons();
+        }
+    })
+    .catch(err => {
+        alert('Server error while publishing exam.');
+        btnElement.disabled = false;
+        btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam`;
+        lucide.createIcons();
+    });
+}
+
+function syncDropdownsAndRescanRoutine() {
+    fetch("{% url 'api_courses_and_faculty' %}")
+    .then(r => r.json())
+    .then(data => {
+        const courses = data.courses || [];
+        const faculty = data.faculty || [];
+
+        // Update Course Dropdown
+        const courseSelect = document.getElementById('courseSelect');
+        const currCourse = courseSelect.value;
+        let cOptions = `<option value="">Select Course...</option>`;
+        courses.forEach(c => {
+            cOptions += `<option value="${c.id}" data-code="${c.code}">${c.code} - ${c.title} (${c.department__name || ''})</option>`;
+        });
+        courseSelect.innerHTML = cOptions;
+        if (currCourse) courseSelect.value = currCourse;
+
+        // Update Faculty Dropdown
+        const facultySelect = document.getElementById('facultySelect');
+        const currFaculty = facultySelect.value;
+        let fOptions = `<option value="">Select Assigned Examiner...</option>`;
+        faculty.forEach(f => {
+            fOptions += `<option value="${f.id}" data-name="${f.name}">${f.name} (${f.username}) - ${f.dept_code}</option>`;
+        });
+        facultySelect.innerHTML = fOptions;
+        if (currFaculty) facultySelect.value = currFaculty;
+
+        // INSTANT 0ms local re-matching without re-scanning or re-uploading file!
+        if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items) {
+            window.lastAIRoutineScanResult.routine_items.forEach(item => {
+                const normCourseCode = (item.course_code || '').replace(/\s+/g, '').toUpperCase();
+                const matchedCourse = courses.find(c => (c.code || '').replace(/\s+/g, '').toUpperCase() === normCourseCode);
+                if (matchedCourse) {
+                    item.course_found = true;
+                    item.course_id = matchedCourse.id;
+                }
+
+                const normFacName = (item.faculty_name || '').toLowerCase().trim();
+                const matchedFaculty = faculty.find(f => {
+                    const fName = (f.name || '').toLowerCase();
+                    const fUser = (f.username || '').toLowerCase();
+                    return fName.includes(normFacName) || normFacName.includes(fName) || fUser.includes(normFacName);
+                });
+                if (matchedFaculty) {
+                    item.faculty_found = true;
+                    item.faculty_id = matchedFaculty.id;
+                }
+            });
+
+            // Re-render table instantly with updated 0ms local matches
+            renderExtractedRoutineTable(window.lastAIRoutineScanResult);
+        }
+    })
+    .catch(e => console.error(e));
+}
+
+window.addEventListener('storage', function(e) {
+    if (e.key === 'intelligrade_entity_added') {
+        syncDropdownsAndRescanRoutine();
+    }
+});
+
+window.addEventListener('focus', function() {
+    const item = localStorage.getItem('intelligrade_entity_added');
+    if (item) {
+        try {
+            const data = JSON.parse(item);
+            if (Date.now() - data.time < 120000) {
+                localStorage.removeItem('intelligrade_entity_added');
+                syncDropdownsAndRescanRoutine();
+            }
+        } catch(e){}
+    }
+});
 </script>
 {% endblock %}
