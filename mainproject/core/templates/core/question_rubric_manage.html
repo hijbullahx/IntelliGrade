@@ -109,8 +109,11 @@
                 {% endif %}
             </div>
 
-            <div class="md:col-span-2 flex justify-end">
-                <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md shadow-brand-600/20 transition-all flex items-center gap-1.5">
+            <div class="md:col-span-2 flex items-center justify-between gap-4 pt-2">
+                <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2">
+                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)
+                </button>
+                <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md shadow-brand-600/20 transition-all flex items-center gap-1.5">
                     <i data-lucide="upload" class="w-3.5 h-3.5"></i> Save Reference Documents
                 </button>
             </div>
@@ -273,6 +276,55 @@ function generateAIRubric() {
         btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Auto-Generate AI Rubric`;
         lucide.createIcons();
         alert('Server error generating AI rubric.');
+    });
+}
+
+function scanAcademicPaper() {
+    const btn = document.getElementById('scanAcademicBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 🧠 Analyzing Academic Paper & Course Outline (AI Engine)...`;
+    lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('examination_id', "{{ selected_exam.id }}");
+
+    const qpFileInput = document.querySelector('input[name="question_paper_file"]');
+    if (qpFileInput && qpFileInput.files.length > 0) {
+        formData.append('question_paper_file', qpFileInput.files[0]);
+    }
+    const coFileInput = document.querySelector('input[name="course_outline_file"]');
+    if (coFileInput && coFileInput.files.length > 0) {
+        formData.append('course_outline_file', coFileInput.files[0]);
+    }
+
+    fetch("{% url 'api_scan_question_paper' %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
+        lucide.createIcons();
+
+        if (data.success && data.data && data.data.questions && data.data.questions.length > 0) {
+            const firstQ = data.data.questions[0];
+            document.getElementById('qNumber').value = firstQ.question_number || 'Q1 (a)';
+            document.getElementById('qMarks').value = firstQ.allocated_marks || 10.0;
+            document.getElementById('qPrompt').value = firstQ.prompt_text || '';
+            document.getElementById('qCriteria').value = firstQ.criteria || '';
+            document.getElementById('qIdealAnswer').value = firstQ.ideal_answer || '';
+            alert('Academic Paper scanned successfully! Extracted ' + data.data.questions.length + ' question(s) into the editor. You can review, edit, and confirm.');
+        } else {
+            alert(data.error || 'Academic scan failed or no questions detected.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
+        lucide.createIcons();
+        alert('Server error executing Academic AI scan.');
     });
 }
 

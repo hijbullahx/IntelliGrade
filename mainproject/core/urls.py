@@ -55,4 +55,5 @@ urlpatterns = [
     path('teacher/exam/<int:exam_id>/questions-rubric/', views.question_rubric_manage, name='question_rubric_manage'),
     path('teacher/delete-question/<int:question_id>/', views.delete_question, name='delete_question'),
     path('api/generate-ai-rubric/', views.api_generate_ai_rubric, name='api_generate_ai_rubric'),
+    path('api/scan-question-paper/', views.api_scan_question_paper, name='api_scan_question_paper'),
 ]
