@@ -206,7 +206,11 @@ function renderExtractedRoutineTable(data) {
 
         items.forEach((item, index) => {
             let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}`;
-            let addFacultyUrl = `{% url 'add_faculty' %}?name=${encodeURIComponent(item.faculty_name || '')}`;
+            
+            let rawFaculty = item.faculty_name ? item.faculty_name.trim() : '';
+            let isUnassigned = !rawFaculty || rawFaculty.toLowerCase() === 'unassigned' || rawFaculty.toLowerCase() === 'assigned examiner';
+            let facultyLabel = isUnassigned ? 'New Faculty' : rawFaculty;
+            let addFacultyUrl = `{% url 'add_faculty' %}` + (isUnassigned ? '' : `?name=${encodeURIComponent(rawFaculty)}`);
 
             let actionCellContent = '';
 
@@ -225,7 +229,7 @@ function renderExtractedRoutineTable(data) {
 
                 let facultyBadge = item.faculty_found ?
                     `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
-                    `<a href="${addFacultyUrl}" target="_blank" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${item.faculty_name || 'Faculty'}'</a>`;
+                    `<a href="${addFacultyUrl}" target="_blank" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${facultyLabel}'</a>`;
 
                 actionCellContent = `<div class="flex items-center justify-end gap-2">${courseBadge} ${facultyBadge}</div>`;
             }
