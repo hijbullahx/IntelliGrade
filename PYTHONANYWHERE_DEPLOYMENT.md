@@ -131,3 +131,57 @@ application = get_wsgi_application()
 2. Visit `https://yourusername.pythonanywhere.com` in your browser.
 
 🎉 **Your IntelliGrade Django web application is now live on PythonAnywhere!**
+
+---
+
+## ⚡ How to Update Your Live Web App (After Future Code Changes)
+
+Whenever you push new code updates from your local workspace to GitHub, you have two quick ways to update your live app on PythonAnywhere:
+
+### **Method 1: 1-Command Update via PythonAnywhere Bash Console (Easiest)**
+
+1. Push your changes from local machine:
+   ```bash
+   git add .
+   git commit -m "Your update message"
+   git push origin main
+   ```
+2. Open **Bash Console** on PythonAnywhere and run:
+   ```bash
+   cd YOUR_REPO_NAME
+   bash deploy_pythonanywhere.sh
+   ```
+
+> 💡 **How it works:** The script automatically pulls from GitHub, runs migrations (`python manage.py migrate`), collects static assets, and automatically triggers PythonAnywhere web app reload without you needing to open the web interface!
+
+---
+
+### **Method 2: Fully Automated Deployment (GitHub Actions - Zero-Click)**
+
+If you want PythonAnywhere to update automatically **every single time you `git push`**:
+
+1. Generate an API Token on PythonAnywhere (**Account** -> **API token** -> **Create a new API token**).
+2. On GitHub, go to your repository **Settings** -> **Secrets and variables** -> **Actions** -> **New repository secret**:
+   - Name: `PA_API_TOKEN`
+   - Value: *(Your PythonAnywhere API Token)*
+3. Add a GitHub Action workflow file `.github/workflows/deploy.yml` in your repo:
+
+```yaml
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger PythonAnywhere Web App Reload
+        run: |
+          curl -X POST \
+            -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}" \
+            "https://www.pythonanywhere.com/api/v0/user/YOUR_USERNAME/webapps/YOUR_USERNAME.pythonanywhere.com/reload/"
+```
+

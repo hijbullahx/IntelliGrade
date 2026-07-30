@@ -24,9 +24,13 @@
         
         <div>
             <label class="block text-xs font-medium theme-text-secondary mb-1.5">Target Examination</label>
-            <select name="examination" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
-                <option value="1" selected>Software Engineering Final Exam (CSE 411)</option>
-                <option value="2">Database Systems Midterm (CSE 312)</option>
+            <select name="examination" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                <option value="">Select Target Examination...</option>
+                {% for exam in exams %}
+                <option value="{{ exam.id }}">{{ exam.title }} (Course: {{ exam.course.code }})</option>
+                {% empty %}
+                <option value="" disabled>No active examinations created yet. Please create an examination first.</option>
+                {% endfor %}
             </select>
         </div>
 

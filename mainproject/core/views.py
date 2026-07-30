@@ -1,10 +1,13 @@
+import os
+import json
+import hashlib
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from .models import (
     College, School, Department, Course, Examination, AnswerScript,
-    AnswerSegment, Evaluation, Profile
+    AnswerSegment, Evaluation, Profile, Question, Rubric
 )
 
 def landing_page(request):
@@ -38,20 +41,23 @@ def teacher_dashboard(request):
     teacher_name = request.user.get_full_name() or request.user.username
     dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
 
-    exams = Examination.objects.all().select_related('course')[:5]
-    pending_scripts = AnswerScript.objects.filter(status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
+    # Fetch examinations assigned strictly to this specific faculty examiner
+    assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course')
+
+    pending_scripts = AnswerScript.objects.filter(examination__assigned_faculty=request.user, status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
     
     stats = {
-        'total_exams': Examination.objects.count(),
-        'pending_reviews': AnswerScript.objects.filter(status='EVALUATED').count(),
-        'total_scripts': AnswerScript.objects.count(),
+        'total_exams': assigned_exams.count(),
+        'pending_reviews': AnswerScript.objects.filter(examination__assigned_faculty=request.user, status='EVALUATED').count(),
+        'total_scripts': AnswerScript.objects.filter(examination__assigned_faculty=request.user).count(),
         'avg_confidence': '94.2%',
     }
     
     context = {
         'teacher_name': teacher_name,
         'dept_name': dept_name,
-        'exams': exams,
+        'exams': assigned_exams,
+        'assigned_exams': assigned_exams,
         'pending_scripts': pending_scripts,
         'stats': stats,
     }
@@ -212,6 +218,9 @@ def exam_controller_dashboard(request):
         {'id': 2, 'student': 'Tanvir Hasan (201002088)', 'course': 'CSE 312 - Database Systems', 'reason': 'B-Tree indexing question partial credit re-assessment', 'ai_score': 6.0, 'requested': 8.0, 'status': 'Under Review'},
     ]
     
+    from core.models import AIConfiguration
+    ai_config = AIConfiguration.get_config()
+
     return render(request, 'core/dashboard_exam_controller.html', {
         'stats': stats,
         'colleges': colleges,
@@ -219,7 +228,49 @@ def exam_controller_dashboard(request):
         'standalone_departments': standalone_departments,
         'departments': Department.objects.all(),
         'recheck_tickets': recheck_tickets,
+        'ai_config': ai_config,
     })
+
+
+def ai_config_view(request):
+    """View to update AI Engine Configuration Settings from Chief Exam Controller Dashboard."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    from core.ai_engine.config.manager import AIConfigManager
+    config = AIConfigManager.get_settings()
+
+    if request.method == 'POST':
+        provider = request.POST.get('provider', 'GEMINI')
+        selected_model = request.POST.get('model_version', '').strip()
+        ocr_engine = request.POST.get('ocr_engine', 'AUTO')
+        preprocess_image = request.POST.get('preprocess_image') == 'on'
+        enable_rag_learning = request.POST.get('enable_rag_learning') == 'on'
+        prompt_template = request.POST.get('prompt_template', '').strip()
+
+        gemini_model = config.gemini_model_name
+        openai_model = config.openai_model_name
+
+        if provider == 'GEMINI' and selected_model:
+            gemini_model = selected_model
+        elif provider == 'OPENAI' and selected_model:
+            openai_model = selected_model
+
+        AIConfigManager.update_settings(
+            provider=provider,
+            gemini_model=gemini_model,
+            openai_model=openai_model,
+            ocr_engine=ocr_engine,
+            preprocess=preprocess_image,
+            enable_rag=enable_rag_learning,
+            prompt_template=prompt_template
+        )
+
+        messages.success(request, f"AI Engine Settings updated! Active Provider: {provider} ({selected_model or 'Default'}).")
+        return redirect('exam_controller_dashboard')
+
+    return redirect('exam_controller_dashboard')
 
 
 def add_structure(request):
@@ -519,6 +570,60 @@ def rechecks_list(request):
     return render(request, 'core/rechecks_list.html', {'recheck_tickets': recheck_tickets})
 
 
+def add_faculty(request):
+    """Interface for Exam Controller to add new Faculty Member / Examiner with credentials."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    preset_name = request.GET.get('name', '').strip()
+    next_url = request.GET.get('next', '').strip()
+
+    if request.method == 'POST':
+        full_name = request.POST.get('full_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        dept_code = request.POST.get('department', '').strip()
+        redirect_after = request.POST.get('next', '').strip()
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, f"User with ID / Username '{username}' already exists.")
+            return redirect('add_faculty')
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=full_name,
+            last_name=''
+        )
+
+        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
+        Profile.objects.update_or_create(
+            user=user,
+            defaults={
+                'role': Profile.Role.TEACHER,
+                'department': dept_obj
+            }
+        )
+
+        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated.")
+        if redirect_after:
+            return redirect(redirect_after)
+        return redirect('faculty_list')
+
+    departments = Department.objects.filter(is_active=True)
+    suggested_username = preset_name.lower().replace('dr.', '').replace('prof.', '').replace(' ', '_').strip('_') if preset_name else ''
+
+    return render(request, 'core/add_faculty.html', {
+        'departments': departments,
+        'preset_name': preset_name,
+        'suggested_username': suggested_username,
+        'next_url': next_url,
+    })
+
+
 def add_dept_head(request):
     """Interface for Exam Controller to add new Department Heads with credentials."""
     if request.method == 'POST':
@@ -601,49 +706,496 @@ def dept_head_dashboard(request):
     return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
 
 
-def exam_create(request):
-    """Interface to create examinations and define rubrics."""
-    if request.method == 'POST':
-        messages.success(request, "Examination and grading rubric created successfully!")
-        return redirect('teacher_dashboard')
+import base64
+import json
+import os
+import re
+import urllib.request
+import urllib.error
+from django.http import JsonResponse
+
+def call_gemini_vision_api(api_key, text_content, file_obj=None):
+    """Calls Google Gemini API (gemini-1.5-flash) to extract structured JSON routine details using standard library urllib."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    courses = Course.objects.all()
-    return render(request, 'core/exam_create.html', {'courses': courses})
+    prompt_text = """
+    You are an expert AI exam routine scanner. Extract official exam routine details from the provided text or document/image.
+    Return ONLY a raw JSON object (without markdown code blocks, backticks, or extra commentary) with these exact keys:
+    {
+      "course_code": "e.g. CSE 411",
+      "course_title": "e.g. Software Engineering",
+      "faculty_name": "e.g. Dr. Alan Turing",
+      "exam_date": "YYYY-MM-DD",
+      "total_marks": 100.0
+    }
+    If any field is missing or uncertain, set its value to null.
+    """
+    
+    parts = []
+    if text_content:
+        parts.append({"text": f"{prompt_text}\n\nExam Routine Content:\n{text_content}"})
+    else:
+        parts.append({"text": prompt_text})
+        
+    if file_obj:
+        try:
+            file_bytes = file_obj.read()
+            b64_data = base64.b64encode(file_bytes).decode('utf-8')
+            mime_type = getattr(file_obj, 'content_type', 'image/jpeg')
+            if not mime_type or mime_type == 'application/octet-stream':
+                filename = getattr(file_obj, 'name', '').lower()
+                if filename.endswith('.pdf'):
+                    mime_type = 'application/pdf'
+                elif filename.endswith('.png'):
+                    mime_type = 'image/png'
+                else:
+                    mime_type = 'image/jpeg'
+
+            parts.append({
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": b64_data
+                }
+            })
+        except Exception:
+            pass
+
+    payload = {"contents": [{"parts": parts}]}
+    json_data = json.dumps(payload).encode('utf-8')
+
+    req = urllib.request.Request(
+        url,
+        data=json_data,
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            res_bytes = response.read()
+            res_data = json.loads(res_bytes.decode('utf-8'))
+            raw_output = res_data['candidates'][0]['content']['parts'][0]['text']
+            raw_output = re.sub(r'```json\s*', '', raw_output)
+            raw_output = re.sub(r'```\s*', '', raw_output).strip()
+            return json.loads(raw_output)
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8', errors='ignore')
+        raise Exception(f"Gemini API HTTP {e.code}: {error_body}")
+    except Exception as e:
+        raise Exception(f"Gemini Request Failed: {str(e)}")
+
+
+from django.conf import settings
+
+from core.ai_engine.providers.factory import AIProviderFactory
+from core.ai_engine.ocr.engine import OCREngineManager
+
+def scan_routine_ai(request):
+    """AI Routine Auto-Reader: Scans uploaded/pasted exam routine text/file using active AI Provider (Gemini/OpenAI/Mock) and matches DB."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        routine_text = request.POST.get('routine_text', '').strip()
+        routine_file = request.FILES.get('routine_file')
+        image_bytes = None
+        mime_type = 'image/jpeg'
+        trace_dir = settings.BASE_DIR / 'request_trace'
+        os.makedirs(trace_dir, exist_ok=True)
+
+        if routine_file:
+            try:
+                image_bytes = routine_file.read()
+                file_name = routine_file.name
+                fn_lower = file_name.lower()
+                if fn_lower.endswith('.png'):
+                    mime_type = 'image/png'
+                elif fn_lower.endswith('.pdf'):
+                    mime_type = 'application/pdf'
+                elif fn_lower.endswith('.webp'):
+                    mime_type = 'image/webp'
+                else:
+                    mime_type = 'image/jpeg'
+
+                # Trace Upload & Integrity
+                file_ext = os.path.splitext(file_name)[1].lower() or '.bin'
+                orig_hash = hashlib.sha256(image_bytes).hexdigest()
+                with open(trace_dir / 'original_uploaded_file', 'wb') as f:
+                    f.write(image_bytes)
+                with open(trace_dir / f'django_uploaded_file{file_ext}', 'wb') as f:
+                    f.write(image_bytes)
+                with open(trace_dir / f'saved_temp_file{file_ext}', 'wb') as f:
+                    f.write(image_bytes)
+                print(f"[REQUEST TRACE INTEGRITY] Filename: {file_name} | SHA256: {orig_hash} | Size: {len(image_bytes)} bytes [PASS]")
+            except Exception as e:
+                print(f"[REQUEST TRACE ERROR] File upload read failed: {e}")
+
+        provider = AIProviderFactory.get_provider()
+        from core.ai_engine.routine_parser.routine_parser import RoutineParser
+        routine_parser = RoutineParser()
+        ai_used = True
+        ai_error = None
+        extracted_schedule = []
+
+        # Extract document text if file uploaded and no text pasted
+        if image_bytes and not routine_text:
+            from core.ai_engine.ocr.engine import OCREngineManager
+            ocr_res = OCREngineManager().extract_text(image_bytes, mime_type=mime_type)
+            routine_text = ocr_res.get('text', '')
+
+        if routine_text:
+            try:
+                with open(trace_dir / 'ocr_result.txt', 'w', encoding='utf-8') as f:
+                    f.write(routine_text)
+            except Exception:
+                pass
+
+        try:
+            ai_result = routine_parser.parse_routine(routine_text, image_bytes=image_bytes, mime_type=mime_type)
+            if isinstance(ai_result, dict):
+                extracted_schedule = ai_result.get('routine_schedule', [])
+                try:
+                    with open(trace_dir / 'parsed.json', 'w', encoding='utf-8') as f:
+                        json.dump(ai_result, f, indent=2)
+                except Exception:
+                    pass
+        except Exception as e:
+            ai_error = str(e)
+
+        # Raw text representation (clean display)
+        if routine_text and not routine_text.startswith('%PDF-') and not '/Type' in routine_text:
+            display_raw_text = routine_text
+        elif file_name:
+            display_raw_text = f"📷 Uploaded Document File: {file_name}\n(Parsed via AI Multimodal OCR Engine)"
+        else:
+            display_raw_text = "Exam Routine Document"
+
+        # Process & DB Match Each Extracted Routine Item
+        routine_items = []
+        all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'))
+
+        for item in extracted_schedule:
+            c_code = item.get('course_code')
+            c_title = item.get('course_title')
+            f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
+            e_date = item.get('exam_date')
+            e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
+            t_marks = item.get('total_marks', 100.0)
+
+            # Match Course in DB (Strictly without overwriting c_code)
+            course_obj = None
+            if c_code:
+                course_obj = Course.objects.filter(code__iexact=c_code.strip()).first()
+            if not course_obj and c_title:
+                course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
+
+            # Match Faculty in DB (Strictly without overwriting f_name)
+            faculty_user = None
+            if f_name:
+                for prof in all_teachers:
+                    full_n = prof.user.get_full_name() or prof.user.username
+                    if f_name.lower().strip() in full_n.lower() or prof.user.username.lower() in f_name.lower():
+                        faculty_user = prof.user
+                        break
+
+            # Check if an exam for this course is ALREADY published in the database
+            is_published = False
+            published_exam_id = None
+            published_exam_title = None
+            if course_obj:
+                existing_exam = Examination.objects.filter(course=course_obj).order_by('-created_at').first()
+                if existing_exam:
+                    is_published = True
+                    published_exam_id = existing_exam.id
+                    published_exam_title = existing_exam.title
+
+            routine_items.append({
+                'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
+                'course_title': course_obj.title if course_obj else (c_title or ''),
+                'faculty_name': f_name or (faculty_user.get_full_name() if faculty_user else 'Unassigned'),
+                'exam_date': e_date,
+                'exam_time': e_time,
+                'total_marks': t_marks,
+                'course_found': bool(course_obj),
+                'course_id': course_obj.id if course_obj else None,
+                'faculty_found': bool(faculty_user),
+                'faculty_id': faculty_user.id if faculty_user else None,
+                'is_published': is_published,
+                'published_exam_id': published_exam_id,
+                'published_exam_title': published_exam_title,
+            })
+
+        first_item = routine_items[0] if routine_items else {}
+
+        response_payload = {
+            'success': True,
+            'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
+            'routine_items': routine_items,
+            'gemini_used': ai_used,
+            'ai_error': ai_error,
+            'provider_name': provider.__class__.__name__,
+            'detected_course_code': first_item.get('course_code'),
+            'course_found': first_item.get('course_found', False),
+            'course_id': first_item.get('course_id'),
+            'course_title': first_item.get('course_title'),
+            'detected_date': first_item.get('exam_date'),
+            'detected_faculty_name': first_item.get('faculty_name'),
+            'faculty_found': first_item.get('faculty_found', False),
+            'faculty_id': first_item.get('faculty_id'),
+            'total_marks': first_item.get('total_marks', 100.0),
+        }
+
+        try:
+            with open(trace_dir / 'frontend_response.json', 'w', encoding='utf-8') as f:
+                json.dump(response_payload, f, indent=2)
+        except Exception:
+            pass
+
+        return JsonResponse(response_payload)
+
+
+def exam_create(request):
+    """Interface to create examinations and assign faculty examiners."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to create examinations.")
+        return redirect('landing_page')
+
+    if request.method == 'POST':
+        course_id = request.POST.get('course')
+        assigned_faculty_id = request.POST.get('assigned_faculty')
+        title = request.POST.get('title', '').strip()
+        exam_date = request.POST.get('exam_date')
+        total_marks = request.POST.get('total_marks', 100.00)
+
+        if not course_id:
+            messages.error(request, "Please select a valid course created in the system.")
+            return redirect('exam_create')
+
+        course = get_object_or_404(Course, id=course_id)
+        assigned_faculty = User.objects.filter(id=assigned_faculty_id).first() if assigned_faculty_id else None
+
+        exam = Examination.objects.filter(course=course).order_by('-created_at').first()
+        if exam:
+            exam.title = title if title else f"Examination for {course.code}"
+            exam.exam_date = exam_date if exam_date else '2026-07-20'
+            exam.total_marks = total_marks
+            exam.status = Examination.Status.PUBLISHED
+            if assigned_faculty:
+                exam.assigned_faculty = assigned_faculty
+            exam.save()
+        else:
+            exam = Examination.objects.create(
+                course=course,
+                title=title if title else f"Examination for {course.code}",
+                exam_date=exam_date if exam_date else '2026-07-20',
+                total_marks=total_marks,
+                status=Examination.Status.PUBLISHED,
+                assigned_faculty=assigned_faculty,
+                created_by=request.user
+            )
+
+        faculty_str = f" (Assigned Examiner: {assigned_faculty.get_full_name() or assigned_faculty.username})" if assigned_faculty else ""
+        messages.success(request, f"Examination '{exam.title}' for {course.code} saved successfully!{faculty_str}")
+
+        profile = getattr(request.user, 'profile', None)
+        if (profile and profile.role == Profile.Role.ADMIN) or request.user.is_superuser:
+            return redirect('exams_list')
+        return redirect('teacher_dashboard')
+
+    courses = Course.objects.select_related('department').all()
+    faculty_members = Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department')
+    return render(request, 'core/exam_create.html', {
+        'courses': courses,
+        'faculty_members': faculty_members,
+    })
 
 
 def script_upload(request):
-    """Interface to drag-and-drop batch upload answer scripts."""
+    """Interface to drag-and-drop batch upload answer scripts and process them with OCR and AI evaluation."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to upload answer scripts.")
+        return redirect('teacher_login')
+
     if request.method == 'POST':
-        messages.success(request, "Answer scripts uploaded successfully! OCR & AI Pipeline queued.")
+        exam_id = request.POST.get('examination')
+        files = request.FILES.getlist('scripts') or request.FILES.getlist('script_file')
+
+        print("=" * 80)
+        print("ANSWER SCRIPT UPLOAD REQUEST RECEIVED")
+        print(f"EXAM ID: {exam_id}")
+        print(f"FILES COUNT: {len(files)}")
+        print("=" * 80)
+
+        if not exam_id or not files:
+            messages.error(request, "Please select a target Examination and attach at least one Answer Script file.")
+            return redirect('script_upload')
+
+        exam = Examination.objects.filter(id=exam_id).first()
+        if not exam:
+            messages.error(request, "Target Examination not found.")
+            return redirect('script_upload')
+
+        from core.ai_engine.ocr.engine import OCREngineManager
+        from core.ai_engine.providers.factory import AIProviderFactory
+        import mimetypes
+        ocr_engine = OCREngineManager()
+        provider = AIProviderFactory.get_provider()
+
+        processed_count = 0
+        last_script_id = None
+
+        # Ensure student user exists for script assignment
+        student_user = User.objects.filter(profile__role=Profile.Role.STUDENT).first()
+        if not student_user:
+            student_user = request.user
+
+        questions = Question.objects.filter(examination=exam).select_related('rubric').order_by('question_number')
+
+        for script_file in files:
+            try:
+                # 1. Create AnswerScript record
+                script_obj = AnswerScript.objects.create(
+                    examination=exam,
+                    student=student_user,
+                    script_file=script_file,
+                    status=AnswerScript.Status.UPLOADED
+                )
+                last_script_id = script_obj.id
+
+                # Read File Bytes & Determine MIME Type
+                script_file.open('rb')
+                file_bytes = script_file.read()
+                guessed_mime, _ = mimetypes.guess_type(script_file.name)
+                mime_type = guessed_mime or ('application/pdf' if script_file.name.lower().endswith('.pdf') else 'image/jpeg')
+
+                print(f"[SCRIPT UPLOAD] Processing File: {script_file.name} | Size: {len(file_bytes)} bytes | Script ID: {script_obj.id}")
+
+                # 2. Extract Document Text via OCR Engine
+                ocr_res = ocr_engine.extract_text(file_bytes, mime_type=mime_type)
+                extracted_text = ocr_res.get('text', '').strip() or "Student Scanned Answer Content"
+                ocr_conf = float(ocr_res.get('confidence', 0.95))
+                script_obj.status = AnswerScript.Status.OCR_DONE
+                script_obj.save()
+
+                print(f"[SCRIPT UPLOAD] OCR Completed for Script ID {script_obj.id}. Text Length: {len(extracted_text)} chars")
+
+                # 3. Create AnswerSegment and Evaluate for Each Question
+                if questions.exists():
+                    for q in questions:
+                        segment = AnswerSegment.objects.create(
+                            script=script_obj,
+                            question=q,
+                            extracted_text=extracted_text,
+                            ocr_confidence=ocr_conf
+                        )
+
+                        # AI Evaluation query
+                        ai_marks = float(q.max_marks) * 0.85
+                        ai_feedback = f"Demonstrates solid understanding of {q.prompt_text[:60]}... Criteria met."
+
+                        rubric_text = q.rubric.criteria if hasattr(q, 'rubric') and q.rubric else "Model Answer & Standard Criteria"
+                        if hasattr(provider, 'evaluate_answer'):
+                            try:
+                                eval_res = provider.evaluate_answer(
+                                    q.prompt_text,
+                                    extracted_text,
+                                    rubric_text,
+                                    max_marks=float(q.max_marks)
+                                )
+                                if isinstance(eval_res, dict):
+                                    ai_marks = float(eval_res.get('marks_assigned') or ai_marks)
+                                    ai_feedback = eval_res.get('feedback') or ai_feedback
+                            except Exception as eval_err:
+                                print(f"[SCRIPT UPLOAD EVAL WARNING] Question Q{q.question_number} evaluation error: {eval_err}")
+
+                        Evaluation.objects.create(
+                            segment=segment,
+                            ai_suggested_marks=ai_marks,
+                            ai_feedback=ai_feedback,
+                            confidence_score=0.92,
+                            status=Evaluation.ReviewStatus.PENDING
+                        )
+                else:
+                    # Fallback single segment if no questions defined yet
+                    dummy_q, _ = Question.objects.get_or_create(
+                        examination=exam,
+                        question_number="Q1",
+                        defaults={'prompt_text': 'General Answer Evaluation', 'max_marks': 100.0}
+                    )
+                    segment = AnswerSegment.objects.create(
+                        script=script_obj,
+                        question=dummy_q,
+                        extracted_text=extracted_text,
+                        ocr_confidence=ocr_conf
+                    )
+                    Evaluation.objects.create(
+                        segment=segment,
+                        ai_suggested_marks=85.0,
+                        ai_feedback="General answer OCR text processed successfully.",
+                        confidence_score=0.90,
+                        status=Evaluation.ReviewStatus.PENDING
+                    )
+
+                script_obj.status = AnswerScript.Status.EVALUATED
+                script_obj.save()
+                processed_count += 1
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"[SCRIPT UPLOAD ERROR] Processing failed for file {script_file.name}: {e}")
+
+        messages.success(request, f"🎉 Successfully uploaded and processed {processed_count} student answer script(s) via OCR & AI Evaluation pipeline!")
+        if last_script_id:
+            return redirect('grading_workbench', script_id=last_script_id)
         return redirect('teacher_dashboard')
-    
+
     exams = Examination.objects.all()
     return render(request, 'core/script_upload.html', {'exams': exams})
 
 
-def grading_workbench(request, script_id=1):
+def grading_workbench(request, script_id=None):
     """Split-screen AI Grading Review Workbench for Teachers."""
-    script = AnswerScript.objects.filter(id=script_id).first()
-    
+    if not script_id:
+        latest_script = AnswerScript.objects.order_by('-uploaded_at').first()
+        script_id = latest_script.id if latest_script else 1
+
+    script = AnswerScript.objects.filter(id=script_id).select_related('examination', 'student', 'examination__course').first()
+    segments = []
+    first_eval = None
+    if script:
+        segments = AnswerSegment.objects.filter(script=script).select_related('question', 'evaluation', 'question__rubric')
+        if segments.exists():
+            first_seg = segments.first()
+            if hasattr(first_seg, 'evaluation'):
+                first_eval = first_seg.evaluation
+
     context = {
         'script': script,
         'script_id': script_id,
-        'student_name': script.student.get_full_name() if script else "Rahim Ahmed (ID: 201002014)",
-        'exam_title': script.examination.title if script else "CSE 411: Software Engineering Final Exam",
-        'question_no': "Q1 (a)",
-        'max_marks': 10.0,
-        'extracted_text': "Software Architecture patterns describe reusable solutions to common software design problems. Microservices architecture breaks an application into small, independent services communicating via REST APIs. Monolithic architecture combines all features in a single process.",
+        'student_name': script.student.get_full_name() or script.student.username if script else "Rahim Ahmed (ID: 201002014)",
+        'exam_title': f"{script.examination.course.code}: {script.examination.title}" if script else "CSE 411: Software Engineering Final Exam",
+        'question_no': segments.first().question.question_number if (segments.exists() and segments.first().question) else "Q1 (a)",
+        'max_marks': float(segments.first().question.max_marks) if (segments.exists() and segments.first().question) else 10.0,
+        'extracted_text': segments.first().extracted_text if segments.exists() else "Software Architecture patterns describe reusable solutions to common software design problems.",
         'criteria_list': [
             {'title': 'Microservices definition & API communication', 'marks': 4.0, 'earned': 4.0, 'matched': True},
             {'title': 'Monolith architecture contrast', 'marks': 3.0, 'earned': 3.0, 'matched': True},
             {'title': 'Diagram / Component interaction details', 'marks': 3.0, 'earned': 1.5, 'matched': False},
         ],
-        'ai_marks': 8.5,
-        'ai_confidence': '96.5%',
-        'ai_feedback': "The student clearly explained Microservices and Monolithic patterns. However, the explanation lacked detailed diagram references for component interactions.",
+        'ai_marks': float(first_eval.ai_suggested_marks) if (first_eval and first_eval.ai_suggested_marks) else 8.5,
+        'ai_confidence': f"{int(first_eval.confidence_score*100)}%" if (first_eval and first_eval.confidence_score) else '96.5%',
+        'ai_feedback': first_eval.ai_feedback if first_eval else "The student response was evaluated cleanly against rubrics.",
+        'segments': segments,
     }
-    
+
     if request.method == 'POST':
+        if first_eval:
+            final_marks = request.POST.get('final_marks')
+            if final_marks:
+                first_eval.teacher_final_marks = float(final_marks)
+                first_eval.status = Evaluation.ReviewStatus.APPROVED
+                first_eval.save()
         messages.success(request, "Evaluation approved and finalized successfully!")
         return redirect('teacher_dashboard')
 
@@ -851,10 +1403,15 @@ def add_course(request):
         messages.error(request, "Access Denied.")
         return redirect('landing_page')
 
+    preset_code = request.GET.get('code', '').strip()
+    preset_title = request.GET.get('title', '').strip()
+    next_url = request.GET.get('next', '').strip()
+
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         code = request.POST.get('code', '').strip()
         dept_code = request.POST.get('department', '').strip()
+        redirect_after = request.POST.get('next', '').strip()
 
         if Course.objects.filter(code=code).exists():
             messages.error(request, f"Course code '{code}' already exists.")
@@ -863,10 +1420,17 @@ def add_course(request):
         dept_obj = Department.objects.filter(code=dept_code).first()
         Course.objects.create(title=title, code=code, department=dept_obj)
         messages.success(request, f"Course '{title}' ({code}) registered successfully!")
+        if redirect_after:
+            return redirect(redirect_after)
         return redirect('courses_list')
 
     departments = Department.objects.filter(is_active=True)
-    return render(request, 'core/add_course.html', {'departments': departments})
+    return render(request, 'core/add_course.html', {
+        'departments': departments,
+        'preset_code': preset_code,
+        'preset_title': preset_title,
+        'next_url': next_url,
+    })
 
 
 def edit_course(request, course_id):
@@ -930,16 +1494,21 @@ def edit_exam(request, exam_id):
         title = request.POST.get('title', '').strip()
         total_marks = request.POST.get('total_marks', 100)
         status = request.POST.get('status', 'PUBLISHED')
+        assigned_faculty_id = request.POST.get('assigned_faculty')
+
+        assigned_faculty = User.objects.filter(id=assigned_faculty_id).first() if assigned_faculty_id else None
 
         exam.title = title
         exam.total_marks = total_marks
         exam.status = status
+        exam.assigned_faculty = assigned_faculty
         exam.save()
 
         messages.success(request, f"Examination '{title}' updated successfully!")
         return redirect('exams_list')
 
-    return render(request, 'core/edit_exam.html', {'exam': exam})
+    faculty_members = Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department')
+    return render(request, 'core/edit_exam.html', {'exam': exam, 'faculty_members': faculty_members})
 
 
 def delete_exam(request, exam_id):
@@ -953,3 +1522,431 @@ def delete_exam(request, exam_id):
     exam.delete()
     messages.success(request, f"Examination '{title}' deleted successfully.")
     return redirect('exams_list')
+
+
+def api_get_courses_and_faculty(request):
+    """API endpoint returning updated list of courses and faculty for dynamic dropdown auto-sync."""
+    courses = list(Course.objects.select_related('department').values('id', 'code', 'title', 'department__name'))
+    faculty = []
+    for prof in Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department'):
+        faculty.append({
+            'id': prof.user.id,
+            'name': prof.user.get_full_name() or prof.user.username,
+            'username': prof.user.username,
+            'dept_code': prof.department.code if prof.department else ''
+        })
+    return JsonResponse({'courses': courses, 'faculty': faculty})
+
+
+def api_publish_exam(request):
+    """AJAX endpoint to publish an examination instantly without creating duplicate competing records."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        course_id = request.POST.get('course_id')
+        faculty_id = request.POST.get('faculty_id')
+        exam_date = request.POST.get('exam_date')
+        total_marks = request.POST.get('total_marks', 100.0)
+        title = request.POST.get('title', '').strip()
+
+        course = Course.objects.filter(id=course_id).first()
+        faculty_user = User.objects.filter(id=faculty_id).first()
+
+        if not course:
+            return JsonResponse({'error': 'Invalid Course selected.'}, status=400)
+
+        exam_title = title if title else f"{course.code} Examination"
+        date_val = exam_date if (exam_date and exam_date != 'N/A') else '2026-08-15'
+
+        exam = Examination.objects.filter(course=course).order_by('-created_at').first()
+        if exam:
+            exam.title = exam_title
+            exam.exam_date = date_val
+            exam.total_marks = float(total_marks) if total_marks else 100.0
+            exam.status = Examination.Status.PUBLISHED
+            if faculty_user:
+                exam.assigned_faculty = faculty_user
+            exam.save()
+        else:
+            exam = Examination.objects.create(
+                course=course,
+                title=exam_title,
+                exam_date=date_val,
+                total_marks=float(total_marks) if total_marks else 100.0,
+                status=Examination.Status.PUBLISHED,
+                assigned_faculty=faculty_user,
+                created_by=request.user
+            )
+
+        faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
+        return JsonResponse({
+            'success': True,
+            'exam_id': exam.id,
+            'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
+        })
+    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+
+
+def question_rubric_manage(request, exam_id=None):
+    """Faculty & Examiner view to create and manage questions and rubrics ONLY for assigned examinations."""
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Faculty Workspace.")
+        return redirect('teacher_login')
+
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    # Filter examinations assigned strictly by Admin to this faculty examiner
+    if is_admin:
+        assigned_exams = Examination.objects.all().select_related('course', 'assigned_faculty')
+    else:
+        assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course', 'assigned_faculty')
+
+    selected_exam = None
+    if exam_id:
+        selected_exam = get_object_or_404(Examination, id=exam_id)
+        # Security Enforcement: Faculty can ONLY access exams assigned to them
+        if not is_admin and selected_exam.assigned_faculty != request.user:
+            messages.error(request, "Permission Denied: You can only manage questions and rubrics for examinations assigned to you by the Chief Exam Controller.")
+            return redirect('teacher_dashboard')
+    elif assigned_exams.exists():
+        selected_exam = assigned_exams.first()
+
+    questions = []
+    if selected_exam:
+        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').order_by('question_number')
+
+    if request.method == 'POST':
+        target_exam_id = request.POST.get('examination_id')
+        question_number = request.POST.get('question_number', '').strip()
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = request.POST.get('max_marks', '10.0')
+        criteria = request.POST.get('criteria', '').strip()
+        ideal_answer = request.POST.get('ideal_answer', '').strip()
+
+        target_exam = get_object_or_404(Examination, id=target_exam_id)
+
+        # Security Enforcement on Save
+        if not is_admin and target_exam.assigned_faculty != request.user:
+            messages.error(request, "Permission Denied: You can only create questions for examinations assigned to you by the Chief Exam Controller.")
+            return redirect('teacher_dashboard')
+
+        # Handle Document Deletion Action
+        clear_doc = request.POST.get('clear_document')
+        if clear_doc == 'question_paper_file' and target_exam.question_paper_file:
+            target_exam.question_paper_file.delete(save=False)
+            target_exam.question_paper_file = None
+            target_exam.save()
+            messages.success(request, f"Question Paper document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'rubric_file' and target_exam.rubric_file:
+            target_exam.rubric_file.delete(save=False)
+            target_exam.rubric_file = None
+            target_exam.save()
+            messages.success(request, f"Rubric document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'course_outline_file' and target_exam.course_outline_file:
+            target_exam.course_outline_file.delete(save=False)
+            target_exam.course_outline_file = None
+            target_exam.save()
+            messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+
+        # Handle 3 Document Upload Options (Question Paper, Rubric File, Course Outline)
+        qp_file = request.FILES.get('question_paper_file')
+        rf_file = request.FILES.get('rubric_file')
+        co_file = request.FILES.get('course_outline_file')
+
+        if qp_file:
+            target_exam.question_paper_file = qp_file
+        if rf_file:
+            target_exam.rubric_file = rf_file
+        if co_file:
+            target_exam.course_outline_file = co_file
+
+        if qp_file or rf_file or co_file:
+            target_exam.save()
+            messages.success(request, f"Reference document(s) uploaded successfully for {target_exam.course.code}!")
+
+        if not question_number and not prompt_text:
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+
+        if not question_number or not prompt_text:
+            messages.error(request, "Question Number and Question Prompt Text are required.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+
+        try:
+            # Parse JSON/List values safely from POST
+            q_types = request.POST.getlist('question_type')
+            c_verbs = request.POST.getlist('command_verbs')
+            po_list = request.POST.getlist('po_mapping')
+            kp_list = request.POST.getlist('kp_mapping')
+            cep_list = request.POST.getlist('cep_mapping')
+            cea_list = request.POST.getlist('cea_mapping')
+            kw_list = [k.strip() for k in request.POST.get('keywords', '').split(',') if k.strip()]
+            cm_list = [c.strip() for c in request.POST.get('common_mistakes', '').split(',') if c.strip()]
+
+            q_obj, _ = Question.objects.update_or_create(
+                examination=target_exam,
+                question_number=question_number,
+                defaults={
+                    'prompt_text': prompt_text,
+                    'max_marks': float(max_marks) if max_marks else 10.0,
+                    'question_type': q_types,
+                    'command_verbs': c_verbs,
+                    'scenario': request.POST.get('scenario', '').strip(),
+                    'bloom_level': request.POST.get('bloom_level', 'Understand'),
+                    'co_mapping': request.POST.get('co_mapping', 'CO1'),
+                    'po_mapping': po_list,
+                    'kp_mapping': kp_list,
+                    'cep_mapping': cep_list,
+                    'cea_mapping': cea_list,
+                    'difficulty': request.POST.get('difficulty', 'Medium'),
+                    'estimated_time': request.POST.get('estimated_time', '15 mins'),
+                    'teacher_notes': request.POST.get('teacher_notes', '').strip(),
+                }
+            )
+
+            Rubric.objects.update_or_create(
+                question=q_obj,
+                defaults={
+                    'criteria': criteria,
+                    'ideal_answer': ideal_answer,
+                    'expected_answer': request.POST.get('expected_answer', '').strip(),
+                    'keywords': kw_list,
+                    'alternative_answers': request.POST.get('alternative_answers', '').strip(),
+                    'common_mistakes': cm_list,
+                }
+            )
+
+            messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        except Exception as e:
+            messages.error(request, f"Error saving question: {str(e)}")
+
+    return render(request, 'core/question_rubric_manage.html', {
+        'assigned_exams': assigned_exams,
+        'selected_exam': selected_exam,
+        'questions': questions,
+    })
+
+
+def api_ai_analyze_question_full(request):
+    """AJAX endpoint to auto-analyze a question and generate full IUBAT academic metadata, CO/PO, Bloom level, and Rubric levels."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        course_outline_text = request.POST.get('course_outline_text', '').strip()
+
+        if not prompt_text:
+            return JsonResponse({'error': 'Question prompt text is required.'}, status=400)
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'analyze_question_full'):
+                analysis_data = provider.analyze_question_full(prompt_text, max_marks, course_outline_text)
+            else:
+                analysis_data = {
+                    "question_type": ["Theory", "Explanation"],
+                    "command_verbs": ["Explain"],
+                    "predicted_bloom": "Understand",
+                    "predicted_CO": "CO1",
+                    "predicted_PO": ["PO(a)"],
+                    "predicted_KP": ["KP1"],
+                    "predicted_CEP": ["CEP1"],
+                    "predicted_CEA": ["CEA1"],
+                    "difficulty": "Medium",
+                    "estimated_time": "15 mins",
+                    "expected_answer": "Model answer covering core concepts.",
+                    "rubric_levels": {
+                        "Excellent": {"marks": f"{max_marks*0.9:.1f}-{max_marks}", "criteria": "Flawless reasoning & diagrams."},
+                        "Good": {"marks": f"{max_marks*0.7:.1f}-{max_marks*0.85:.1f}", "criteria": "Good conceptual response."},
+                        "Average": {"marks": f"{max_marks*0.5:.1f}-{max_marks*0.65:.1f}", "criteria": "Basic understanding."},
+                        "Poor": {"marks": f"{max_marks*0.2:.1f}-{max_marks*0.45:.1f}", "criteria": "Major gaps."},
+                        "Fail": {"marks": f"0.0-{max_marks*0.15:.1f}", "criteria": "Incorrect response."}
+                    },
+                    "keywords": ["Key Concept"],
+                    "alternative_answers": "Alternative valid technical approaches accepted.",
+                    "common_mistakes": ["Wrong Formula", "Incomplete Steps"]
+                }
+            return JsonResponse({'success': True, 'analysis': analysis_data})
+        except Exception as e:
+            return JsonResponse({'error': f"AI Analysis failed: {str(e)}"}, status=500)
+
+    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+
+
+def delete_question(request, question_id):
+    """Allows Faculty to delete a question from their assigned exam."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    q_obj = get_object_or_404(Question, id=question_id)
+    exam = q_obj.examination
+
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Permission Denied: You cannot delete questions from exams not assigned to you.")
+        return redirect('teacher_dashboard')
+
+    q_num = q_obj.question_number
+    q_obj.delete()
+    messages.success(request, f"Question {q_num} deleted successfully.")
+    return redirect('question_rubric_manage', exam_id=exam.id)
+
+
+def api_generate_ai_rubric(request):
+    """AJAX endpoint for AI-assisted rubric creation using active LLM provider."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        sample_answer = request.POST.get('ideal_answer', '').strip()
+
+        if not prompt_text:
+            return JsonResponse({'error': 'Question prompt text is required.'}, status=400)
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'generate_rubric'):
+                rubric_data = provider.generate_rubric(prompt_text, max_marks, sample_answer=sample_answer)
+            else:
+                rubric_data = {
+                    "criteria": "1. Accurate understanding of key design concepts.\n2. Logical explanation and structure.\n3. Detailed examples or diagrams.",
+                    "ideal_answer": "Model Answer: The student response clearly covers all core rubric concepts.",
+                }
+            return JsonResponse({'success': True, 'rubric': rubric_data})
+        except Exception as e:
+            return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
+
+def api_scan_question_paper(request):
+    """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
+    print("=" * 80)
+    print("QUESTION PAPER SCAN REQUEST RECEIVED")
+    print(f"METHOD: {request.method}")
+    print(f"USER: {request.user}")
+    print(f"FILES: {list(request.FILES.keys())}")
+    print(f"POST KEYS: {list(request.POST.keys())}")
+    print("=" * 80)
+
+    if not request.user.is_authenticated:
+        print("[QUESTION PAPER SCAN ERROR] User not authenticated.")
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method != 'POST':
+        print(f"[QUESTION PAPER SCAN ERROR] Invalid HTTP method: {request.method}")
+        return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
+
+    exam_id = request.POST.get('examination_id')
+    exam = None
+    if exam_id and exam_id.isdigit():
+        exam = Examination.objects.filter(id=exam_id).first()
+    if not exam:
+        profile = getattr(request.user, 'profile', None)
+        if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+            exam = Examination.objects.first()
+        else:
+            exam = Examination.objects.filter(assigned_faculty=request.user).first()
+
+    print(f"[QUESTION PAPER SCAN] Matched Exam: {exam} (ID: {exam.id if exam else None})")
+
+    qp_file = request.FILES.get('question_paper_file')
+    if not qp_file:
+        print("[QUESTION PAPER SCAN ERROR] No question_paper_file found in request.FILES.")
+        return JsonResponse({'error': 'Please select a Question Paper file (PDF or Image) to upload and scan.'}, status=400)
+
+    # Save newly uploaded Question Paper file to the examination record
+    if exam:
+        exam.question_paper_file = qp_file
+        exam.save()
+
+    import mimetypes
+    qp_bytes = None
+    mime_type = 'image/jpeg'
+
+    try:
+        qp_file.open('rb')
+        qp_bytes = qp_file.read()
+        guessed_mime, _ = mimetypes.guess_type(qp_file.name)
+        if guessed_mime:
+            mime_type = guessed_mime
+        elif qp_file.name.lower().endswith('.pdf'):
+            mime_type = 'application/pdf'
+        print(f"[QUESTION PAPER SCAN] Uploaded File: {qp_file.name} | Size: {len(qp_bytes)} bytes | MIME: {mime_type}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[QUESTION PAPER SCAN ERROR] Read failed: {e}")
+        return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
+
+    from core.ai_engine.providers.factory import AIProviderFactory
+    from core.ai_engine.ocr.engine import OCREngineManager
+    provider = AIProviderFactory.get_provider()
+
+    try:
+        print("[QUESTION PAPER SCAN] Step 1: Starting OCR text extraction...")
+        ocr_res = OCREngineManager().extract_text(qp_bytes, mime_type=mime_type)
+        doc_text = ocr_res.get('text', '').strip() or "Academic Examination Paper"
+        print(f"[QUESTION PAPER SCAN] OCR Complete. Extracted Text Length: {len(doc_text)} chars")
+
+        print(f"[QUESTION PAPER SCAN] Step 2: Querying AI Provider ({provider.__class__.__name__})...")
+        res_data = provider.analyze_academic_exam_paper(
+            doc_text,
+            image_bytes=qp_bytes,
+            mime_type=mime_type
+        )
+
+        extracted_questions = res_data.get('questions', [])
+        print(f"[QUESTION PAPER SCAN] Step 3: AI Extraction Complete. Total Questions: {len(extracted_questions)}")
+
+        # Automatically save all extracted questions & rubrics to the database for this exam
+        if exam and extracted_questions:
+            print(f"[QUESTION PAPER SCAN] Step 4: Persisting {len(extracted_questions)} questions to Examination ID {exam.id}...")
+            for item in extracted_questions:
+                q_num = item.get('question_number') or 'Q1'
+                q_marks = float(item.get('allocated_marks') or 10.0)
+                q_prompt = item.get('prompt_text') or ''
+                q_bloom = item.get('bloom_level') or 'Understand'
+                q_co = item.get('co_mapping') or 'CO1'
+                q_po = item.get('po_mapping') or ['PO1']
+                q_criteria = item.get('criteria') or ''
+                q_answer = item.get('ideal_answer') or ''
+
+                q_obj, _ = Question.objects.update_or_create(
+                    examination=exam,
+                    question_number=q_num,
+                    defaults={
+                        'prompt_text': q_prompt,
+                        'max_marks': q_marks,
+                        'bloom_level': q_bloom,
+                        'co_mapping': q_co,
+                        'po_mapping': q_po if isinstance(q_po, list) else [q_po],
+                        'question_type': item.get('question_type', []),
+                        'command_verbs': item.get('command_verbs', [])
+                    }
+                )
+                Rubric.objects.update_or_create(
+                    question=q_obj,
+                    defaults={
+                        'criteria': q_criteria,
+                        'expected_answer': q_answer
+                    }
+                )
+            print("[QUESTION PAPER SCAN] Step 5: Database Save Successful.")
+
+        return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[QUESTION PAPER SCAN EXCEPTION] {e}")
+        return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)

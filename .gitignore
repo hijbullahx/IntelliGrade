@@ -2,7 +2,7 @@
 .env
 
 # Python bytecode & cache
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so

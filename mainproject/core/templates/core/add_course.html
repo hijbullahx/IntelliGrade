@@ -18,15 +18,16 @@
 
         <form method="POST" class="space-y-4">
             {% csrf_token %}
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
             
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Course Title</label>
-                <input type="text" name="title" placeholder="e.g. Software Engineering & Architecture" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500">
+                <input type="text" name="title" value="{{ preset_title }}" placeholder="e.g. Software Engineering & Architecture" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500">
             </div>
 
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Course Code</label>
-                <input type="text" name="code" placeholder="e.g. CSE 411" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500 font-mono">
+                <input type="text" name="code" value="{{ preset_code }}" placeholder="e.g. CSE 411" required class="w-full px-4 py-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-sm theme-text-primary focus:outline-none focus:border-brand-500 font-mono">
             </div>
 
             <div>
@@ -45,4 +46,14 @@
         </form>
     </div>
 </div>
+
+<script>
+if (document.querySelector('form')) {
+    document.querySelector('form').addEventListener('submit', function() {
+        try {
+            localStorage.setItem('intelligrade_entity_added', JSON.stringify({ type: 'course', time: Date.now() }));
+        } catch(e){}
+    });
+}
+</script>
 {% endblock %}

@@ -1,0 +1,712 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Exam Questions & Rubric | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-8">
+    
+    <!-- Top Navigation Header -->
+    <div class="flex items-center justify-between">
+        <a href="{% url 'teacher_dashboard' %}" class="text-xs font-bold theme-text-muted hover:theme-text-primary transition-colors flex items-center gap-1.5">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to Examiner Dashboard
+        </a>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-500 border border-brand-500/20 text-xs font-bold">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Faculty Portal: Assigned Exams Only
+        </div>
+    </div>
+
+    <!-- Exam Selector & Overview Header -->
+    <div class="glass-card p-6 rounded-2xl space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div>
+                <h1 class="text-xl font-bold theme-text-primary flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-brand-500"></i> Create Questions & Grading Rubric
+                </h1>
+                <p class="theme-text-muted text-xs mt-1">Select an assigned examination to configure its question paper items and AI evaluation rubrics.</p>
+            </div>
+            
+            <!-- Assigned Exam Selector Dropdown -->
+            <div class="w-full md:w-80">
+                <label class="block text-[11px] font-bold uppercase tracking-wider theme-text-muted mb-1">Select Assigned Examination</label>
+                <select id="examSelector" onchange="window.location.href='/teacher/exam/' + this.value + '/questions-rubric/'" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary font-semibold focus:ring-2 focus:ring-brand-500 outline-none">
+                    {% for exam in assigned_exams %}
+                    <option value="{{ exam.id }}" {% if selected_exam and selected_exam.id == exam.id %}selected{% endif %}>
+                        {{ exam.course.code }} - {{ exam.title }} ({{ exam.exam_date }})
+                    </option>
+                    {% empty %}
+                    <option value="" disabled>No examinations assigned by Chief Controller yet.</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        {% if selected_exam %}
+        <div class="flex flex-wrap items-center justify-between gap-4 pt-2 text-xs">
+            <div class="flex items-center gap-4">
+                <span class="px-3 py-1 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold font-mono">{{ selected_exam.course.code }}</span>
+                <span class="font-bold theme-text-primary">{{ selected_exam.course.title }}</span>
+                <span class="theme-text-muted">&bull; Exam Date: <strong class="theme-text-primary">{{ selected_exam.exam_date }}</strong></span>
+            </div>
+            <div>
+                <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">Assigned Examiner: {% if selected_exam.assigned_faculty %}{{ selected_exam.assigned_faculty.get_full_name|default:selected_exam.assigned_faculty.username }}{% else %}{{ teacher_name|default:"Assigned Faculty" }}{% endif %}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if not assigned_exams %}
+    <div class="glass-card p-12 rounded-2xl text-center space-y-3">
+        <div class="w-12 h-12 rounded-full bg-amber-500/10 text-amber-500 mx-auto flex items-center justify-center">
+            <i data-lucide="alert-circle" class="w-6 h-6"></i>
+        </div>
+        <h3 class="text-base font-bold theme-text-primary">No Assigned Examinations Found</h3>
+        <p class="theme-text-muted text-xs max-w-md mx-auto">The Chief Exam Controller has not assigned any examination to your faculty account yet. Please contact the Admin to assign an examination routine.</p>
+    </div>
+    {% else %}
+
+    <!-- 2 Reference Document Upload Options Grid -->
+    <div class="glass-card p-6 rounded-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="upload-cloud" class="w-4.5 h-4.5 text-brand-500"></i> Course Reference Document Upload Options
+            </h3>
+            <span class="text-[11px] theme-text-muted">PDF, Image, or Word Document Format Supported</span>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data" class="space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+
+            <!-- Question Paper File Upload & AI Scan -->
+            <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-wrap items-center justify-between gap-4">
+                <div class="space-y-1.5 flex-1 min-w-[280px]">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> Upload Question Paper Document (Image or PDF)
+                        </span>
+                    </div>
+
+                    <input type="file" name="question_paper_file" id="qpFileInput" onchange="handleQPFileSelect(this)" class="w-full text-xs theme-text-secondary file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+
+                    <div id="qpStatusBadge">
+                        {% if selected_exam.question_paper_file %}
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/20">
+                                ✓ Document Saved on Exam: {{ selected_exam.question_paper_file.name|default:"File" }}
+                            </span>
+                            <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="external-link" class="w-3 h-3"></i> View Saved Document
+                            </a>
+                            <button type="submit" name="clear_document" value="question_paper_file" onclick="return confirm('Remove saved Question Paper document from this exam?')" class="text-[11px] text-rose-500 hover:text-rose-600 font-bold underline ml-2">
+                                🗑️ Remove Document
+                            </button>
+                        </div>
+                        {% else %}
+                        <span class="text-[11px] theme-text-muted italic">No Question Paper document uploaded yet for this examination.</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2">
+                        <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Questions (AI Engine)
+                    </button>
+                    <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Save Document
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Main Grid: IUBAT Collapsible Question Builder + Paper Question List -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Col: 23-Section Collapsible IUBAT Question Builder -->
+        <div class="lg:col-span-7 space-y-6">
+            <form method="POST" enctype="multipart/form-data" id="questionBuilderForm" class="space-y-4">
+                {% csrf_token %}
+                <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+
+                <!-- Builder Header & Sticky Action Controls -->
+                <div class="glass-card p-5 rounded-2xl flex items-center justify-between gap-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
+                    <div>
+                        <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
+                        </h3>
+                        <p class="text-[10px] theme-text-muted">Fill manually or write question text & click AI Auto-Analyze</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="analyzeQuestionFullAI()" id="aiFullAnalyzeBtn" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-1.5">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Analyze
+                        </button>
+                        <button type="button" onclick="openIUBATPreviewModal()" class="px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-xl text-xs font-bold transition-all flex items-center gap-1">
+                            <i data-lucide="printer" class="w-3.5 h-3.5 text-cyan-500"></i> Preview Paper
+                        </button>
+                        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center gap-1">
+                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Save
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section 1 & 2: Exam & Question Basics -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="info" class="w-4 h-4 text-brand-500"></i> Sections 1 & 2: Exam Metadata & Question Number
+                        </span>
+                        <span class="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-brand-500/10 text-brand-500">Auto-Reordering</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Question Identifier / Number</label>
+                            <input type="text" name="question_number" id="qNumber" placeholder="e.g. Q1 (a)" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Allocated Marks</label>
+                            <input type="number" step="0.5" name="max_marks" id="qMarks" value="10.0" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-mono font-bold focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3 & 4: Category & Command Verbs -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="tag" class="w-4 h-4 text-purple-500"></i> Sections 3 & 4: Question Category & Command Verbs
+                        </span>
+                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Detected</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Question Category (Multi-Select)</label>
+                            <select name="question_type" id="qTypeSelect" multiple class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs theme-text-primary h-24 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="Theory" selected>Theory</option>
+                                <option value="Explanation" selected>Explanation</option>
+                                <option value="Numerical">Numerical Problem</option>
+                                <option value="Algorithm">Algorithm</option>
+                                <option value="Programming">Programming</option>
+                                <option value="Scenario">Scenario / Case Study</option>
+                                <option value="Comparative">Comparative Analysis</option>
+                                <option value="Design">Design Problem</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Instructional Command Verbs</label>
+                            <select name="command_verbs" id="qVerbSelect" multiple class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs theme-text-primary h-24 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="Explain" selected>Explain</option>
+                                <option value="Define">Define</option>
+                                <option value="Apply">Apply</option>
+                                <option value="Analyze">Analyze</option>
+                                <option value="Evaluate">Evaluate</option>
+                                <option value="Design">Design</option>
+                                <option value="Calculate">Calculate</option>
+                                <option value="Compare">Compare / Contrast</option>
+                                <option value="Justify">Justify</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 5 & 6: Scenario & Main Question Statement -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="file-text" class="w-4 h-4 text-cyan-500"></i> Sections 5 & 6: Scenario & Question Statement
+                        </span>
+                        <span class="text-[10px] theme-text-muted">Supports Math, Code & Tables</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Scenario / Context (Optional)</label>
+                        <textarea name="scenario" id="qScenario" rows="2" placeholder="Optional problem background or engineering scenario..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-cyan-500 outline-none"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Question Statement / Prompt Text</label>
+                        <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
+                    </div>
+                </div>
+
+                <!-- Section 9, 10, 11: CO, Bloom Taxonomy & PO Matrix -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Sections 9-11: CO, Bloom & PO Mapping
+                        </span>
+                        <span class="text-[10px] text-emerald-500 font-bold">OBE Aligned</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Course Outcome (CO)</label>
+                            <select name="co_mapping" id="qCOSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                                <option value="CO1" selected>CO1 - Core Fundamental Knowledge</option>
+                                <option value="CO2">CO2 - Analytical Problem Solving</option>
+                                <option value="CO3">CO3 - Design & Implementation</option>
+                                <option value="CO4">CO4 - Modern Tool & System Evaluation</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Bloom Taxonomy Level</label>
+                            <select name="bloom_level" id="qBloomSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                                <option value="Remember">1. Remember (Recall)</option>
+                                <option value="Understand" selected>2. Understand (Explain)</option>
+                                <option value="Apply">3. Apply (Execute)</option>
+                                <option value="Analyze">4. Analyze (Differentiate)</option>
+                                <option value="Evaluate">5. Evaluate (Justify)</option>
+                                <option value="Create">6. Create (Design)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1.5">Program Outcome (PO) Checkbox Matrix</label>
+                        <div class="grid grid-cols-4 gap-2 text-[11px]">
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(a)" checked class="rounded text-brand-600"> <span class="font-bold">PO(a)</span> Math/Sci</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(b)" class="rounded text-brand-600"> <span class="font-bold">PO(b)</span> Analysis</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(c)" checked class="rounded text-brand-600"> <span class="font-bold">PO(c)</span> Design</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(d)" class="rounded text-brand-600"> <span class="font-bold">PO(d)</span> Investigation</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 12-16: KP, CEP, CEA, Difficulty & Estimated Time -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i> Sections 12-16: KP, CEP, CEA & Complexity
+                        </span>
+                        <span class="text-[10px] theme-text-muted">Engineering Attributes</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Difficulty Level</label>
+                            <select name="difficulty" id="qDifficulty" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-amber-500 outline-none">
+                                <option value="Easy">Easy</option>
+                                <option value="Medium" selected>Medium</option>
+                                <option value="Hard">Hard</option>
+                                <option value="Very Hard">Very Hard</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Estimated Solving Time</label>
+                            <input type="text" name="estimated_time" id="qTime" value="15 mins" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-3 text-[11px]">
+                        <div>
+                            <span class="font-bold block mb-1 theme-text-secondary">Knowledge Profile (KP)</span>
+                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP1" checked> KP1 Natural Sci</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP3" checked> KP3 Engineering</label>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="font-bold block mb-1 theme-text-secondary">Complex Problems (CEP)</span>
+                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP1" checked> CEP1 Depth Knowledge</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP2"> CEP2 Conflicting Req</label>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="font-bold block mb-1 theme-text-secondary">Complex Activities (CEA)</span>
+                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA1" checked> CEA1 Diverse Resources</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA2"> CEA2 Novel Solution</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 17-22: Rubrics, Expected Answer, Keywords & Notes -->
+                <div class="glass-card p-5 rounded-2xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
+                            <i data-lucide="award" class="w-4 h-4 text-purple-500"></i> Sections 17-22: Grading Rubrics & Expected Answer
+                        </span>
+                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Generated</span>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Step-by-Step Marking Criteria</label>
+                        <textarea name="criteria" id="qCriteria" rows="3" placeholder="1. Correct architectural definition (4 marks)&#10;2. Monolith contrast (3 marks)&#10;3. Detailed component diagram (3 marks)" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Expected Model Ideal Answer</label>
+                        <textarea name="ideal_answer" id="qIdealAnswer" rows="3" placeholder="Model answer reference..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Keywords (Comma Separated)</label>
+                            <input type="text" name="keywords" id="qKeywords" placeholder="e.g. Microservices, REST API, Monolith" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Common Student Mistakes</label>
+                            <input type="text" name="common_mistakes" id="qMistakes" placeholder="e.g. Wrong Formula, Missing Diagram" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Private Teacher Notes (Internal Only)</label>
+                        <textarea name="teacher_notes" id="qNotes" rows="2" placeholder="Private internal grading notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Right Col: List of Questions Configured for Selected Exam -->
+        <div class="lg:col-span-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Configured Exam Paper Items ({{ questions|length }})
+                </h3>
+                <button type="button" onclick="openIUBATPreviewModal()" class="text-xs font-bold text-brand-500 hover:underline inline-flex items-center gap-1">
+                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> Full Paper Preview &rarr;
+                </button>
+            </div>
+
+            <div class="space-y-4 max-h-[850px] overflow-y-auto pr-1">
+                {% for q in questions %}
+                <div class="glass-card p-4 rounded-2xl space-y-3 relative group border-l-4 border-l-brand-500">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="px-2.5 py-0.5 rounded-lg bg-brand-500/10 text-brand-500 font-mono font-bold text-xs">{{ q.question_number }}</span>
+                            <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px] font-bold">{{ q.max_marks }} Marks</span>
+                            {% if q.co_mapping %}<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono text-[10px] font-bold">{{ q.co_mapping }}</span>{% endif %}
+                            {% if q.bloom_level %}<span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono text-[10px] font-bold">{{ q.bloom_level }}</span>{% endif %}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button type="button" onclick="editQuestion('{{ q.question_number }}', '{{ q.max_marks }}', `{{ q.prompt_text|escapejs }}`, `{{ q.rubric.criteria|escapejs }}`, `{{ q.rubric.ideal_answer|escapejs }}`)" class="p-1.5 text-slate-400 hover:text-brand-500 transition-colors">
+                                <i data-lucide="edit-3" class="w-4 h-4"></i>
+                            </button>
+                            <a href="{% url 'delete_question' q.id %}" onclick="return confirm('Delete this question?');" class="p-1.5 text-slate-400 hover:text-rose-500 transition-colors">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </a>
+                        </div>
+                    </div>
+
+                    <p class="text-xs theme-text-primary font-medium line-clamp-3">{{ q.prompt_text }}</p>
+
+                    {% if q.rubric %}
+                    <div class="p-3 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 text-[11px] space-y-1.5">
+                        <span class="font-bold text-purple-600 dark:text-purple-400 block flex items-center gap-1"><i data-lucide="award" class="w-3 h-3"></i> Marking Criteria:</span>
+                        <p class="theme-text-muted whitespace-pre-line">{{ q.rubric.criteria|truncatewords:20 }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="glass-card p-8 rounded-2xl text-center space-y-2">
+                    <i data-lucide="file-question" class="w-8 h-8 text-slate-400 mx-auto"></i>
+                    <p class="text-xs font-bold theme-text-primary">No Questions Configured Yet</p>
+                    <p class="text-[11px] theme-text-muted">Use the 23-Section Question Builder on the left to create or AI auto-generate questions for this examination.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Section 23: Live IUBAT Examination Paper Preview Modal -->
+<div id="iubatPreviewModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-white text-slate-900 w-full max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl space-y-6">
+        
+        <!-- Action Header -->
+        <div class="flex items-center justify-between border-b pb-4">
+            <span class="font-bold text-sm text-slate-600 uppercase tracking-widest flex items-center gap-2">
+                <i data-lucide="award" class="w-4 h-4 text-purple-600"></i> Official IUBAT Examination Paper Format
+            </span>
+            <div class="flex items-center gap-3">
+                <button onclick="window.print()" class="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-purple-500 transition-all flex items-center gap-1.5">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Print Official PDF
+                </button>
+                <button onclick="closeIUBATPreviewModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all">
+                    Close
+                </button>
+            </div>
+        </div>
+
+        <!-- IUBAT Official Header -->
+        <div class="text-center space-y-1 font-serif border-b pb-6">
+            <h2 class="text-xl font-bold uppercase tracking-wide">International University of Business Agriculture and Technology</h2>
+            <h3 class="text-base font-semibold text-slate-700">Department of Computer Science and Engineering</h3>
+            <p class="text-xs text-slate-600 font-mono mt-1">Final Examination &bull; Summer 2026 Semester</p>
+
+            <div class="grid grid-cols-2 text-left text-xs font-sans mt-4 pt-3 border-t max-w-2xl mx-auto gap-2">
+                <div><strong>Course Code:</strong> {{ selected_exam.course.code|default:"N/A" }}</div>
+                <div><strong>Course Title:</strong> {{ selected_exam.course.title|default:"N/A" }}</div>
+                <div><strong>Instructor:</strong> {% if selected_exam and selected_exam.assigned_faculty %}{{ selected_exam.assigned_faculty.get_full_name|default:selected_exam.assigned_faculty.username }}{% else %}{{ teacher_name|default:"Assigned Faculty" }}{% endif %}</div>
+                <div><strong>Exam Date:</strong> {{ selected_exam.exam_date|default:"2026-08-15" }}</div>
+                <div><strong>Time Allowed:</strong> 3 Hours</div>
+                <div><strong>Total Marks:</strong> {{ selected_exam.total_marks|default:100.0 }}</div>
+            </div>
+
+            <div class="text-left text-[11px] font-sans italic text-slate-600 mt-3 pt-2 border-t max-w-2xl mx-auto">
+                <strong>Instructions to Candidates:</strong> Answer all questions. Figures in the right margin indicate full allocated marks. Course Outcomes (CO) & Program Outcomes (PO) indicate accreditation targets.
+            </div>
+        </div>
+
+        <!-- IUBAT Question Items List -->
+        <div class="space-y-6 font-sans text-xs">
+            {% for q in questions %}
+            <div class="border-b pb-4 space-y-2">
+                <div class="flex items-start justify-between font-bold">
+                    <span class="text-sm text-purple-900 font-mono">{{ q.question_number }}. {{ q.prompt_text }}</span>
+                    <span class="font-mono text-slate-800 ml-4 font-extrabold text-sm">[{{ q.max_marks }} Marks]</span>
+                </div>
+
+                {% if q.scenario %}
+                <p class="text-slate-600 italic bg-slate-50 p-2.5 rounded-lg border-l-2 border-purple-500 text-[11px]">
+                    <strong>Scenario:</strong> {{ q.scenario }}
+                </p>
+                {% endif %}
+
+                <div class="flex items-center gap-3 text-[10px] font-mono text-slate-500">
+                    {% if q.co_mapping %}<span><strong>CO Target:</strong> {{ q.co_mapping }}</span>{% endif %}
+                    {% if q.bloom_level %}<span>&bull; <strong>Bloom Level:</strong> {{ q.bloom_level }}</span>{% endif %}
+                    {% if q.po_mapping %}<span>&bull; <strong>PO Mapping:</strong> {{ q.po_mapping|join:", " }}</span>{% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-8 text-slate-400">No examination questions created yet. Add questions in the builder to preview.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue || '{{ csrf_token }}';
+}
+function openIUBATPreviewModal() {
+    const modal = document.getElementById('iubatPreviewModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeIUBATPreviewModal() {
+    const modal = document.getElementById('iubatPreviewModal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+}
+
+function analyzeQuestionFullAI() {
+    const promptText = document.getElementById('qPrompt').value.trim();
+    const maxMarks = document.getElementById('qMarks').value || 10.0;
+    const btn = document.getElementById('aiFullAnalyzeBtn');
+
+    if (!promptText) {
+        alert('Please enter the Question Prompt Text first before triggering AI Auto-Analysis.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Analyzing...`;
+    lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('prompt_text', promptText);
+    formData.append('max_marks', maxMarks);
+
+    fetch("{% url 'api_ai_analyze_question_full' %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Analyze`;
+        lucide.createIcons();
+
+        if (data.success && data.analysis) {
+            const a = data.analysis;
+            if (a.predicted_bloom) document.getElementById('qBloomSelect').value = a.predicted_bloom;
+            if (a.predicted_CO) document.getElementById('qCOSelect').value = a.predicted_CO;
+            if (a.difficulty) document.getElementById('qDifficulty').value = a.difficulty;
+            if (a.estimated_time) document.getElementById('qTime').value = a.estimated_time;
+            if (a.expected_answer) document.getElementById('qIdealAnswer').value = a.expected_answer;
+            if (a.keywords && Array.isArray(a.keywords)) document.getElementById('qKeywords').value = a.keywords.join(', ');
+            if (a.common_mistakes && Array.isArray(a.common_mistakes)) document.getElementById('qMistakes').value = a.common_mistakes.join(', ');
+
+            if (a.rubric_levels && typeof a.rubric_levels === 'object') {
+                let critText = "";
+                for (let lvl in a.rubric_levels) {
+                    critText += `${lvl} (${a.rubric_levels[lvl].marks}): ${a.rubric_levels[lvl].criteria}\n`;
+                }
+                document.getElementById('qCriteria').value = critText.trim();
+            }
+            alert('AI Analysis Complete! All academic metadata, CO/PO mappings, Bloom levels, and Rubrics auto-populated.');
+        } else {
+            alert(data.error || 'AI Analysis failed.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Analyze`;
+        lucide.createIcons();
+        alert('Server error executing AI Auto-Analysis.');
+    });
+}
+
+function generateAIRubric() {
+    const promptText = document.getElementById('qPrompt').value.trim();
+    const maxMarks = document.getElementById('qMarks').value || 10.0;
+    const idealAnswer = document.getElementById('qIdealAnswer').value.trim();
+    const btn = document.getElementById('aiGenBtn');
+
+    if (!promptText) {
+        alert('Please enter the Question Prompt Text first before generating AI Rubric.');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Generating AI Rubric...`;
+    lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('prompt_text', promptText);
+    formData.append('max_marks', maxMarks);
+    formData.append('ideal_answer', idealAnswer);
+
+    fetch("{% url 'api_generate_ai_rubric' %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Auto-Generate AI Rubric`;
+        lucide.createIcons();
+
+        if (data.success && data.rubric) {
+            if (data.rubric.criteria) {
+                document.getElementById('qCriteria').value = data.rubric.criteria;
+            }
+            if (data.rubric.ideal_answer) {
+                document.getElementById('qIdealAnswer').value = data.rubric.ideal_answer;
+            }
+        } else {
+            alert(data.error || 'AI Rubric generation failed.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Auto-Generate AI Rubric`;
+        lucide.createIcons();
+        alert('Server error generating AI rubric.');
+    });
+}
+
+function handleQPFileSelect(input) {
+    const badge = document.getElementById('qpStatusBadge');
+    if (!badge) return;
+    if (input.files && input.files.length > 0) {
+        const file = input.files[0];
+        const fileUrl = URL.createObjectURL(file);
+        badge.innerHTML = `
+            <div class="flex items-center gap-2 text-xs mt-1">
+                <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-bold text-[10px] border border-purple-500/20">
+                    📁 Selected for Scan: ${file.name} (${(file.size / 1024).toFixed(1)} KB)
+                </span>
+                <a href="${fileUrl}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1">
+                    <i data-lucide="external-link" class="w-3 h-3"></i> Preview Selected Document
+                </a>
+            </div>
+        `;
+        lucide.createIcons();
+    }
+}
+
+function scanAcademicPaper() {
+    console.log("[SCAN BUTTON CLICKED]");
+    const qpFileInput = document.querySelector('input[name="question_paper_file"]');
+    const hasSelectedFile = qpFileInput && qpFileInput.files && qpFileInput.files.length > 0;
+
+    if (!hasSelectedFile) {
+        console.warn("[SCAN CANCELLED] No file selected in input[name='question_paper_file']");
+        alert('Please choose a Question Paper document file (PDF or Image) using the file selection input before scanning.');
+        if (qpFileInput) qpFileInput.focus();
+        return;
+    }
+
+    const selectedFile = qpFileInput.files[0];
+    console.log("[FILE SELECTED]", selectedFile.name, selectedFile.size, "bytes", selectedFile.type);
+
+    const btn = document.getElementById('scanAcademicBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 🧠 Scanning ${selectedFile.name} (AI Engine)...`;
+    lucide.createIcons();
+
+    const formData = new FormData();
+    formData.append('examination_id', "{{ selected_exam.id }}");
+    formData.append('question_paper_file', selectedFile);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    console.log("[SENDING REQUEST...]", "{% url 'api_scan_question_paper' %}");
+
+    fetch("{% url 'api_scan_question_paper' %}", {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(response => {
+        console.log("[RESPONSE STATUS]", response.status, response.statusText);
+        return response.json();
+    })
+    .then(data => {
+        console.log("[RESPONSE DATA RECEIVED]", data);
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
+        lucide.createIcons();
+
+        if (data.success && data.data && data.data.questions && data.data.questions.length > 0) {
+            const count = data.extracted_count || data.data.questions.length;
+            console.log("[SUCCESS CALLBACK] Extracted", count, "questions. Reloading...");
+            alert('🎉 Question Paper Scanned Successfully!\n\nExtracted ' + count + ' question(s) from ' + selectedFile.name + ' and saved them to your exam paper. Reloading page to display...');
+            window.location.reload();
+        } else {
+            console.warn("[SCAN ERROR CALLBACK]", data.error);
+            alert(data.error || 'Academic scan failed or no questions detected in the Question Paper document.');
+        }
+    })
+    .catch(err => {
+        console.error("[QUESTION PAPER SCAN JS EXCEPTION]", err);
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
+        lucide.createIcons();
+        alert('Server error executing Academic AI scan. Check DevTools console.');
+    });
+}
+
+function editQuestion(num, marks, prompt, criteria, ideal) {
+    document.getElementById('qNumber').value = num;
+    document.getElementById('qMarks').value = marks;
+    document.getElementById('qPrompt').value = prompt;
+    document.getElementById('qCriteria').value = criteria;
+    document.getElementById('qIdealAnswer').value = ideal;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+{% endblock %}

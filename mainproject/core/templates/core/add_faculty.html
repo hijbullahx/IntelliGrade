@@ -19,23 +19,24 @@
     </div>
 
     <!-- Form Card -->
-    <form method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
+    <form method="POST" autocomplete="off" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
         {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Full Name</label>
-                <input type="text" name="full_name" placeholder="e.g. Dr. Al-Amin Hossain" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                <input type="text" name="full_name" value="{{ preset_name }}" autocomplete="off" placeholder="e.g. Dr. Al-Amin Hossain" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
             </div>
 
             <div>
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Official Email</label>
-                <input type="email" name="email" placeholder="faculty@iubat.edu" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                <input type="email" name="email" value="" autocomplete="off" placeholder="faculty@iubat.edu" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
             </div>
 
             <div>
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Username / Employee ID</label>
-                <input type="text" name="username" placeholder="emp_104" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                <input type="text" name="username" value="" autocomplete="off" placeholder="emp_104" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
             </div>
 
             <div>
@@ -53,12 +54,12 @@
 
             <div>
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Designation</label>
-                <input type="text" name="designation" value="Assistant Professor" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                <input type="text" name="designation" value="Assistant Professor" autocomplete="off" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
             </div>
 
             <div class="md:col-span-2">
                 <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Set Initial Password</label>
-                <input type="password" name="password" placeholder="••••••••••••" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
+                <input type="password" name="password" value="" autocomplete="new-password" placeholder="••••••••••••" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none" required>
             </div>
         </div>
 
@@ -71,4 +72,14 @@
     </form>
 
 </div>
+
+<script>
+if (document.querySelector('form')) {
+    document.querySelector('form').addEventListener('submit', function() {
+        try {
+            localStorage.setItem('intelligrade_entity_added', JSON.stringify({ type: 'faculty', time: Date.now() }));
+        } catch(e){}
+    });
+}
+</script>
 {% endblock %}
