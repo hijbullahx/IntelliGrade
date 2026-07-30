@@ -96,6 +96,21 @@ class Question(models.Model):
     prompt_text = models.TextField()
     max_marks = models.DecimalField(max_digits=5, decimal_places=2)
 
+    # IUBAT Academic Hierarchy & Classification Fields
+    question_type = models.JSONField(default=list, blank=True, help_text="Categories (e.g. Theory, Numerical, Algorithm, Scenario)")
+    command_verbs = models.JSONField(default=list, blank=True, help_text="Instructional verbs (e.g. Explain, Calculate, Design)")
+    scenario = models.TextField(blank=True, help_text="Optional case scenario or context")
+    bloom_level = models.CharField(max_length=50, default='Understand', help_text="Bloom Taxonomy Level")
+    co_mapping = models.CharField(max_length=50, blank=True, help_text="Course Outcome Mapping (e.g. CO1)")
+    po_mapping = models.JSONField(default=list, blank=True, help_text="Program Outcome Mappings (e.g. ['PO(a)', 'PO(c)'])")
+    kp_mapping = models.JSONField(default=list, blank=True, help_text="Knowledge Profile (e.g. ['KP1', 'KP3'])")
+    cep_mapping = models.JSONField(default=list, blank=True, help_text="Complex Engineering Problems (e.g. ['CEP1'])")
+    cea_mapping = models.JSONField(default=list, blank=True, help_text="Complex Engineering Activities (e.g. ['CEA1'])")
+    difficulty = models.CharField(max_length=30, default='Medium', help_text="Easy, Medium, Hard, Very Hard")
+    estimated_time = models.CharField(max_length=50, default='15 mins', help_text="Estimated Solving Time")
+    figures = models.JSONField(default=list, blank=True, help_text="Attached Figures, Diagrams, Equations")
+    teacher_notes = models.TextField(blank=True, help_text="Private teacher notes (not visible to students)")
+
     class Meta:
         ordering = ['question_number']
         unique_together = ('examination', 'question_number')
@@ -109,6 +124,13 @@ class Rubric(models.Model):
     criteria = models.TextField(help_text="Detailed grading criteria and key concepts expected.")
     ideal_answer = models.TextField(blank=True, help_text="Sample or model answer.")
     mark_distribution = models.JSONField(default=dict, blank=True, help_text="JSON mapping criteria/steps to specific marks.")
+    
+    # Extended Academic Rubric & Evaluation Fields
+    expected_answer = models.TextField(blank=True, help_text="Structured expected answer format")
+    rubric_levels = models.JSONField(default=dict, blank=True, help_text="Grading levels (Excellent, Good, Average, Poor, Fail)")
+    keywords = models.JSONField(default=list, blank=True, help_text="Expected key terms/concepts")
+    alternative_answers = models.TextField(blank=True, help_text="Alternative valid solutions")
+    common_mistakes = models.JSONField(default=list, blank=True, help_text="Common student pitfalls and deductions")
 
     def __str__(self):
         return f"Rubric for Q{self.question.question_number} ({self.question.examination.title})"

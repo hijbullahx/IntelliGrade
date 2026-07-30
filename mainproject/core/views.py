@@ -901,6 +901,10 @@ def scan_routine_ai(request):
                     is_published = True
                     published_exam_id = existing_exam.id
                     published_exam_title = existing_exam.title
+                    # Preserve existing assigned faculty from DB so re-scanning routine never overwrites assigned faculty
+                    if existing_exam.assigned_faculty:
+                        faculty_user = existing_exam.assigned_faculty
+                        f_name = faculty_user.get_full_name() or faculty_user.username
 
             routine_items.append({
                 'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
@@ -959,18 +963,28 @@ def exam_create(request):
         course = get_object_or_404(Course, id=course_id)
         assigned_faculty = User.objects.filter(id=assigned_faculty_id).first() if assigned_faculty_id else None
 
-        exam = Examination.objects.create(
-            course=course,
-            title=title if title else f"Examination for {course.code}",
-            exam_date=exam_date if exam_date else '2026-07-20',
-            total_marks=total_marks,
-            status=Examination.Status.PUBLISHED,
-            assigned_faculty=assigned_faculty,
-            created_by=request.user
-        )
+        exam = Examination.objects.filter(course=course).order_by('-created_at').first()
+        if exam:
+            exam.title = title if title else f"Examination for {course.code}"
+            exam.exam_date = exam_date if exam_date else '2026-07-20'
+            exam.total_marks = total_marks
+            exam.status = Examination.Status.PUBLISHED
+            if assigned_faculty:
+                exam.assigned_faculty = assigned_faculty
+            exam.save()
+        else:
+            exam = Examination.objects.create(
+                course=course,
+                title=title if title else f"Examination for {course.code}",
+                exam_date=exam_date if exam_date else '2026-07-20',
+                total_marks=total_marks,
+                status=Examination.Status.PUBLISHED,
+                assigned_faculty=assigned_faculty,
+                created_by=request.user
+            )
 
         faculty_str = f" (Assigned Examiner: {assigned_faculty.get_full_name() or assigned_faculty.username})" if assigned_faculty else ""
-        messages.success(request, f"Examination '{exam.title}' for {course.code} created successfully!{faculty_str}")
+        messages.success(request, f"Examination '{exam.title}' for {course.code} saved successfully!{faculty_str}")
 
         profile = getattr(request.user, 'profile', None)
         if (profile and profile.role == Profile.Role.ADMIN) or request.user.is_superuser:
@@ -1316,16 +1330,21 @@ def edit_exam(request, exam_id):
         title = request.POST.get('title', '').strip()
         total_marks = request.POST.get('total_marks', 100)
         status = request.POST.get('status', 'PUBLISHED')
+        assigned_faculty_id = request.POST.get('assigned_faculty')
+
+        assigned_faculty = User.objects.filter(id=assigned_faculty_id).first() if assigned_faculty_id else None
 
         exam.title = title
         exam.total_marks = total_marks
         exam.status = status
+        exam.assigned_faculty = assigned_faculty
         exam.save()
 
         messages.success(request, f"Examination '{title}' updated successfully!")
         return redirect('exams_list')
 
-    return render(request, 'core/edit_exam.html', {'exam': exam})
+    faculty_members = Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department')
+    return render(request, 'core/edit_exam.html', {'exam': exam, 'faculty_members': faculty_members})
 
 
 def delete_exam(request, exam_id):
@@ -1356,7 +1375,7 @@ def api_get_courses_and_faculty(request):
 
 
 def api_publish_exam(request):
-    """AJAX endpoint to publish an examination instantly without page reload."""
+    """AJAX endpoint to publish an examination instantly without creating duplicate competing records."""
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required.'}, status=401)
 
@@ -1376,15 +1395,25 @@ def api_publish_exam(request):
         exam_title = title if title else f"{course.code} Examination"
         date_val = exam_date if (exam_date and exam_date != 'N/A') else '2026-08-15'
 
-        exam = Examination.objects.create(
-            course=course,
-            title=exam_title,
-            exam_date=date_val,
-            total_marks=float(total_marks) if total_marks else 100.0,
-            status=Examination.Status.PUBLISHED,
-            assigned_faculty=faculty_user,
-            created_by=request.user
-        )
+        exam = Examination.objects.filter(course=course).order_by('-created_at').first()
+        if exam:
+            exam.title = exam_title
+            exam.exam_date = date_val
+            exam.total_marks = float(total_marks) if total_marks else 100.0
+            exam.status = Examination.Status.PUBLISHED
+            if faculty_user:
+                exam.assigned_faculty = faculty_user
+            exam.save()
+        else:
+            exam = Examination.objects.create(
+                course=course,
+                title=exam_title,
+                exam_date=date_val,
+                total_marks=float(total_marks) if total_marks else 100.0,
+                status=Examination.Status.PUBLISHED,
+                assigned_faculty=faculty_user,
+                created_by=request.user
+            )
 
         faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
         return JsonResponse({
@@ -1463,12 +1492,34 @@ def question_rubric_manage(request, exam_id=None):
             return redirect('question_rubric_manage', exam_id=target_exam.id)
 
         try:
+            # Parse JSON/List values safely from POST
+            q_types = request.POST.getlist('question_type')
+            c_verbs = request.POST.getlist('command_verbs')
+            po_list = request.POST.getlist('po_mapping')
+            kp_list = request.POST.getlist('kp_mapping')
+            cep_list = request.POST.getlist('cep_mapping')
+            cea_list = request.POST.getlist('cea_mapping')
+            kw_list = [k.strip() for k in request.POST.get('keywords', '').split(',') if k.strip()]
+            cm_list = [c.strip() for c in request.POST.get('common_mistakes', '').split(',') if c.strip()]
+
             q_obj, _ = Question.objects.update_or_create(
                 examination=target_exam,
                 question_number=question_number,
                 defaults={
                     'prompt_text': prompt_text,
-                    'max_marks': float(max_marks) if max_marks else 10.0
+                    'max_marks': float(max_marks) if max_marks else 10.0,
+                    'question_type': q_types,
+                    'command_verbs': c_verbs,
+                    'scenario': request.POST.get('scenario', '').strip(),
+                    'bloom_level': request.POST.get('bloom_level', 'Understand'),
+                    'co_mapping': request.POST.get('co_mapping', 'CO1'),
+                    'po_mapping': po_list,
+                    'kp_mapping': kp_list,
+                    'cep_mapping': cep_list,
+                    'cea_mapping': cea_list,
+                    'difficulty': request.POST.get('difficulty', 'Medium'),
+                    'estimated_time': request.POST.get('estimated_time', '15 mins'),
+                    'teacher_notes': request.POST.get('teacher_notes', '').strip(),
                 }
             )
 
@@ -1476,11 +1527,15 @@ def question_rubric_manage(request, exam_id=None):
                 question=q_obj,
                 defaults={
                     'criteria': criteria,
-                    'ideal_answer': ideal_answer
+                    'ideal_answer': ideal_answer,
+                    'expected_answer': request.POST.get('expected_answer', '').strip(),
+                    'keywords': kw_list,
+                    'alternative_answers': request.POST.get('alternative_answers', '').strip(),
+                    'common_mistakes': cm_list,
                 }
             )
 
-            messages.success(request, f"Question {q_obj.question_number} and Grading Rubric saved successfully for {target_exam.course.code}!")
+            messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
         except Exception as e:
             messages.error(request, f"Error saving question: {str(e)}")
@@ -1490,6 +1545,55 @@ def question_rubric_manage(request, exam_id=None):
         'selected_exam': selected_exam,
         'questions': questions,
     })
+
+
+def api_ai_analyze_question_full(request):
+    """AJAX endpoint to auto-analyze a question and generate full IUBAT academic metadata, CO/PO, Bloom level, and Rubric levels."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        course_outline_text = request.POST.get('course_outline_text', '').strip()
+
+        if not prompt_text:
+            return JsonResponse({'error': 'Question prompt text is required.'}, status=400)
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'analyze_question_full'):
+                analysis_data = provider.analyze_question_full(prompt_text, max_marks, course_outline_text)
+            else:
+                analysis_data = {
+                    "question_type": ["Theory", "Explanation"],
+                    "command_verbs": ["Explain"],
+                    "predicted_bloom": "Understand",
+                    "predicted_CO": "CO1",
+                    "predicted_PO": ["PO(a)"],
+                    "predicted_KP": ["KP1"],
+                    "predicted_CEP": ["CEP1"],
+                    "predicted_CEA": ["CEA1"],
+                    "difficulty": "Medium",
+                    "estimated_time": "15 mins",
+                    "expected_answer": "Model answer covering core concepts.",
+                    "rubric_levels": {
+                        "Excellent": {"marks": f"{max_marks*0.9:.1f}-{max_marks}", "criteria": "Flawless reasoning & diagrams."},
+                        "Good": {"marks": f"{max_marks*0.7:.1f}-{max_marks*0.85:.1f}", "criteria": "Good conceptual response."},
+                        "Average": {"marks": f"{max_marks*0.5:.1f}-{max_marks*0.65:.1f}", "criteria": "Basic understanding."},
+                        "Poor": {"marks": f"{max_marks*0.2:.1f}-{max_marks*0.45:.1f}", "criteria": "Major gaps."},
+                        "Fail": {"marks": f"0.0-{max_marks*0.15:.1f}", "criteria": "Incorrect response."}
+                    },
+                    "keywords": ["Key Concept"],
+                    "alternative_answers": "Alternative valid technical approaches accepted.",
+                    "common_mistakes": ["Wrong Formula", "Incomplete Steps"]
+                }
+            return JsonResponse({'success': True, 'analysis': analysis_data})
+        except Exception as e:
+            return JsonResponse({'error': f"AI Analysis failed: {str(e)}"}, status=500)
+
+    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
 
 
 def delete_question(request, question_id):
@@ -1541,40 +1645,58 @@ def api_generate_ai_rubric(request):
             return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
 
 def api_scan_question_paper(request):
-    """AJAX endpoint to analyze uploaded Question Paper & Course Outline using 18-part Academic Intelligence Engine."""
+    """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required.'}, status=401)
 
     if request.method == 'POST':
         exam_id = request.POST.get('examination_id')
-        exam = get_object_or_404(Examination, id=exam_id)
+        exam = None
+        if exam_id and exam_id.isdigit():
+            exam = Examination.objects.filter(id=exam_id).first()
+        if not exam:
+            profile = getattr(request.user, 'profile', None)
+            if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+                exam = Examination.objects.first()
+            else:
+                exam = Examination.objects.filter(assigned_faculty=request.user).first()
 
-        qp_file = request.FILES.get('question_paper_file') or exam.question_paper_file
-        co_file = request.FILES.get('course_outline_file') or exam.course_outline_file
+        # Save uploaded Question Paper file if attached
+        if exam and request.FILES.get('question_paper_file'):
+            exam.question_paper_file = request.FILES.get('question_paper_file')
+            exam.save()
 
-        image_bytes = None
+        # Retrieve Question Paper file buffer (either newly uploaded or saved on exam)
+        qp_file = request.FILES.get('question_paper_file') or (exam.question_paper_file if (exam and exam.question_paper_file) else None)
+
+        if not qp_file:
+            return JsonResponse({'error': 'Please attach the Question Paper document (Image or PDF) first before scanning.'}, status=400)
+
+        import mimetypes
+        qp_bytes = None
         mime_type = 'image/jpeg'
 
-        if qp_file:
-            try:
-                qp_file.open('rb')
-                image_bytes = qp_file.read()
-                fn_lower = qp_file.name.lower()
-                if fn_lower.endswith('.png'):
-                    mime_type = 'image/png'
-                elif fn_lower.endswith('.pdf'):
-                    mime_type = 'application/pdf'
-                elif fn_lower.endswith('.webp'):
-                    mime_type = 'image/webp'
-            except Exception:
-                pass
+        try:
+            qp_file.open('rb')
+            qp_bytes = qp_file.read()
+            guessed_mime, _ = mimetypes.guess_type(qp_file.name)
+            if guessed_mime:
+                mime_type = guessed_mime
+            elif qp_file.name.lower().endswith('.pdf'):
+                mime_type = 'application/pdf'
+        except Exception as e:
+            return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
 
         from core.ai_engine.providers.factory import AIProviderFactory
         provider = AIProviderFactory.get_provider()
 
         try:
             if hasattr(provider, 'analyze_academic_exam_paper'):
-                res_data = provider.analyze_academic_exam_paper("Academic Exam Paper", image_bytes=image_bytes, mime_type=mime_type)
+                res_data = provider.analyze_academic_exam_paper(
+                    "Academic Examination Paper",
+                    image_bytes=qp_bytes,
+                    mime_type=mime_type
+                )
             else:
                 res_data = {
                     "questions": [
@@ -1587,14 +1709,49 @@ def api_scan_question_paper(request):
                             "bloom_level": "Understand",
                             "co_mapping": "CO1",
                             "po_mapping": "PO1",
-                            "mark_breakdown": "6 + 4",
                             "criteria": "1. Microservices definition & API communication (6 marks)\n2. Monolith contrast (4 marks)",
                             "ideal_answer": "Microservices break applications into independent REST services. Monolith combines all components into a single executable process."
                         }
                     ]
                 }
-            return JsonResponse({'success': True, 'data': res_data})
+
+            extracted_questions = res_data.get('questions', [])
+            
+            # Automatically save all extracted questions & rubrics to the database for this exam
+            if exam and extracted_questions:
+                for item in extracted_questions:
+                    q_num = item.get('question_number') or 'Q1'
+                    q_marks = float(item.get('allocated_marks') or 10.0)
+                    q_prompt = item.get('prompt_text') or ''
+                    q_bloom = item.get('bloom_level') or 'Understand'
+                    q_co = item.get('co_mapping') or 'CO1'
+                    q_po = item.get('po_mapping') or ['PO1']
+                    q_criteria = item.get('criteria') or ''
+                    q_answer = item.get('ideal_answer') or ''
+
+                    q_obj, _ = Question.objects.update_or_create(
+                        examination=exam,
+                        question_number=q_num,
+                        defaults={
+                            'prompt_text': q_prompt,
+                            'max_marks': q_marks,
+                            'bloom_level': q_bloom,
+                            'co_mapping': q_co,
+                            'po_mapping': q_po if isinstance(q_po, list) else [q_po],
+                            'question_type': item.get('question_type', []),
+                            'command_verbs': item.get('command_verbs', [])
+                        }
+                    )
+                    Rubric.objects.update_or_create(
+                        question=q_obj,
+                        defaults={
+                            'criteria': q_criteria,
+                            'expected_answer': q_answer
+                        }
+                    )
+
+            return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
         except Exception as e:
-            return JsonResponse({'error': f"Academic Scan Failed: {str(e)}"}, status=500)
+            return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)
 
     return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)

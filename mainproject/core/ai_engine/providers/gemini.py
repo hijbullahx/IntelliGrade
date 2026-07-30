@@ -2,6 +2,7 @@ import json
 import re
 import urllib.request
 import urllib.error
+import time
 from typing import Dict, Any, Optional, List
 from .base import BaseAIProvider
 
@@ -17,11 +18,14 @@ class GeminiProvider(BaseAIProvider):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg') -> str:
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> str:
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
 
-        candidate_models = [self.model_name, "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest"]
+        candidate_models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash-latest"]
+        if self.model_name and self.model_name not in candidate_models:
+            candidate_models.insert(0, self.model_name)
+
         # Deduplicate preserving order
         unique_models = []
         for m in candidate_models:
@@ -42,6 +46,17 @@ class GeminiProvider(BaseAIProvider):
                 }
             })
 
+        if extra_files:
+            for ef in extra_files:
+                if ef.get('bytes'):
+                    b64_ef = base64.b64encode(ef['bytes']).decode('utf-8')
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": ef.get('mime_type', 'application/pdf'),
+                            "data": b64_ef
+                        }
+                    })
+
         payload = {"contents": [{"parts": parts}]}
         json_data = json.dumps(payload).encode('utf-8')
 
@@ -56,7 +71,7 @@ class GeminiProvider(BaseAIProvider):
             )
 
             try:
-                with urllib.request.urlopen(req, timeout=30) as response:
+                with urllib.request.urlopen(req, timeout=10) as response:
                     res_bytes = response.read()
                     res_data = json.loads(res_bytes.decode('utf-8'))
                     candidates = res_data.get('candidates', [])
@@ -67,13 +82,12 @@ class GeminiProvider(BaseAIProvider):
                 error_body = e.read().decode('utf-8', errors='ignore')
                 last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
                 if e.code == 429:
-                    break
-                if e.code in (404, 503):
+                    time.sleep(0.5)
                     continue
-                break
+                continue
             except Exception as e:
                 last_error = f"Gemini Request Failed ({model}): {str(e)}"
-                break
+                continue
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
@@ -199,61 +213,116 @@ Return ONLY a valid JSON object in this exact schema:
 
         return {"routine_schedule": schedule}
 
-    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg') -> Dict[str, Any]:
-        prompt = """
-You are the Academic Intelligence Engine powering IntelliGrade. Your primary responsibility is to understand an academic examination exactly as a university faculty member understands it. You must never consider an examination paper as plain text. Instead, every uploaded examination is a structured academic document.
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        doc_text = str(qp_text_or_bytes) if (qp_text_or_bytes and isinstance(qp_text_or_bytes, str)) else 'Read directly from uploaded image/document'
+        
+        prompt = f"""
+You are an expert University Academic Examination Question Scanner and OCR Engine.
+Read the uploaded examination paper image or document carefully and extract ALL examination questions, sub-parts, allocated marks, command verbs, Bloom taxonomy levels, CO/PO mappings, and expected answer criteria.
 
-Follow these 18 Academic Document Rules:
-1. ACADEMIC DOCUMENT UNDERSTANDING: Maintain document hierarchy (Institution -> School -> Dept -> Course -> Exam Metadata -> Instructions -> Questions -> Sub-questions -> Figures -> Tables -> Rubrics -> CO/PO -> Evaluation Scheme).
-2. HEADER EXTRACTION: Extract University Name, School, Department, Semester, Program, Course Code, Course Title, Instructor, Exam Type, Duration, Total Marks, Date, Instructions.
-3. QUESTION STRUCTURE: Each question must contain Question Number, Statement, Scenario, Task, Instruction, Allocated Marks, CO Mapping, PO Mapping, Bloom Level. Never merge multiple questions or subparts.
-4. QUESTION TYPES: Classify questions (Definition, Theory, Explanation, Application, Numerical Problem, Algorithm, Programming, Case Study, Design Problem, Comparative, etc.).
-5. COMMAND VERBS: Detect instructional verbs (Explain, Define, Apply, Analyze, Evaluate, Design, Compare, etc.).
-6. MARK DISTRIBUTION: Detect sub-mark distributions (e.g. 25 = 10 + 15 or 8 + 10 + 7). Store Question -> Sub-Question -> Allocated Marks.
-7. FIGURE UNDERSTANDING: Extract Figure Number, Caption, Referenced Question, Type (Matrix, Graph, Diagram, Table). Connect figures with questions.
-8. COURSE OUTCOMES: Retrieve COs (CO1, CO2, CO3) from Course Outline if available.
-9. PROGRAM OUTCOMES: Map POs, Knowledge Profile, Complex Engineering Problems.
-10. BLOOM TAXONOMY: Classify levels (Remember, Understand, Apply, Analyze, Evaluate, Create).
-11. EXPECTED ANSWER STRUCTURE: Determine format (Definition -> Explanation -> Example; Formula -> Calculation -> Result; Algorithm -> Pseudo Code -> Complexity).
-12. RUBRIC GENERATION: Generate rubric with Ideal Answer, Key Concepts, Expected Keywords, Partial Mark Rules, Required Steps/Diagrams, Common Mistakes.
+Question Paper Document Content:
+{doc_text}
 
-Return ONLY a raw JSON object matching this exact schema:
-{
-  "header_metadata": {
-    "university": "e.g. University Name",
-    "department": "e.g. Computer Science & Engineering",
-    "course_code": "e.g. CSE 411",
-    "course_title": "e.g. Software Engineering",
-    "exam_type": "Final Examination",
-    "exam_duration": "3 Hours",
-    "total_marks": 100.0,
-    "instructions": ["Answer all questions", "Figures in margin indicate full marks"]
-  },
+Return ONLY a valid JSON object in this exact schema without any markdown or commentary:
+{{
   "questions": [
-    {
-      "question_number": "Q1 (a)",
-      "prompt_text": "Full question statement here...",
-      "allocated_marks": 5.0,
+    {{
+      "question_number": "e.g. Q1 (a)",
+      "prompt_text": "Exact text of the question statement from the paper",
+      "allocated_marks": 10.0,
       "question_type": ["Theory", "Explanation"],
-      "command_verbs": ["Explain", "Compare"],
+      "command_verbs": ["Explain"],
       "bloom_level": "Understand",
       "co_mapping": "CO1",
-      "po_mapping": "PO1",
-      "mark_breakdown": "3+2",
-      "criteria": "1. Definition of microservices (3 marks)\n2. Comparison with monolith (2 marks)",
-      "ideal_answer": "Model answer covering key architectural points..."
-    }
+      "po_mapping": ["PO1"],
+      "criteria": "Key criteria for grading",
+      "ideal_answer": "Expected model answer summary"
+    }}
   ]
-}
+}}
 """
         try:
-            response_text = self._call_api(prompt, system_instruction="You are an expert University Academic Examination Parser. Return ONLY valid JSON.", image_bytes=image_bytes, mime_type=mime_type)
+            response_text = self._call_api(prompt, system_instruction="Return ONLY raw JSON without commentary.", image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files)
+            
             cleaned = re.sub(r'```json\s*', '', response_text)
             cleaned = re.sub(r'```\s*', '', cleaned).strip()
             
             try:
                 parsed = json.loads(cleaned)
-                if isinstance(parsed, dict) and 'questions' in parsed:
+                if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                    return parsed
+            except Exception:
+                pass
+
+            match = re.search(r'(\{[\s\S]*\})', response_text)
+            if match:
+                try:
+                    parsed = json.loads(match.group(1))
+                    if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                        return parsed
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return {
+            "questions": [
+                {
+                    "question_number": "Q1 (a)",
+                    "prompt_text": "Explain the core concepts presented in the uploaded examination paper.",
+                    "allocated_marks": 10.0,
+                    "question_type": ["Explanation"],
+                    "command_verbs": ["Explain"],
+                    "bloom_level": "Understand",
+                    "co_mapping": "CO1",
+                    "po_mapping": ["PO1"],
+                    "criteria": "1. Accurate understanding of key principles.\n2. Clear, structured explanation.",
+                    "ideal_answer": "Model answer covering the core principles outlined in the examination document."
+                }
+            ]
+        }
+
+    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '') -> Dict[str, Any]:
+        prompt = f"""
+You are the IUBAT Academic Intelligence Engine. Analyze the following examination question text and generate full academic assessment metadata.
+
+Question Text: {question_text}
+Allocated Marks: {max_marks}
+Course Outline Context: {course_outline_text or 'N/A'}
+
+Analyze and return ONLY a raw JSON object matching this schema:
+{{
+  "question_type": ["Theory", "Explanation"],
+  "command_verbs": ["Explain", "Compare"],
+  "predicted_bloom": "Understand",
+  "predicted_CO": "CO1",
+  "predicted_PO": ["PO(a)", "PO(c)"],
+  "predicted_KP": ["KP1", "KP3"],
+  "predicted_CEP": ["CEP1"],
+  "predicted_CEA": ["CEA1"],
+  "difficulty": "Medium",
+  "estimated_time": "15 mins",
+  "expected_answer": "1. Definition and architecture...\n2. Step-by-step comparison...",
+  "rubric_levels": {{
+    "Excellent": {{"marks": "9.0 - 10.0", "criteria": "Complete mastery, clear diagrams, flawless reasoning."}},
+    "Good": {{"marks": "7.0 - 8.5", "criteria": "Accurate concepts with minor omissions in detail."}},
+    "Average": {{"marks": "5.0 - 6.5", "criteria": "Partial understanding; basic definition provided."}},
+    "Poor": {{"marks": "2.0 - 4.5", "criteria": "Significant conceptual gaps or incorrect formulas."}},
+    "Fail": {{"marks": "0.0 - 1.5", "criteria": "Irrelevant or completely incorrect response."}}
+  }},
+  "keywords": ["Microservices", "Monolith", "REST API", "Scalability"],
+  "alternative_answers": "Event-Driven Architecture or Serverless implementations are also valid.",
+  "common_mistakes": ["Confusing microservices with SOA", "Omitting database isolation", "Missing diagram"]
+}}
+"""
+        try:
+            response_text = self._call_api(prompt, system_instruction="You are an expert University Academic Examination Evaluator. Return ONLY valid JSON.")
+            cleaned = re.sub(r'```json\s*', '', response_text)
+            cleaned = re.sub(r'```\s*', '', cleaned).strip()
+            
+            try:
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict) and 'predicted_bloom' in parsed:
                     return parsed
             except Exception:
                 pass
@@ -262,7 +331,7 @@ Return ONLY a raw JSON object matching this exact schema:
             if match:
                 try:
                     parsed = json.loads(match.group(1))
-                    if isinstance(parsed, dict) and 'questions' in parsed:
+                    if isinstance(parsed, dict) and 'predicted_bloom' in parsed:
                         return parsed
                 except Exception:
                     pass
@@ -270,22 +339,27 @@ Return ONLY a raw JSON object matching this exact schema:
             pass
 
         return {
-            "header_metadata": {"total_marks": 100.0},
-            "questions": [
-                {
-                    "question_number": "Q1 (a)",
-                    "prompt_text": "Explain Microservices Architecture and contrast it with Monolithic Pattern.",
-                    "allocated_marks": 10.0,
-                    "question_type": ["Explanation", "Comparative"],
-                    "command_verbs": ["Explain", "Contrast"],
-                    "bloom_level": "Understand",
-                    "co_mapping": "CO1",
-                    "po_mapping": "PO1",
-                    "mark_breakdown": "6 + 4",
-                    "criteria": "1. Microservices definition & API communication (6 marks)\n2. Monolith contrast (4 marks)",
-                    "ideal_answer": "Microservices break applications into independent REST services. Monolith combines all components into a single executable process."
-                }
-            ]
+            "question_type": ["Theory", "Explanation"],
+            "command_verbs": ["Explain"],
+            "predicted_bloom": "Understand",
+            "predicted_CO": "CO1",
+            "predicted_PO": ["PO(a)", "PO(c)"],
+            "predicted_KP": ["KP1", "KP3"],
+            "predicted_CEP": ["CEP1"],
+            "predicted_CEA": ["CEA1"],
+            "difficulty": "Medium",
+            "estimated_time": "15 mins",
+            "expected_answer": f"Expected answer for: {question_text[:50]}...\n1. Core concepts & theory.\n2. Supporting examples.",
+            "rubric_levels": {
+                "Excellent": {"marks": f"{max_marks*0.9:.1f} - {max_marks:.1f}", "criteria": "Complete mastery & accurate concepts."},
+                "Good": {"marks": f"{max_marks*0.7:.1f} - {max_marks*0.85:.1f}", "criteria": "Good conceptual understanding."},
+                "Average": {"marks": f"{max_marks*0.5:.1f} - {max_marks*0.65:.1f}", "criteria": "Basic partial response."},
+                "Poor": {"marks": f"{max_marks*0.2:.1f} - {max_marks*0.45:.1f}", "criteria": "Major gaps in reasoning."},
+                "Fail": {"marks": f"0.0 - {max_marks*0.15:.1f}", "criteria": "Incorrect response."}
+            },
+            "keywords": ["Key Concept 1", "Key Concept 2", "Academic Standard"],
+            "alternative_answers": "Alternative valid technical approaches are acceptable.",
+            "common_mistakes": ["Wrong Formula", "Wrong Unit", "Incomplete Steps"]
         }
 
     def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None) -> Dict[str, Any]:

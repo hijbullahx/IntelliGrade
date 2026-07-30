@@ -56,4 +56,5 @@ urlpatterns = [
     path('teacher/delete-question/<int:question_id>/', views.delete_question, name='delete_question'),
     path('api/generate-ai-rubric/', views.api_generate_ai_rubric, name='api_generate_ai_rubric'),
     path('api/scan-question-paper/', views.api_scan_question_paper, name='api_scan_question_paper'),
+    path('api/ai-analyze-question-full/', views.api_ai_analyze_question_full, name='api_ai_analyze_question_full'),
 ]
