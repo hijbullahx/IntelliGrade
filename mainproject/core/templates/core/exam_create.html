@@ -157,23 +157,27 @@ function runAIRoutineScan() {
         scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
         lucide.createIcons();
 
+        console.log("[AI ROUTINE SCAN RESPONSE RECEIVED]", data);
+
         // Store last scan data in window memory for zero-latency local re-matching
         window.lastAIRoutineScanResult = data;
         renderExtractedRoutineTable(data);
     })
     .catch(err => {
+        console.error("[AI ROUTINE SCAN JS ERROR]", err);
         scanBtn.disabled = false;
         scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
         lucide.createIcons();
-        alert('Routine scanning failed. Please check your inputs.');
+        alert('Routine scanning failed. Check DevTools console for details.');
     });
 }
 
 function renderExtractedRoutineTable(data) {
     const resultBox = document.getElementById('aiScanResult');
+    if (!resultBox) return;
     resultBox.classList.remove('hidden');
-    let html = `<div class="space-y-4">`;
 
+    let html = `<div class="space-y-4">`;
     let statusHeader = `<span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">✨ Provider: ${data.provider_name || 'AI Engine'}</span>`;
 
     html += `<div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
@@ -205,6 +209,12 @@ function renderExtractedRoutineTable(data) {
                     <tbody class="divide-y divide-slate-200 dark:divide-slate-800 font-medium">`;
 
         items.forEach((item, index) => {
+            let safeCode = (item.course_code || '').replace(/'/g, "\\'");
+            let safeTitle = (item.course_title || '').replace(/'/g, "\\'");
+            let safeFaculty = (item.faculty_name || '').replace(/'/g, "\\'");
+            let safeDate = (item.exam_date || '').replace(/'/g, "\\'");
+            let safeTime = (item.exam_time || '').replace(/'/g, "\\'");
+
             let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}`;
             
             let rawFaculty = item.faculty_name ? item.faculty_name.trim() : '';
@@ -219,7 +229,7 @@ function renderExtractedRoutineTable(data) {
                     <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
                 </span>`;
             } else if (item.course_found && item.faculty_found) {
-                actionCellContent = `<button type="button" onclick="publishExamFromRow(this, ${item.course_id}, ${item.faculty_id}, '${item.exam_date || ''}', '${item.total_marks || 100}', '${item.course_code || ''}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all inline-flex items-center gap-1.5">
+                actionCellContent = `<button type="button" onclick="publishExamFromRow(this, ${item.course_id}, ${item.faculty_id}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all inline-flex items-center gap-1.5">
                     <i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam
                 </button>`;
             } else {
@@ -237,7 +247,7 @@ function renderExtractedRoutineTable(data) {
             html += `<tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
                 <td class="px-4 py-3 font-bold theme-text-primary">
                     <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px]">${item.course_code}</span>
+                        <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px]">${item.course_code || 'N/A'}</span>
                         <span>${item.course_title || ''}</span>
                     </div>
                 </td>
@@ -259,24 +269,35 @@ function renderExtractedRoutineTable(data) {
         });
 
         html += `</tbody></table></div></div>`;
-    }
-
-    if (data.course_found && data.course_id) {
-        document.getElementById('courseSelect').value = data.course_id;
-    }
-    if (data.faculty_found && data.faculty_id) {
-        document.getElementById('facultySelect').value = data.faculty_id;
-    }
-    if (data.detected_date) {
-        document.getElementById('examDate').value = data.detected_date;
-    }
-    if (data.total_marks) {
-        document.getElementById('totalMarks').value = data.total_marks;
+    } else {
+        html += `<div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 space-y-2">
+            <div class="font-bold flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i> No Exam Schedule Entries Extracted</div>
+            <p class="text-[11px] opacity-90">Extracted Raw Content from Document:</p>
+            <pre class="p-2.5 rounded-lg bg-slate-900 text-slate-200 text-[10px] overflow-x-auto max-h-40 font-mono">${data.raw_extracted_text || 'No text found in document'}</pre>
+        </div>`;
     }
 
     html += `</div>`;
     resultBox.innerHTML = html;
     resultBox.className = "p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 transition-all text-xs";
+
+    try {
+        if (data.course_found && data.course_id && document.getElementById('courseSelect')) {
+            document.getElementById('courseSelect').value = data.course_id;
+        }
+        if (data.faculty_found && data.faculty_id && document.getElementById('facultySelect')) {
+            document.getElementById('facultySelect').value = data.faculty_id;
+        }
+        if (data.detected_date && document.getElementById('examDate')) {
+            document.getElementById('examDate').value = data.detected_date;
+        }
+        if (data.total_marks && document.getElementById('totalMarks')) {
+            document.getElementById('totalMarks').value = data.total_marks;
+        }
+    } catch(err) {
+        console.warn("[DROPDOWN SYNC WARNING]", err);
+    }
+
     lucide.createIcons();
 }
 

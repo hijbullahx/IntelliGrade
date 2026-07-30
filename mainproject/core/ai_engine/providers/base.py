@@ -46,3 +46,7 @@ class BaseAIProvider(ABC):
         Generates a suggested grading rubric, key points, and mark distribution for a question.
         """
         pass
+
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        """Extracts text from document image via multimodal vision."""
+        return ""

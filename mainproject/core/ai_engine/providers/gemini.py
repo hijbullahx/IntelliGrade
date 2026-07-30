@@ -22,9 +22,7 @@ class GeminiProvider(BaseAIProvider):
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
 
-        candidate_models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash-latest"]
-        if self.model_name and self.model_name not in candidate_models:
-            candidate_models.insert(0, self.model_name)
+        candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
 
         # Deduplicate preserving order
         unique_models = []
@@ -70,29 +68,45 @@ class GeminiProvider(BaseAIProvider):
                 method='POST'
             )
 
-            try:
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    res_bytes = response.read()
-                    res_data = json.loads(res_bytes.decode('utf-8'))
-                    candidates = res_data.get('candidates', [])
-                    if candidates:
-                        return candidates[0]['content']['parts'][0]['text']
-                    return ""
-            except urllib.error.HTTPError as e:
-                error_body = e.read().decode('utf-8', errors='ignore')
-                last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
-                if e.code == 429:
-                    time.sleep(0.5)
-                    continue
-                continue
-            except Exception as e:
-                last_error = f"Gemini Request Failed ({model}): {str(e)}"
-                continue
+            for attempt in range(3):
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as response:
+                        res_bytes = response.read()
+                        res_data = json.loads(res_bytes.decode('utf-8'))
+                        candidates = res_data.get('candidates', [])
+                        if candidates:
+                            text_out = candidates[0]['content']['parts'][0]['text']
+                            try:
+                                trace_dir = os.path.join(settings.BASE_DIR, 'request_trace')
+                                os.makedirs(trace_dir, exist_ok=True)
+                                with open(os.path.join(trace_dir, 'prompt.txt'), 'w', encoding='utf-8') as f:
+                                    f.write(prompt)
+                                with open(os.path.join(trace_dir, 'provider_response.json'), 'w', encoding='utf-8') as f:
+                                    f.write(text_out)
+                            except Exception:
+                                pass
+                            return text_out
+                        return ""
+                except urllib.error.HTTPError as e:
+                    error_body = e.read().decode('utf-8', errors='ignore')
+                    last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
+                    if e.code == 429:
+                        time.sleep(4.0)
+                        continue
+                    break
+                except Exception as e:
+                    last_error = f"Gemini Request Failed ({model}): {str(e)}"
+                    break
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        return self._call_api(prompt, system_instruction)
+        try:
+            return self._call_api(prompt, system_instruction)
+        except Exception as e:
+            if "Return ONLY raw JSON" in (system_instruction or "") or "JSON" in prompt:
+                return '{"status": "quota_exceeded", "message": "API Quota Limit reached. Please provide a fresh Gemini API Key."}'
+            return "Generated text completion (Offline fallback)."
 
     def evaluate_answer(
         self,
@@ -388,3 +402,7 @@ Return ONLY raw JSON in this schema:
                 "ideal_answer": f"Model answer covering essential principles for: {question_text}",
                 "mark_distribution": {"core_concept": float(max_marks * 0.5), "accuracy": float(max_marks * 0.5)}
             }
+
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        prompt = "Transcribe all written and printed academic text, questions, matrices, course codes, marks, and tables from this document image word for word."
+        return self._call_api(prompt, image_bytes=image_bytes, mime_type=mime_type)

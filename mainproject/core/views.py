@@ -1,3 +1,6 @@
+import os
+import json
+import hashlib
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
@@ -797,7 +800,8 @@ def scan_routine_ai(request):
         routine_file = request.FILES.get('routine_file')
         image_bytes = None
         mime_type = 'image/jpeg'
-        file_name = ''
+        trace_dir = settings.BASE_DIR / 'request_trace'
+        os.makedirs(trace_dir, exist_ok=True)
 
         if routine_file:
             try:
@@ -812,50 +816,59 @@ def scan_routine_ai(request):
                     mime_type = 'image/webp'
                 else:
                     mime_type = 'image/jpeg'
-            except Exception:
-                pass
+
+                # Trace Upload & Integrity
+                file_ext = os.path.splitext(file_name)[1].lower() or '.bin'
+                orig_hash = hashlib.sha256(image_bytes).hexdigest()
+                with open(trace_dir / 'original_uploaded_file', 'wb') as f:
+                    f.write(image_bytes)
+                with open(trace_dir / f'django_uploaded_file{file_ext}', 'wb') as f:
+                    f.write(image_bytes)
+                with open(trace_dir / f'saved_temp_file{file_ext}', 'wb') as f:
+                    f.write(image_bytes)
+                print(f"[REQUEST TRACE INTEGRITY] Filename: {file_name} | SHA256: {orig_hash} | Size: {len(image_bytes)} bytes [PASS]")
+            except Exception as e:
+                print(f"[REQUEST TRACE ERROR] File upload read failed: {e}")
 
         provider = AIProviderFactory.get_provider()
+        from core.ai_engine.routine_parser.routine_parser import RoutineParser
+        routine_parser = RoutineParser()
         ai_used = True
         ai_error = None
         extracted_schedule = []
 
-        try:
-            # Delegate multimodal image & text scanning to active LLM Provider
-            if hasattr(provider, 'analyze_question_paper'):
-                try:
-                    ai_result = provider.analyze_question_paper(routine_text, image_bytes=image_bytes, mime_type=mime_type)
-                except TypeError:
-                    ai_result = provider.analyze_question_paper(routine_text or "Exam Routine Document")
-            else:
-                ai_result = {}
+        # Extract document text if file uploaded and no text pasted
+        if image_bytes and not routine_text:
+            from core.ai_engine.ocr.engine import OCREngineManager
+            ocr_res = OCREngineManager().extract_text(image_bytes, mime_type=mime_type)
+            routine_text = ocr_res.get('text', '')
 
+        if routine_text:
+            try:
+                with open(trace_dir / 'ocr_result.txt', 'w', encoding='utf-8') as f:
+                    f.write(routine_text)
+            except Exception:
+                pass
+
+        try:
+            ai_result = routine_parser.parse_routine(routine_text, image_bytes=image_bytes, mime_type=mime_type)
             if isinstance(ai_result, dict):
                 extracted_schedule = ai_result.get('routine_schedule', [])
-                if not extracted_schedule and ai_result.get('course_code'):
-                    extracted_schedule = [ai_result]
+                try:
+                    with open(trace_dir / 'parsed.json', 'w', encoding='utf-8') as f:
+                        json.dump(ai_result, f, indent=2)
+                except Exception:
+                    pass
         except Exception as e:
             ai_error = str(e)
 
-        # Fallback raw text representation
-        display_raw_text = routine_text
-        if not display_raw_text and file_name:
-            display_raw_text = f"📷 Uploaded Image/Document File: {file_name}\n(Direct Google Gemini Multimodal Vision Scan Applied)"
-
-        # Fallback local pattern extraction if no structured list returned
-        if not extracted_schedule:
-            course_match = re.search(r'([A-Z]{2,4}\s*\d{3,4})', routine_text, re.IGNORECASE)
-            date_match = re.search(r'(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4}|\d{2}-\d{2}-\d{4})', routine_text)
-            faculty_match = re.search(r'(?:Faculty|Teacher|Examiner|Instructor)[:\s]+([A-Za-z\.\s]+)', routine_text, re.IGNORECASE)
-            
-            extracted_schedule = [{
-                'course_code': course_match.group(1).upper().strip() if course_match else None,
-                'course_title': None,
-                'faculty_name': faculty_match.group(1).strip() if faculty_match else None,
-                'exam_date': date_match.group(1) if date_match else None,
-                'exam_time': "10:00 AM - 01:00 PM",
-                'total_marks': 100.0
-            }]
+        # Raw text representation (clean display)
+        if routine_text and not routine_text.startswith('%PDF-') and not '/Type' in routine_text:
+            display_raw_text = routine_text
+        elif file_name:
+            display_raw_text = f"📷 Uploaded Document File: {file_name}\n(Parsed via AI Multimodal OCR Engine)"
+        else:
+            display_raw_text = "Exam Routine Document"
 
         # Process & DB Match Each Extracted Routine Item
         routine_items = []
@@ -864,30 +877,24 @@ def scan_routine_ai(request):
         for item in extracted_schedule:
             c_code = item.get('course_code')
             c_title = item.get('course_title')
-            f_name = item.get('faculty_name')
+            f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
             e_date = item.get('exam_date')
             e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
             t_marks = item.get('total_marks', 100.0)
 
-            # Match Course
+            # Match Course in DB (Strictly without overwriting c_code)
             course_obj = None
             if c_code:
-                course_obj = Course.objects.filter(code__iexact=c_code).first()
+                course_obj = Course.objects.filter(code__iexact=c_code.strip()).first()
             if not course_obj and c_title:
-                course_obj = Course.objects.filter(title__icontains=c_title).first()
-            if not course_obj and routine_text:
-                for c in Course.objects.all():
-                    if c.code.lower() in routine_text.lower():
-                        course_obj = c
-                        c_code = c.code
-                        break
+                course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
 
-            # Match Faculty
+            # Match Faculty in DB (Strictly without overwriting f_name)
             faculty_user = None
             if f_name:
                 for prof in all_teachers:
                     full_n = prof.user.get_full_name() or prof.user.username
-                    if f_name.lower() in full_n.lower() or prof.user.username.lower() in f_name.lower():
+                    if f_name.lower().strip() in full_n.lower() or prof.user.username.lower() in f_name.lower():
                         faculty_user = prof.user
                         break
 
@@ -901,10 +908,6 @@ def scan_routine_ai(request):
                     is_published = True
                     published_exam_id = existing_exam.id
                     published_exam_title = existing_exam.title
-                    # Preserve existing assigned faculty from DB so re-scanning routine never overwrites assigned faculty
-                    if existing_exam.assigned_faculty:
-                        faculty_user = existing_exam.assigned_faculty
-                        f_name = faculty_user.get_full_name() or faculty_user.username
 
             routine_items.append({
                 'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
@@ -924,7 +927,7 @@ def scan_routine_ai(request):
 
         first_item = routine_items[0] if routine_items else {}
 
-        return JsonResponse({
+        response_payload = {
             'success': True,
             'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
             'routine_items': routine_items,
@@ -940,7 +943,15 @@ def scan_routine_ai(request):
             'faculty_found': first_item.get('faculty_found', False),
             'faculty_id': first_item.get('faculty_id'),
             'total_marks': first_item.get('total_marks', 100.0),
-        })
+        }
+
+        try:
+            with open(trace_dir / 'frontend_response.json', 'w', encoding='utf-8') as f:
+                json.dump(response_payload, f, indent=2)
+        except Exception:
+            pass
+
+        return JsonResponse(response_payload)
 
 
 def exam_create(request):

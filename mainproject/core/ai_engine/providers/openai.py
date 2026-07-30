@@ -37,7 +37,8 @@ class OpenAIProvider(BaseAIProvider):
             data=json_data,
             headers={
                 'Content-Type': 'application/json',
-                'Authorization': f'Bearer {self.api_key}'
+                'Authorization': f'Bearer {self.api_key}',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
             },
             method='POST'
         )

@@ -195,7 +195,9 @@ class Evaluation(models.Model):
 class AIConfiguration(models.Model):
     class Provider(models.TextChoices):
         GEMINI = 'GEMINI', 'Google Gemini AI'
+        GROQ = 'GROQ', 'Groq AI (Llama-3 / Mixtral)'
         OPENAI = 'OPENAI', 'OpenAI GPT-4o'
+        OLLAMA = 'OLLAMA', 'Local Ollama LLM'
         MOCK = 'MOCK', 'Mock Testing Provider'
 
     class OCREngine(models.TextChoices):
