@@ -8,7 +8,7 @@
       "instructor_name": "Drs Ferdaus Anam Jibon",
       "room_number": "405 (A-4)",
       "section": "E",
-      "department": null,
+      "department": "Computer Science & Engineering",
       "semester": "Spring 2026",
       "total_marks": null
     },
@@ -20,7 +20,7 @@
       "instructor_name": "Kazi Johir Raihan Suny",
       "room_number": "508 (D-2)",
       "section": "Q",
-      "department": null,
+      "department": "Computer Science",
       "semester": "Spring 2026",
       "total_marks": null
     },
@@ -32,7 +32,7 @@
       "instructor_name": "Naeem Mia",
       "room_number": "310 (F-4)",
       "section": "C",
-      "department": null,
+      "department": "Computer Science & Engineering",
       "semester": "Spring 2026",
       "total_marks": null
     },
@@ -44,7 +44,7 @@
       "instructor_name": "Ms. Kashfi Shormita Kushal",
       "room_number": "501 (E-3)",
       "section": "K",
-      "department": null,
+      "department": "Computer Science",
       "semester": "Spring 2026",
       "total_marks": null
     }

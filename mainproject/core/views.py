@@ -1479,6 +1479,27 @@ def question_rubric_manage(request, exam_id=None):
             messages.error(request, "Permission Denied: You can only create questions for examinations assigned to you by the Chief Exam Controller.")
             return redirect('teacher_dashboard')
 
+        # Handle Document Deletion Action
+        clear_doc = request.POST.get('clear_document')
+        if clear_doc == 'question_paper_file' and target_exam.question_paper_file:
+            target_exam.question_paper_file.delete(save=False)
+            target_exam.question_paper_file = None
+            target_exam.save()
+            messages.success(request, f"Question Paper document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'rubric_file' and target_exam.rubric_file:
+            target_exam.rubric_file.delete(save=False)
+            target_exam.rubric_file = None
+            target_exam.save()
+            messages.success(request, f"Rubric document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'course_outline_file' and target_exam.course_outline_file:
+            target_exam.course_outline_file.delete(save=False)
+            target_exam.course_outline_file = None
+            target_exam.save()
+            messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
+
         # Handle 3 Document Upload Options (Question Paper, Rubric File, Course Outline)
         qp_file = request.FILES.get('question_paper_file')
         rf_file = request.FILES.get('rubric_file')
@@ -1657,112 +1678,122 @@ def api_generate_ai_rubric(request):
 
 def api_scan_question_paper(request):
     """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
+    print("=" * 80)
+    print("QUESTION PAPER SCAN REQUEST RECEIVED")
+    print(f"METHOD: {request.method}")
+    print(f"USER: {request.user}")
+    print(f"FILES: {list(request.FILES.keys())}")
+    print(f"POST KEYS: {list(request.POST.keys())}")
+    print("=" * 80)
+
     if not request.user.is_authenticated:
+        print("[QUESTION PAPER SCAN ERROR] User not authenticated.")
         return JsonResponse({'error': 'Authentication required.'}, status=401)
 
-    if request.method == 'POST':
-        exam_id = request.POST.get('examination_id')
-        exam = None
-        if exam_id and exam_id.isdigit():
-            exam = Examination.objects.filter(id=exam_id).first()
-        if not exam:
-            profile = getattr(request.user, 'profile', None)
-            if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
-                exam = Examination.objects.first()
-            else:
-                exam = Examination.objects.filter(assigned_faculty=request.user).first()
+    if request.method != 'POST':
+        print(f"[QUESTION PAPER SCAN ERROR] Invalid HTTP method: {request.method}")
+        return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
 
-        # Save uploaded Question Paper file if attached
-        if exam and request.FILES.get('question_paper_file'):
-            exam.question_paper_file = request.FILES.get('question_paper_file')
-            exam.save()
+    exam_id = request.POST.get('examination_id')
+    exam = None
+    if exam_id and exam_id.isdigit():
+        exam = Examination.objects.filter(id=exam_id).first()
+    if not exam:
+        profile = getattr(request.user, 'profile', None)
+        if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+            exam = Examination.objects.first()
+        else:
+            exam = Examination.objects.filter(assigned_faculty=request.user).first()
 
-        # Retrieve Question Paper file buffer (either newly uploaded or saved on exam)
-        qp_file = request.FILES.get('question_paper_file') or (exam.question_paper_file if (exam and exam.question_paper_file) else None)
+    print(f"[QUESTION PAPER SCAN] Matched Exam: {exam} (ID: {exam.id if exam else None})")
 
-        if not qp_file:
-            return JsonResponse({'error': 'Please attach the Question Paper document (Image or PDF) first before scanning.'}, status=400)
+    qp_file = request.FILES.get('question_paper_file')
+    if not qp_file:
+        print("[QUESTION PAPER SCAN ERROR] No question_paper_file found in request.FILES.")
+        return JsonResponse({'error': 'Please select a Question Paper file (PDF or Image) to upload and scan.'}, status=400)
 
-        import mimetypes
-        qp_bytes = None
-        mime_type = 'image/jpeg'
+    # Save newly uploaded Question Paper file to the examination record
+    if exam:
+        exam.question_paper_file = qp_file
+        exam.save()
 
-        try:
-            qp_file.open('rb')
-            qp_bytes = qp_file.read()
-            guessed_mime, _ = mimetypes.guess_type(qp_file.name)
-            if guessed_mime:
-                mime_type = guessed_mime
-            elif qp_file.name.lower().endswith('.pdf'):
-                mime_type = 'application/pdf'
-        except Exception as e:
-            return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
+    import mimetypes
+    qp_bytes = None
+    mime_type = 'image/jpeg'
 
-        from core.ai_engine.providers.factory import AIProviderFactory
-        provider = AIProviderFactory.get_provider()
+    try:
+        qp_file.open('rb')
+        qp_bytes = qp_file.read()
+        guessed_mime, _ = mimetypes.guess_type(qp_file.name)
+        if guessed_mime:
+            mime_type = guessed_mime
+        elif qp_file.name.lower().endswith('.pdf'):
+            mime_type = 'application/pdf'
+        print(f"[QUESTION PAPER SCAN] Uploaded File: {qp_file.name} | Size: {len(qp_bytes)} bytes | MIME: {mime_type}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[QUESTION PAPER SCAN ERROR] Read failed: {e}")
+        return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
 
-        try:
-            if hasattr(provider, 'analyze_academic_exam_paper'):
-                res_data = provider.analyze_academic_exam_paper(
-                    "Academic Examination Paper",
-                    image_bytes=qp_bytes,
-                    mime_type=mime_type
+    from core.ai_engine.providers.factory import AIProviderFactory
+    from core.ai_engine.ocr.engine import OCREngineManager
+    provider = AIProviderFactory.get_provider()
+
+    try:
+        print("[QUESTION PAPER SCAN] Step 1: Starting OCR text extraction...")
+        ocr_res = OCREngineManager().extract_text(qp_bytes, mime_type=mime_type)
+        doc_text = ocr_res.get('text', '').strip() or "Academic Examination Paper"
+        print(f"[QUESTION PAPER SCAN] OCR Complete. Extracted Text Length: {len(doc_text)} chars")
+
+        print(f"[QUESTION PAPER SCAN] Step 2: Querying AI Provider ({provider.__class__.__name__})...")
+        res_data = provider.analyze_academic_exam_paper(
+            doc_text,
+            image_bytes=qp_bytes,
+            mime_type=mime_type
+        )
+
+        extracted_questions = res_data.get('questions', [])
+        print(f"[QUESTION PAPER SCAN] Step 3: AI Extraction Complete. Total Questions: {len(extracted_questions)}")
+
+        # Automatically save all extracted questions & rubrics to the database for this exam
+        if exam and extracted_questions:
+            print(f"[QUESTION PAPER SCAN] Step 4: Persisting {len(extracted_questions)} questions to Examination ID {exam.id}...")
+            for item in extracted_questions:
+                q_num = item.get('question_number') or 'Q1'
+                q_marks = float(item.get('allocated_marks') or 10.0)
+                q_prompt = item.get('prompt_text') or ''
+                q_bloom = item.get('bloom_level') or 'Understand'
+                q_co = item.get('co_mapping') or 'CO1'
+                q_po = item.get('po_mapping') or ['PO1']
+                q_criteria = item.get('criteria') or ''
+                q_answer = item.get('ideal_answer') or ''
+
+                q_obj, _ = Question.objects.update_or_create(
+                    examination=exam,
+                    question_number=q_num,
+                    defaults={
+                        'prompt_text': q_prompt,
+                        'max_marks': q_marks,
+                        'bloom_level': q_bloom,
+                        'co_mapping': q_co,
+                        'po_mapping': q_po if isinstance(q_po, list) else [q_po],
+                        'question_type': item.get('question_type', []),
+                        'command_verbs': item.get('command_verbs', [])
+                    }
                 )
-            else:
-                res_data = {
-                    "questions": [
-                        {
-                            "question_number": "Q1 (a)",
-                            "prompt_text": "Explain Microservices Architecture and contrast it with Monolithic Pattern.",
-                            "allocated_marks": 10.0,
-                            "question_type": ["Explanation", "Comparative"],
-                            "command_verbs": ["Explain", "Contrast"],
-                            "bloom_level": "Understand",
-                            "co_mapping": "CO1",
-                            "po_mapping": "PO1",
-                            "criteria": "1. Microservices definition & API communication (6 marks)\n2. Monolith contrast (4 marks)",
-                            "ideal_answer": "Microservices break applications into independent REST services. Monolith combines all components into a single executable process."
-                        }
-                    ]
-                }
+                Rubric.objects.update_or_create(
+                    question=q_obj,
+                    defaults={
+                        'criteria': q_criteria,
+                        'expected_answer': q_answer
+                    }
+                )
+            print("[QUESTION PAPER SCAN] Step 5: Database Save Successful.")
 
-            extracted_questions = res_data.get('questions', [])
-            
-            # Automatically save all extracted questions & rubrics to the database for this exam
-            if exam and extracted_questions:
-                for item in extracted_questions:
-                    q_num = item.get('question_number') or 'Q1'
-                    q_marks = float(item.get('allocated_marks') or 10.0)
-                    q_prompt = item.get('prompt_text') or ''
-                    q_bloom = item.get('bloom_level') or 'Understand'
-                    q_co = item.get('co_mapping') or 'CO1'
-                    q_po = item.get('po_mapping') or ['PO1']
-                    q_criteria = item.get('criteria') or ''
-                    q_answer = item.get('ideal_answer') or ''
-
-                    q_obj, _ = Question.objects.update_or_create(
-                        examination=exam,
-                        question_number=q_num,
-                        defaults={
-                            'prompt_text': q_prompt,
-                            'max_marks': q_marks,
-                            'bloom_level': q_bloom,
-                            'co_mapping': q_co,
-                            'po_mapping': q_po if isinstance(q_po, list) else [q_po],
-                            'question_type': item.get('question_type', []),
-                            'command_verbs': item.get('command_verbs', [])
-                        }
-                    )
-                    Rubric.objects.update_or_create(
-                        question=q_obj,
-                        defaults={
-                            'criteria': q_criteria,
-                            'expected_answer': q_answer
-                        }
-                    )
-
-            return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
-        except Exception as e:
-            return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)
-
-    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+        return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[QUESTION PAPER SCAN EXCEPTION] {e}")
+        return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)

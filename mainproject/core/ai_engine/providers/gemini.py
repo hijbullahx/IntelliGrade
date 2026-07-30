@@ -90,10 +90,11 @@ class GeminiProvider(BaseAIProvider):
                 except urllib.error.HTTPError as e:
                     error_body = e.read().decode('utf-8', errors='ignore')
                     last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
-                    if e.code == 429:
-                        time.sleep(4.0)
-                        continue
-                    break
+                    print(f"[GEMINI MODEL {model} ERROR] {last_error}")
+                    if e.code in [429, 404, 403]:
+                        # Immediately try next model in unique_models on quota or auth error
+                        break
+                    time.sleep(2.0)
                 except Exception as e:
                     last_error = f"Gemini Request Failed ({model}): {str(e)}"
                     break
@@ -234,6 +235,10 @@ Return ONLY a valid JSON object in this exact schema:
 You are an expert University Academic Examination Question Scanner and OCR Engine.
 Read the uploaded examination paper image or document carefully and extract ALL examination questions, sub-parts, allocated marks, command verbs, Bloom taxonomy levels, CO/PO mappings, and expected answer criteria.
 
+CRITICAL INSTRUCTION:
+1. Extract EVERY SINGLE question (Question 1, Question 2, Question 3, Question 4, etc.) from the entire paper.
+2. Escape all backslashes in mathematical formulas or LaTeX equations (e.g. write \\\\begin{{bmatrix}} instead of \\begin{{bmatrix}}).
+
 Question Paper Document Content:
 {doc_text}
 
@@ -241,13 +246,13 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
 {{
   "questions": [
     {{
-      "question_number": "e.g. Q1 (a)",
+      "question_number": "e.g. Q1",
       "prompt_text": "Exact text of the question statement from the paper",
-      "allocated_marks": 10.0,
+      "allocated_marks": 25.0,
       "question_type": ["Theory", "Explanation"],
-      "command_verbs": ["Explain"],
-      "bloom_level": "Understand",
-      "co_mapping": "CO1",
+      "command_verbs": ["Explain", "Calculate"],
+      "bloom_level": "Apply",
+      "co_mapping": "CO2",
       "po_mapping": ["PO1"],
       "criteria": "Key criteria for grading",
       "ideal_answer": "Expected model answer summary"
@@ -261,8 +266,18 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
             cleaned = re.sub(r'```json\s*', '', response_text)
             cleaned = re.sub(r'```\s*', '', cleaned).strip()
             
+            # Attempt 1: Direct JSON parse
             try:
                 parsed = json.loads(cleaned)
+                if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                    return parsed
+            except Exception:
+                pass
+
+            # Attempt 2: Fix unescaped LaTeX backslashes
+            try:
+                fixed_escapes = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cleaned)
+                parsed = json.loads(fixed_escapes)
                 if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
                     return parsed
             except Exception:
@@ -275,14 +290,20 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                     if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
                         return parsed
                 except Exception:
-                    pass
-        except Exception:
-            pass
+                    try:
+                        fixed_match = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', match.group(1))
+                        parsed = json.loads(fixed_match)
+                        if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                            return parsed
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[EXAM PAPER SCAN ERROR] {e}")
 
         return {
             "questions": [
                 {
-                    "question_number": "Q1 (a)",
+                    "question_number": "Q1",
                     "prompt_text": "Explain the core concepts presented in the uploaded examination paper.",
                     "allocated_marks": 10.0,
                     "question_type": ["Explanation"],

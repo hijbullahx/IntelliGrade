@@ -84,6 +84,12 @@ class FailoverAIProvider(BaseAIProvider):
     def analyze_question_paper(self, paper_text_or_image: Any, **kwargs) -> Dict[str, Any]:
         return self._execute_with_failover('analyze_question_paper', paper_text_or_image, **kwargs)
 
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        return self._execute_with_failover('analyze_academic_exam_paper', qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files)
+
+    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '') -> Dict[str, Any]:
+        return self._execute_with_failover('analyze_question_full', question_text, max_marks=max_marks, course_outline_text=course_outline_text)
+
     def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None) -> Dict[str, Any]:
         return self._execute_with_failover('generate_rubric', question_text, max_marks, sample_answer=sample_answer)
 

@@ -84,14 +84,27 @@
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
                             <i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> Upload Question Paper Document (Image or PDF)
                         </span>
+                    </div>
+
+                    <input type="file" name="question_paper_file" id="qpFileInput" onchange="handleQPFileSelect(this)" class="w-full text-xs theme-text-secondary file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+
+                    <div id="qpStatusBadge">
                         {% if selected_exam.question_paper_file %}
-                        <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/20">✓ Document Saved</span>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/20">
+                                ✓ Document Saved on Exam: {{ selected_exam.question_paper_file.name|default:"File" }}
+                            </span>
+                            <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="external-link" class="w-3 h-3"></i> View Saved Document
+                            </a>
+                            <button type="submit" name="clear_document" value="question_paper_file" onclick="return confirm('Remove saved Question Paper document from this exam?')" class="text-[11px] text-rose-500 hover:text-rose-600 font-bold underline ml-2">
+                                🗑️ Remove Document
+                            </button>
+                        </div>
+                        {% else %}
+                        <span class="text-[11px] theme-text-muted italic">No Question Paper document uploaded yet for this examination.</span>
                         {% endif %}
                     </div>
-                    <input type="file" name="question_paper_file" class="w-full text-xs theme-text-secondary file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
-                    {% if selected_exam.question_paper_file %}
-                    <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1"><i data-lucide="external-link" class="w-3 h-3"></i> View Uploaded Question Paper</a>
-                    {% endif %}
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -592,52 +605,84 @@ function generateAIRubric() {
     });
 }
 
-function scanAcademicPaper() {
-    const qpFileInput = document.querySelector('input[name="question_paper_file"]');
-    const hasUploadedDBFile = {% if selected_exam and selected_exam.question_paper_file %}true{% else %}false{% endif %};
-    const hasSelectedFile = qpFileInput && qpFileInput.files.length > 0;
+function handleQPFileSelect(input) {
+    const badge = document.getElementById('qpStatusBadge');
+    if (!badge) return;
+    if (input.files && input.files.length > 0) {
+        const file = input.files[0];
+        const fileUrl = URL.createObjectURL(file);
+        badge.innerHTML = `
+            <div class="flex items-center gap-2 text-xs mt-1">
+                <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-bold text-[10px] border border-purple-500/20">
+                    📁 Selected for Scan: ${file.name} (${(file.size / 1024).toFixed(1)} KB)
+                </span>
+                <a href="${fileUrl}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1">
+                    <i data-lucide="external-link" class="w-3 h-3"></i> Preview Selected Document
+                </a>
+            </div>
+        `;
+        lucide.createIcons();
+    }
+}
 
-    if (!hasSelectedFile && !hasUploadedDBFile) {
-        alert('Please attach or upload a Question Paper document (Image or PDF) first before scanning.');
+function scanAcademicPaper() {
+    console.log("[SCAN BUTTON CLICKED]");
+    const qpFileInput = document.querySelector('input[name="question_paper_file"]');
+    const hasSelectedFile = qpFileInput && qpFileInput.files && qpFileInput.files.length > 0;
+
+    if (!hasSelectedFile) {
+        console.warn("[SCAN CANCELLED] No file selected in input[name='question_paper_file']");
+        alert('Please choose a Question Paper document file (PDF or Image) using the file selection input before scanning.');
+        if (qpFileInput) qpFileInput.focus();
         return;
     }
 
+    const selectedFile = qpFileInput.files[0];
+    console.log("[FILE SELECTED]", selectedFile.name, selectedFile.size, "bytes", selectedFile.type);
+
     const btn = document.getElementById('scanAcademicBtn');
     btn.disabled = true;
-    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 🧠 Scanning Question Paper Document (AI Engine)...`;
+    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 🧠 Scanning ${selectedFile.name} (AI Engine)...`;
     lucide.createIcons();
 
     const formData = new FormData();
     formData.append('examination_id', "{{ selected_exam.id }}");
+    formData.append('question_paper_file', selectedFile);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-    if (hasSelectedFile) {
-        formData.append('question_paper_file', qpFileInput.files[0]);
-    }
+    console.log("[SENDING REQUEST...]", "{% url 'api_scan_question_paper' %}");
 
     fetch("{% url 'api_scan_question_paper' %}", {
         method: 'POST',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
         body: formData
     })
-    .then(r => r.json())
+    .then(response => {
+        console.log("[RESPONSE STATUS]", response.status, response.statusText);
+        return response.json();
+    })
     .then(data => {
+        console.log("[RESPONSE DATA RECEIVED]", data);
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
         lucide.createIcons();
 
         if (data.success && data.data && data.data.questions && data.data.questions.length > 0) {
             const count = data.extracted_count || data.data.questions.length;
-            alert('🎉 Question Paper Scanned Successfully!\n\nExtracted ' + count + ' question(s) and automatically saved them into the formatted examination paper. Reloading page to display...');
+            console.log("[SUCCESS CALLBACK] Extracted", count, "questions. Reloading...");
+            alert('🎉 Question Paper Scanned Successfully!\n\nExtracted ' + count + ' question(s) from ' + selectedFile.name + ' and saved them to your exam paper. Reloading page to display...');
             window.location.reload();
         } else {
+            console.warn("[SCAN ERROR CALLBACK]", data.error);
             alert(data.error || 'Academic scan failed or no questions detected in the Question Paper document.');
         }
     })
     .catch(err => {
+        console.error("[QUESTION PAPER SCAN JS EXCEPTION]", err);
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Academic Hierarchy (AI Engine)`;
         lucide.createIcons();
-        alert('Server error executing Academic AI scan.');
+        alert('Server error executing Academic AI scan. Check DevTools console.');
     });
 }
 
