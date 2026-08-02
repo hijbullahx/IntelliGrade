@@ -1615,7 +1615,7 @@ def question_rubric_manage(request, exam_id=None):
 
     questions = []
     if selected_exam:
-        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').order_by('question_number')
+        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').prefetch_related('figures_rel', 'tables_rel', 'formulas_rel').order_by('question_number')
 
     if request.method == 'POST':
         target_exam_id = request.POST.get('examination_id')
@@ -1829,6 +1829,30 @@ def api_generate_ai_rubric(request):
         except Exception as e:
             return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
 
+
+def ai_config_view(request):
+    """Interface to view system-wide AI configuration, model keys, and Provider Health Monitors."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    from core.models import AIConfiguration, AIProviderHealth
+    config, _ = AIConfiguration.objects.get_or_create(id=1)
+    health_monitors = AIProviderHealth.objects.all().order_by('provider_name')
+
+    if request.method == 'POST':
+        config.active_provider = request.POST.get('active_provider', config.active_provider)
+        config.gemini_model = request.POST.get('gemini_model', config.gemini_model)
+        config.save()
+        messages.success(request, "AI Engine Configuration updated successfully!")
+        return redirect('ai_config_view')
+
+    return render(request, 'core/ai_config.html', {
+        'config': config,
+        'health_monitors': health_monitors,
+    })
+
+
 def api_scan_question_paper(request):
     """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
     print("=" * 80)
@@ -1891,29 +1915,60 @@ def api_scan_question_paper(request):
 
     from core.ai_engine.providers.factory import AIProviderFactory
     from core.ai_engine.ocr.engine import OCREngineManager
+    from core.models import QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
     provider = AIProviderFactory.get_provider()
 
     try:
-        print("[QUESTION PAPER SCAN] Step 1: Starting OCR text extraction...")
+        print("[DOCUMENT AI SCAN] Step 1: Starting High-DPI Page Rendering & Embedded Figure Extraction...")
+        layout_res = OCREngineManager.extract_document_layout_and_figures(qp_bytes, mime_type=mime_type)
+        extracted_figures = layout_res.get('figures', [])
+        dom_elements = layout_res.get('dom_elements', [])
+        total_pages = layout_res.get('total_pages', 1)
+
+        if exam:
+            DocumentDOM.objects.update_or_create(
+                examination=exam,
+                defaults={
+                    'elements_json': dom_elements,
+                    'total_pages': total_pages
+                }
+            )
+
+        print(f"[DOCUMENT AI SCAN] Layout Extraction Complete. Pages: {total_pages} | Extracted Figures: {len(extracted_figures)}")
+
+        print("[DOCUMENT AI SCAN] Step 2: Starting OCR text extraction...")
         ocr_res = OCREngineManager().extract_text(qp_bytes, mime_type=mime_type)
         doc_text = ocr_res.get('text', '').strip() or "Academic Examination Paper"
-        print(f"[QUESTION PAPER SCAN] OCR Complete. Extracted Text Length: {len(doc_text)} chars")
+        print(f"[DOCUMENT AI SCAN] OCR Complete. Extracted Text Length: {len(doc_text)} chars")
 
-        print(f"[QUESTION PAPER SCAN] Step 2: Querying AI Provider ({provider.__class__.__name__})...")
+        # Trace Debug Files in DEBUG Mode
+        if getattr(settings, 'DEBUG', False):
+            try:
+                trace_dir = settings.BASE_DIR / 'request_trace'
+                os.makedirs(trace_dir, exist_ok=True)
+                with open(trace_dir / 'ocr_text.txt', 'w', encoding='utf-8') as f:
+                    f.write(doc_text)
+                with open(trace_dir / 'layout_dom.json', 'w', encoding='utf-8') as f:
+                    json.dump(dom_elements, f, indent=2)
+            except Exception:
+                pass
+
+        print(f"[DOCUMENT AI SCAN] Step 3: Querying AI Provider ({provider.__class__.__name__})...")
         res_data = provider.analyze_academic_exam_paper(
             doc_text,
             image_bytes=qp_bytes,
-            mime_type=mime_type
+            mime_type=mime_type,
+            extra_files=extracted_figures
         )
 
         extracted_questions = res_data.get('questions', [])
-        print(f"[QUESTION PAPER SCAN] Step 3: AI Extraction Complete. Total Questions: {len(extracted_questions)}")
+        print(f"[DOCUMENT AI SCAN] Step 4: AI Extraction Complete. Total Questions: {len(extracted_questions)}")
 
-        # Automatically save all extracted questions & rubrics to the database for this exam
+        # Automatically save all extracted questions, rubrics & figures to DB
         if exam and extracted_questions:
-            print(f"[QUESTION PAPER SCAN] Step 4: Persisting {len(extracted_questions)} questions to Examination ID {exam.id}...")
-            for item in extracted_questions:
-                q_num = item.get('question_number') or 'Q1'
+            print(f"[DOCUMENT AI SCAN] Step 5: Persisting {len(extracted_questions)} questions & figures to Examination ID {exam.id}...")
+            for q_idx, item in enumerate(extracted_questions):
+                q_num = item.get('question_number') or f"Q{q_idx+1}"
                 q_marks = float(item.get('allocated_marks') or 10.0)
                 q_prompt = item.get('prompt_text') or ''
                 q_bloom = item.get('bloom_level') or 'Understand'
@@ -1942,9 +1997,32 @@ def api_scan_question_paper(request):
                         'expected_answer': q_answer
                     }
                 )
-            print("[QUESTION PAPER SCAN] Step 5: Database Save Successful.")
 
-        return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
+                # Map extracted figures to this question if figure caption/number matches or sequential
+                for fig_idx, fig_data in enumerate(extracted_figures):
+                    fig_q_num = fig_data.get('question_number')
+                    if not fig_q_num or str(fig_q_num) == str(q_num) or (len(extracted_questions) == 1):
+                        QuestionFigure.objects.update_or_create(
+                            question=q_obj,
+                            display_order=fig_idx + 1,
+                            defaults={
+                                'page_number': fig_data.get('page_number', 1),
+                                'caption': fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
+                                'image': fig_data.get('image_path', ''),
+                                'thumbnail': fig_data.get('image_path', ''),
+                                'bounding_box': fig_data.get('bounding_box', [])
+                            }
+                        )
+
+            print("[DOCUMENT AI SCAN] Step 6: Database Save Successful.")
+
+        return JsonResponse({
+            'success': True,
+            'data': res_data,
+            'extracted_count': len(extracted_questions),
+            'figures_count': len(extracted_figures),
+            'total_pages': total_pages
+        })
     except Exception as e:
         import traceback
         traceback.print_exc()

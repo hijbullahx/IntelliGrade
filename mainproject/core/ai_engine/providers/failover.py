@@ -45,16 +45,33 @@ class FailoverAIProvider(BaseAIProvider):
             self._chain.append(OllamaProvider())
 
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
+        import time
         last_error = None
-        for provider in self._chain:
+        has_images = bool(kwargs.get('image_bytes') or (args and isinstance(args[0], bytes)))
+
+        # Dynamic Capability-Based Provider Selection
+        chain_order = list(self._chain)
+        if has_images:
+            # Sort vision-capable providers to the front of the chain
+            chain_order.sort(key=lambda p: 0 if p.get_capabilities().get('supports_images') else 1)
+
+        for provider in chain_order:
+            provider_name = provider.__class__.__name__
+            start_time = time.time()
             try:
                 method = getattr(provider, method_name, None)
                 if method and callable(method):
                     res = method(*args, **kwargs)
                     if res and not (isinstance(res, str) and "quota_exceeded" in res):
+                        elapsed_ms = int((time.time() - start_time) * 1000)
+                        self.log_health_event(provider_name, 'HEALTHY', error_msg="", response_time_ms=elapsed_ms)
                         return res
             except Exception as e:
                 last_error = str(e)
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                status_code = 'RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else ('EXPIRED' if ('401' in last_error or '403' in last_error) else 'OFFLINE')
+                self.log_health_event(provider_name, status_code, error_msg=last_error, response_time_ms=elapsed_ms)
+                print(f"[FAILOVER WARNING] {provider_name}.{method_name} failed: {last_error}. Switching to next provider in chain...")
                 continue
 
         raise Exception(f"All AI Providers in the failover chain failed. Last error: {last_error}")

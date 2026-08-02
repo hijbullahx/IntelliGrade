@@ -136,6 +136,83 @@ class Rubric(models.Model):
         return f"Rubric for Q{self.question.question_number} ({self.question.examination.title})"
 
 
+class QuestionFigure(models.Model):
+    """Stores visual figures, diagrams, and images attached to specific exam questions with layout bounding boxes."""
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='figures_rel')
+    page_number = models.IntegerField(default=1)
+    caption = models.CharField(max_length=255, blank=True, help_text="e.g. Figure 1: 8-bit Grayscale Matrix")
+    image = models.ImageField(upload_to='exam_figures/%Y/%m/')
+    thumbnail = models.ImageField(upload_to='exam_figures/thumbs/%Y/%m/', blank=True, null=True)
+    bounding_box = models.JSONField(default=list, blank=True, help_text="[xmin, ymin, xmax, ymax]")
+    display_order = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['page_number', 'display_order', 'id']
+
+    def __str__(self):
+        return f"Figure '{self.caption or 'Diagram'}' for Q{self.question.question_number} (Page {self.page_number})"
+
+
+class QuestionTable(models.Model):
+    """Stores structured tabular data / matrices extracted from exam questions."""
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='tables_rel')
+    caption = models.CharField(max_length=255, blank=True)
+    table_data = models.JSONField(default=dict, help_text="JSON grid representing rows and columns")
+    display_order = models.IntegerField(default=1)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+
+    def __str__(self):
+        return f"Table '{self.caption or 'Data Table'}' for Q{self.question.question_number}"
+
+
+class QuestionFormula(models.Model):
+    """Stores mathematical formulas and LaTeX matrix representations."""
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='formulas_rel')
+    raw_latex = models.TextField(help_text="LaTeX equation representation")
+    is_matrix = models.BooleanField(default=False)
+    display_order = models.IntegerField(default=1)
+
+    def __str__(self):
+        return f"Formula for Q{self.question.question_number}"
+
+
+class DocumentDOM(models.Model):
+    """Stores complete Document Object Model (DOM) layout tree per examination paper."""
+    examination = models.OneToOneField(Examination, on_delete=models.CASCADE, related_name='document_dom')
+    elements_json = models.JSONField(default=list, help_text="Hierarchical DOM tree (headings, questions, figures, tables, boxes)")
+    total_pages = models.IntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Document DOM for {self.examination.title} ({self.total_pages} pages)"
+
+
+class AIProviderHealth(models.Model):
+    """Real-time health status, capabilities, error logs, and metrics per AI Provider."""
+    class HealthStatus(models.TextChoices):
+        HEALTHY = 'HEALTHY', 'Healthy'
+        RATE_LIMITED = 'RATE_LIMITED', 'Rate Limited (429)'
+        EXPIRED = 'EXPIRED', 'API Key Expired / Unauthorized'
+        OFFLINE = 'OFFLINE', 'Offline / Unavailable'
+
+    provider_name = models.CharField(max_length=100, unique=True)
+    current_model = models.CharField(max_length=100, default='AUTO')
+    status = models.CharField(max_length=30, choices=HealthStatus.choices, default=HealthStatus.HEALTHY)
+    capabilities_json = models.JSONField(default=dict, help_text="Declared capabilities (vision, pdf, json, function_calling)")
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_error_message = models.TextField(blank=True)
+    error_count = models.IntegerField(default=0)
+    avg_response_time_ms = models.IntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.provider_name} [{self.status}] - Model: {self.current_model}"
+
+
 class AnswerScript(models.Model):
     class Status(models.TextChoices):
         UPLOADED = 'UPLOADED', 'Uploaded'

@@ -9,6 +9,43 @@ class BaseAIProvider(ABC):
     Enforces SOLID principles (Interface Segregation & Dependency Inversion).
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": True,
+        "supports_json": True,
+        "supports_function_calling": False,
+        "supports_streaming": False
+    }
+
+    def get_capabilities(self) -> Dict[str, bool]:
+        """Returns declared capability matrix for provider routing."""
+        return getattr(self, 'capabilities', {
+            "supports_text": True, "supports_images": False, "supports_pdf": False, "supports_json": True
+        })
+
+    @staticmethod
+    def log_health_event(provider_name: str, status: str, model_name: str = "AUTO", error_msg: str = "", response_time_ms: int = 0):
+        """Logs provider health metrics, status changes, and rate limits to DB."""
+        try:
+            import datetime
+            from core.models import AIProviderHealth
+            now = datetime.datetime.now()
+            obj, _ = AIProviderHealth.objects.get_or_create(provider_name=provider_name)
+            obj.current_model = model_name
+            obj.status = status
+            if status == AIProviderHealth.HealthStatus.HEALTHY:
+                obj.last_success_at = now
+                if response_time_ms > 0:
+                    obj.avg_response_time_ms = int((obj.avg_response_time_ms + response_time_ms) / 2) if obj.avg_response_time_ms else response_time_ms
+            else:
+                obj.last_failure_at = now
+                obj.error_count += 1
+                obj.last_error_message = str(error_msg)[:500]
+            obj.save()
+        except Exception:
+            pass
+
     @abstractmethod
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         """Generates raw text completion from prompt."""
