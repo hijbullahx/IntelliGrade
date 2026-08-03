@@ -156,27 +156,46 @@ class QuestionFigure(models.Model):
 
 class QuestionTable(models.Model):
     """Stores structured tabular data / matrices extracted from exam questions."""
+    ELEMENT_TYPE_CHOICES = [
+        ('TABLE', 'Table'),
+        ('MATRIX', 'Matrix'),
+        ('GRID', 'Grid'),
+    ]
+
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='tables_rel')
+    page_number = models.IntegerField(default=1)
+    element_type = models.CharField(max_length=20, choices=ELEMENT_TYPE_CHOICES, default='TABLE')
     caption = models.CharField(max_length=255, blank=True)
-    table_data = models.JSONField(default=dict, help_text="JSON grid representing rows and columns")
+    image = models.ImageField(upload_to='exam_tables/%Y/%m/', blank=True, null=True)
+    bounding_box = models.JSONField(default=list, blank=True, help_text="[xmin, ymin, xmax, ymax]")
+    rows = models.IntegerField(default=0)
+    columns = models.IntegerField(default=0)
+    cell_json = models.JSONField(default=list, help_text="2D array of cell text e.g. [['50','56'], ['52','72']]")
+    table_data = models.JSONField(default=dict, blank=True)
     display_order = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     class Meta:
-        ordering = ['display_order', 'id']
+        ordering = ['page_number', 'display_order', 'id']
 
     def __str__(self):
-        return f"Table '{self.caption or 'Data Table'}' for Q{self.question.question_number}"
+        return f"Table '{self.caption or 'Data Table'}' for Q{self.question.question_number} (Page {self.page_number})"
 
 
 class QuestionFormula(models.Model):
     """Stores mathematical formulas and LaTeX matrix representations."""
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='formulas_rel')
-    raw_latex = models.TextField(help_text="LaTeX equation representation")
+    page_number = models.IntegerField(default=1)
+    caption = models.CharField(max_length=255, blank=True)
+    raw_latex = models.TextField(blank=True, help_text="LaTeX equation representation")
+    image = models.ImageField(upload_to='exam_formulas/%Y/%m/', blank=True, null=True)
+    bounding_box = models.JSONField(default=list, blank=True, help_text="[xmin, ymin, xmax, ymax]")
     is_matrix = models.BooleanField(default=False)
     display_order = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     def __str__(self):
-        return f"Formula for Q{self.question.question_number}"
+        return f"Formula for Q{self.question.question_number} (Page {self.page_number})"
 
 
 class DocumentDOM(models.Model):

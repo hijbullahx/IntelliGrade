@@ -2032,6 +2032,8 @@ def api_scan_question_paper(request):
             print("[PIPELINE STAGE 2] DocumentService: Rendering 300 DPI Page Images & Extracting Graphics...")
             graphics_res = DocumentService.process_graphics_and_figures(qp_bytes, mime_type=mime_type)
             extracted_figures = graphics_res.get('figures', [])
+            extracted_tables = graphics_res.get('tables', [])
+            extracted_formulas = graphics_res.get('formulas', [])
             dom_elements = graphics_res.get('dom_elements', [])
             total_pages = graphics_res.get('total_pages', len(graphics_res.get('page_renders', [])))
             page_renders = graphics_res.get('page_renders', [])
@@ -2145,8 +2147,11 @@ def api_scan_question_paper(request):
                     }
                 )
 
-                # Clear old QuestionFigure records for this exam to prevent duplicate accumulation
+                # Clear old QuestionFigure, QuestionTable, and QuestionFormula records for this exam
+                from core.models import QuestionTable, QuestionFormula
                 QuestionFigure.objects.filter(question__examination=exam).delete()
+                QuestionTable.objects.filter(question__examination=exam).delete()
+                QuestionFormula.objects.filter(question__examination=exam).delete()
 
                 print(f"[DETERMINISTIC PIPELINE] Persisting {len(parsed_questions)} questions to Examination ID {exam.id}...")
                 for q_idx, item in enumerate(parsed_questions):
@@ -2180,7 +2185,7 @@ def api_scan_question_paper(request):
                         }
                     )
 
-                    # Persist single-owner QuestionFigure records linked to Question
+                    # Persist single-owner QuestionFigure records
                     for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
                         QuestionFigure.objects.create(
                             question=q_obj,
@@ -2191,6 +2196,71 @@ def api_scan_question_paper(request):
                             thumbnail=fig_data.get('thumbnail_url', ''),
                             bounding_box=fig_data.get('bounding_box', [])
                         )
+
+                    # Persist single-owner QuestionTable records with Task 6 Database IoU Protection
+                    persisted_table_bboxes = []
+                    for tbl_idx, tbl_data in enumerate(item.get('associated_tables', [])):
+                        tbl_bbox = tbl_data.get('bounding_box', [])
+                        is_duplicate_db = False
+                        for prev_bbox in persisted_table_bboxes:
+                            iou_score = DocumentService.calculate_iou(tbl_bbox, prev_bbox)
+                            if iou_score > 0.80:
+                                is_duplicate_db = True
+                                print(f"  [DB IOU PROTECTION] Skipping duplicate table insertion (IoU={iou_score:.4f} > 0.80)")
+                                break
+
+                        if not is_duplicate_db:
+                            persisted_table_bboxes.append(tbl_bbox)
+                            QuestionTable.objects.create(
+                                question=q_obj,
+                                display_order=len(persisted_table_bboxes),
+                                page_number=tbl_data.get('page_number', 1),
+                                element_type=tbl_data.get('element_type', 'TABLE'),
+                                caption=tbl_data.get('caption', f'Table {tbl_idx+1} for {q_num}'),
+                                image=tbl_data.get('image_path', ''),
+                                bounding_box=tbl_bbox,
+                                rows=tbl_data.get('rows', 0),
+                                columns=tbl_data.get('columns', 0),
+                                cell_json=tbl_data.get('cell_json', [])
+                            )
+
+                    # Persist single-owner QuestionFormula records
+                    for form_idx, form_data in enumerate(item.get('associated_formulas', [])):
+                        QuestionFormula.objects.create(
+                            question=q_obj,
+                            display_order=form_idx + 1,
+                            page_number=form_data.get('page_number', 1),
+                            caption=form_data.get('caption', f'Formula {form_idx+1} for {q_num}'),
+                            image=form_data.get('image_path', ''),
+                            bounding_box=form_data.get('bounding_box', []),
+                            raw_latex=form_data.get('raw_latex', '')
+                        )
+
+                # 1-to-1 Detection vs Persistence Enforcement
+                db_figs = QuestionFigure.objects.filter(question__examination=exam).count()
+                db_tbls = QuestionTable.objects.filter(question__examination=exam).count()
+                db_forms = QuestionFormula.objects.filter(question__examination=exam).count()
+                total_persisted = db_figs + db_tbls + db_forms
+                total_detected = len(extracted_figures) + len(extracted_tables) + len(extracted_formulas)
+
+                print("=" * 80)
+                print("DETECTED CANDIDATE REGIONS VS PERSISTED DATABASE ROWS")
+                print("=" * 80)
+                print("Detected candidate regions:")
+                for c_idx, fig in enumerate(extracted_figures):
+                    print(f"  ID {c_idx+1} | bbox={fig.get('bounding_box')} | crop={fig.get('image_path')} | classification=FIGURE | owner=Q{fig.get('question_number', 1)}")
+                for c_idx, tbl in enumerate(extracted_tables):
+                    print(f"  ID {len(extracted_figures)+c_idx+1} | bbox={tbl.get('bounding_box')} | crop={tbl.get('image_path')} | classification={tbl.get('element_type', 'TABLE')} | owner=Q{tbl.get('question_number', 1)}")
+                print("-" * 80)
+                print("Persisted DB rows:")
+                print(f"  QuestionFigure count  : {db_figs}")
+                print(f"  QuestionTable count   : {db_tbls}")
+                print(f"  QuestionFormula count : {db_forms}")
+                print(f"  Total Persisted       : {total_persisted} (Total Detected Candidates: {total_detected})")
+                print("=" * 80)
+
+                if total_detected != total_persisted:
+                    raise RuntimeError(f"1-to-1 Persistence Failure: Detected Candidate Count ({total_detected}) != Persisted DB Rows Count ({total_persisted}).")
 
                 print("[DETERMINISTIC PIPELINE] Transaction Committed Successfully.")
 

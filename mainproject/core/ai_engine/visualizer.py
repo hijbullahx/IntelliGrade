@@ -12,15 +12,17 @@ class LayoutVisualizer:
     """
 
     COLOR_MAP = {
-        "question": (0, 102, 255),            # Blue
-        "VALID_FIGURE": (0, 204, 102),        # Green
-        "figure": (0, 204, 102),              # Green
-        "REJECT_TEXT_LINE": (255, 51, 51),    # Red
-        "table": (255, 51, 51),               # Red
-        "REJECT_PAGE_BORDER": (120, 120, 120),# Gray
-        "text_block": (120, 120, 120),        # Gray
-        "caption": (255, 204, 0),             # Yellow
-        "formula": (153, 51, 255)             # Purple
+        "question": (0, 102, 255),              # Blue
+        "VALID_FIGURE": (0, 204, 102),          # Green
+        "figure": (0, 204, 102),                # Green
+        "table": (255, 51, 51),                 # Red
+        "matrix": (255, 128, 0),                # Orange
+        "formula": (153, 51, 255),              # Purple
+        "REJECT_TEXT_LINE": (255, 51, 51),      # Red
+        "REJECT_PAGE_BORDER": (120, 120, 120),  # Gray
+        "REJECT_DUPLICATE_NMS": (120, 120, 120),# Gray
+        "text_block": (120, 120, 120),          # Gray
+        "caption": (255, 204, 0)                # Yellow
     }
 
     @classmethod
@@ -80,14 +82,24 @@ class LayoutVisualizer:
                     x0, y0, x1, y1 = x0 * img_w, y0 * img_h, x1 * img_w, y1 * img_h
 
                 draw.rectangle([x0, y0, x1, y1], outline=color, width=4)
-                tag_label = f"F{elem_idx+1}" if elem_type == 'figure' else f"{elem_type.upper()} {elem_idx+1}"
-                draw.rectangle([x0, max(0, y0 - 25), x0 + 120, max(25, y0)], fill=color)
+                if elem_type == 'figure':
+                    tag_label = f"F{elem_idx+1}"
+                elif elem_type == 'table':
+                    tag_label = f"T{elem_idx+1}"
+                elif elem_type == 'formula':
+                    tag_label = f"FORM{elem_idx+1}"
+                else:
+                    tag_label = f"{elem_type.upper()} {elem_idx+1}"
+
+                draw.rectangle([x0, max(0, y0 - 25), x0 + 140, max(25, y0)], fill=color)
                 draw.text((x0 + 5, max(0, y0 - 23)), tag_label, fill=(255, 255, 255), font=small_font)
 
             # 3. Draw Question Bounding Boxes (Blue)
             for q_idx, q in enumerate(parsed_questions):
                 q_num = q.get('question_number', f"Q{q_idx+1}")
                 assoc_figs = q.get('associated_figures', [])
+                assoc_tbls = q.get('associated_tables', [])
+                assoc_forms = q.get('associated_formulas', [])
 
                 q_top = 40 + (q_idx * (img_h // max(len(parsed_questions), 1)))
                 q_bottom = q_top + (img_h // max(len(parsed_questions), 1)) - 30
@@ -95,8 +107,13 @@ class LayoutVisualizer:
                 color = cls.COLOR_MAP["question"]
                 draw.rectangle([15, q_top, img_w - 15, q_bottom], outline=color, width=5)
 
-                fig_count_txt = f" ({len(assoc_figs)} figs)" if assoc_figs else ""
-                lbl_text = f"QUESTION {q_num}{fig_count_txt}"
+                badge_info = []
+                if assoc_figs: badge_info.append(f"{len(assoc_figs)}F")
+                if assoc_tbls: badge_info.append(f"{len(assoc_tbls)}T")
+                if assoc_forms: badge_info.append(f"{len(assoc_forms)}FORM")
+                badge_txt = f" ({', '.join(badge_info)})" if badge_info else ""
+
+                lbl_text = f"Q{q_num}{badge_txt}"
                 draw.rectangle([20, q_top + 5, 280, q_top + 35], fill=color)
                 draw.text((25, q_top + 8), lbl_text, fill=(255, 255, 255), font=font)
 

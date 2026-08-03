@@ -18,49 +18,92 @@ class AcademicParserService:
     """
 
     @staticmethod
-    def associate_figures_with_questions(questions: List[Dict[str, Any]], figures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def associate_figures_with_questions(
+        questions: List[Dict[str, Any]],
+        figures: List[Dict[str, Any]],
+        tables: List[Dict[str, Any]] = None,
+        formulas: List[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
         """
-        Maps figures to questions using spatial bounding box layout and page reading order.
-        ENFORCES STRICT SINGLE-OWNERSHIP: Each figure belongs to ONLY ONE question (no duplicates across questions).
+        Maps figures, tables, and formulas to questions using spatial bounding box layout and page reading order.
+        ENFORCES STRICT SINGLE-OWNERSHIP: Each figure/table/formula belongs to ONLY ONE question (no duplicates across questions).
         """
         for q in questions:
             q['associated_figures'] = []
+            q['associated_tables'] = []
+            q['associated_formulas'] = []
 
-        if not figures or not questions:
+        if not questions:
             return questions
 
-        claimed_figure_indices = set()
-
-        for fig_idx, fig in enumerate(figures):
+        # 1. Associate Figures
+        claimed_fig_indices = set()
+        for fig_idx, fig in enumerate(figures or []):
             fig_page = fig.get('page_number', 1)
             bbox = fig.get('bounding_box', [0, 0, 0, 0])
             fig_center_y = (bbox[1] + bbox[3]) / 2.0 if len(bbox) >= 4 else bbox[1]
 
             target_q_idx = None
-            fig_q_num = fig.get('question_number')
-            if fig_q_num:
-                for idx, q in enumerate(questions):
-                    if str(q.get('question_number', '')).strip().lower() == str(fig_q_num).strip().lower():
-                        target_q_idx = idx
+            page_q_list = [(idx, q) for idx, q in enumerate(questions) if q.get('page_number', 1) == fig_page or len(questions) == 1]
+            if page_q_list:
+                for i, (q_idx, q_item) in enumerate(page_q_list):
+                    q_start_y = q_item.get('start_y', i * (3500 // max(len(page_q_list), 1)))
+                    next_q_start_y = page_q_list[i+1][1].get('start_y', 99999) if i + 1 < len(page_q_list) else 99999
+                    if q_start_y <= fig_center_y < next_q_start_y:
+                        target_q_idx = q_idx
                         break
+                if target_q_idx is None:
+                    target_q_idx = page_q_list[0][0]
 
-            # Task 6 Rule: Question.start_y <= Figure.center_y < NextQuestion.start_y
-            if target_q_idx is None:
-                page_q_list = [(idx, q) for idx, q in enumerate(questions) if q.get('page_number', 1) == fig_page or len(questions) == 1]
-                if page_q_list:
-                    for i, (q_idx, q_item) in enumerate(page_q_list):
-                        q_start_y = q_item.get('start_y', i * (3500 // max(len(page_q_list), 1)))
-                        next_q_start_y = page_q_list[i+1][1].get('start_y', 99999) if i + 1 < len(page_q_list) else 99999
-                        if q_start_y <= fig_center_y < next_q_start_y:
-                            target_q_idx = q_idx
-                            break
-                    if target_q_idx is None:
-                        # Nearest preceding question on same page
-                        target_q_idx = page_q_list[0][0]
-
-            if target_q_idx is not None and fig_idx not in claimed_figure_indices:
-                claimed_figure_indices.add(fig_idx)
+            if target_q_idx is not None and fig_idx not in claimed_fig_indices:
+                claimed_fig_indices.add(fig_idx)
                 questions[target_q_idx]['associated_figures'].append(fig)
+
+        # 2. Associate Tables
+        claimed_tbl_indices = set()
+        for tbl_idx, tbl in enumerate(tables or []):
+            tbl_page = tbl.get('page_number', 1)
+            bbox = tbl.get('bounding_box', [0, 0, 0, 0])
+            tbl_center_y = (bbox[1] + bbox[3]) / 2.0 if len(bbox) >= 4 else bbox[1]
+
+            target_q_idx = None
+            page_q_list = [(idx, q) for idx, q in enumerate(questions) if q.get('page_number', 1) == tbl_page or len(questions) == 1]
+            if page_q_list:
+                for i, (q_idx, q_item) in enumerate(page_q_list):
+                    q_start_y = q_item.get('start_y', i * (3500 // max(len(page_q_list), 1)))
+                    next_q_start_y = page_q_list[i+1][1].get('start_y', 99999) if i + 1 < len(page_q_list) else 99999
+                    if q_start_y <= tbl_center_y < next_q_start_y:
+                        target_q_idx = q_idx
+                        break
+                if target_q_idx is None:
+                    target_q_idx = page_q_list[0][0]
+
+            if target_q_idx is not None and tbl_idx not in claimed_tbl_indices:
+                claimed_tbl_indices.add(tbl_idx)
+                questions[target_q_idx]['associated_tables'].append(tbl)
+
+        # 3. Associate Formulas
+        claimed_form_indices = set()
+        for form_idx, form in enumerate(formulas or []):
+            form_page = form.get('page_number', 1)
+            bbox = form.get('bounding_box', [0, 0, 0, 0])
+            form_center_y = (bbox[1] + bbox[3]) / 2.0 if len(bbox) >= 4 else bbox[1]
+
+            target_q_idx = None
+            page_q_list = [(idx, q) for idx, q in enumerate(questions) if q.get('page_number', 1) == form_page or len(questions) == 1]
+            if page_q_list:
+                for i, (q_idx, q_item) in enumerate(page_q_list):
+                    q_start_y = q_item.get('start_y', i * (3500 // max(len(page_q_list), 1)))
+                    next_q_start_y = page_q_list[i+1][1].get('start_y', 99999) if i + 1 < len(page_q_list) else 99999
+                    if q_start_y <= form_center_y < next_q_start_y:
+                        target_q_idx = q_idx
+                        break
+                if target_q_idx is None:
+                    target_q_idx = page_q_list[0][0]
+
+            if target_q_idx is not None and form_idx not in claimed_form_indices:
+                claimed_form_indices.add(form_idx)
+                questions[target_q_idx]['associated_formulas'].append(form)
 
         return questions
 
@@ -93,6 +136,8 @@ class AcademicParserService:
             )
 
         extracted_figures = graphics_result.get('figures', [])
+        extracted_tables = graphics_result.get('tables', [])
+        extracted_formulas = graphics_result.get('formulas', [])
 
         # Assertion 2: Figure File Existence Validation
         for fig in extracted_figures:
@@ -102,12 +147,19 @@ class AcademicParserService:
                     f"[STRICT PIPELINE FAILURE] Figure Storage Failure: Extracted image file '{img_path}' was not persisted to disk."
                 )
 
-        # Associate figures with questions
-        parsed_questions = cls.associate_figures_with_questions(extracted_questions, extracted_figures)
+        # Associate figures, tables, and formulas with questions independently
+        parsed_questions = cls.associate_figures_with_questions(
+            extracted_questions,
+            extracted_figures,
+            tables=extracted_tables,
+            formulas=extracted_formulas
+        )
 
         return {
             "parsed_questions": parsed_questions,
             "figures": extracted_figures,
+            "tables": extracted_tables,
+            "formulas": extracted_formulas,
             "ocr_text": ocr_text,
             "ocr_confidence": ocr_result.get('confidence', 0.0),
             "ocr_engine": ocr_result.get('engine', 'Unknown'),

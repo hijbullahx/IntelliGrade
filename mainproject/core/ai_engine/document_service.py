@@ -150,142 +150,178 @@ class DocumentService:
         os.makedirs(thumb_dir, exist_ok=True)
 
         extracted_figures = []
+        extracted_tables = []
+        extracted_formulas = []
         page_renders = []
         dom_elements = []
+        all_contours = []
 
         if FITZ_AVAILABLE and doc_bytes.startswith(b'%PDF'):
-            doc = fitz.open(stream=doc_bytes, filetype="pdf")
-            for page_idx, page in enumerate(doc):
-                page_num = page_idx + 1
+            # PDF Processing Pipeline
+            try:
+                doc = fitz.open(stream=doc_bytes, filetype="pdf")
+                for page_num, page in enumerate(doc, start=1):
+                    pix = page.get_pixmap(dpi=300)
+                    p_bytes = pix.tobytes("png")
+                    page_renders.append(p_bytes)
 
-                # Render 300 DPI page image
-                pix = page.get_pixmap(dpi=300)
-                page_png = pix.tobytes("png")
-                page_renders.append(page_png)
-
-                # Extract embedded images
-                img_list = page.get_images(full=True)
-                for img_idx, img_info in enumerate(img_list):
-                    xref = img_info[0]
-                    base_img = doc.extract_image(xref)
-                    image_bytes = base_img.get("image")
-                    image_ext = base_img.get("ext", "png")
-
-                    if image_bytes and len(image_bytes) > 500:
-                        fig_filename = f"fig_p{page_num}_{img_idx+1}_{xref}.{image_ext}"
-                        fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
-                        fig_full_path = os.path.join(save_dir, fig_filename)
-
-                        with open(fig_full_path, "wb") as f:
-                            f.write(image_bytes)
-
-                        # Generate 300px Thumbnail
-                        thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
-                        thumb_full_path = os.path.join(thumb_dir, fig_filename)
-                        w, h = 300, 300
-                        try:
-                            im = Image.open(io.BytesIO(image_bytes))
-                            w, h = im.width, im.height
-                            im.thumbnail((300, 300))
-                            im.save(thumb_full_path)
-                        except Exception:
-                            thumb_rel_path = fig_rel_path
-
-                        rects = page.get_image_rects(xref)
-                        bbox = [round(c, 2) for c in rects[0]] if rects else [0, 0, w, h]
-
-                        fig_obj = {
-                            "page_number": page_num,
-                            "caption": f"Figure {img_idx+1} (Page {page_num})",
-                            "image_path": fig_rel_path,
-                            "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
-                            "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
-                            "bounding_box": bbox,
-                            "width": w,
-                            "height": h,
-                            "bytes": image_bytes,
-                            "mime_type": f"image/{image_ext}",
-                            "display_order": img_idx + 1
-                        }
-                        extracted_figures.append(fig_obj)
-
+                    # 1. Detect Tables & Grids in Page Image
+                    page_tables = cls.detect_tables_and_grids(p_bytes, page_num=page_num, save_dir=save_dir, subfolder=subfolder)
+                    for tbl in page_tables:
+                        extracted_tables.append(tbl)
                         dom_elements.append({
-                            "type": "figure",
+                            "type": "table",
                             "page": page_num,
-                            "caption": fig_obj["caption"],
-                            "image_url": fig_obj["image_url"],
-                            "bbox": bbox
+                            "caption": tbl["caption"],
+                            "bbox": tbl["bounding_box"]
                         })
 
-                # 3. Fallback Bounding Box Drawing Cropping for Vector Diagrams / Matrices
-                if not img_list:
-                    drawings = page.get_drawings()
-                    if drawings:
-                        # Compute bounding box covering drawings
-                        rect_boxes = [d["rect"] for d in drawings if "rect" in d]
-                        if rect_boxes:
-                            x0 = min(r[0] for r in rect_boxes)
-                            y0 = min(r[1] for r in rect_boxes)
-                            x1 = max(r[2] for r in rect_boxes)
-                            y1 = max(r[3] for r in rect_boxes)
-                            pw, ph = page.rect.width, page.rect.height
-                            # Filter out small underline strokes AND full-page border boxes (>80% of page)
-                            if (x1 - x0) > 40 and (y1 - y0) > 40 and not ((x1 - x0) > 0.85 * pw and (y1 - y0) > 0.85 * ph):
-                                crop_rect = fitz.Rect(x0, y0, x1, y1)
-                                crop_pix = page.get_pixmap(clip=crop_rect, dpi=300)
-                                crop_bytes = crop_pix.tobytes("png")
-                                
-                                fig_filename = f"fig_crop_p{page_num}_1.png"
-                                fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
-                                fig_full_path = os.path.join(save_dir, fig_filename)
-                                with open(fig_full_path, "wb") as f:
-                                    f.write(crop_bytes)
+                    # 2. Extract Embedded Image Streams
+                    img_list = page.get_images()
+                    for img_idx, img_info in enumerate(img_list):
+                        xref = img_info[0]
+                        base_image = doc.extract_image(xref)
+                        if base_image:
+                            image_bytes = base_image["image"]
+                            image_ext = base_image["ext"]
+                            fig_filename = f"fig_pdf_p{page_num}_{img_idx+1}.{image_ext}"
+                            fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
+                            fig_full_path = os.path.join(save_dir, fig_filename)
+                            with open(fig_full_path, "wb") as f:
+                                f.write(image_bytes)
 
-                                thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
-                                thumb_full_path = os.path.join(thumb_dir, fig_filename)
-                                try:
-                                    im = Image.open(io.BytesIO(crop_bytes))
-                                    im.thumbnail((300, 300))
-                                    im.save(thumb_full_path)
-                                except Exception:
-                                    thumb_rel_path = fig_rel_path
+                            thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
+                            thumb_full_path = os.path.join(thumb_dir, fig_filename)
+                            w, h = 300, 300
+                            try:
+                                im = Image.open(io.BytesIO(image_bytes))
+                                w, h = im.width, im.height
+                                im.thumbnail((300, 300))
+                                im.save(thumb_full_path)
+                            except Exception:
+                                thumb_rel_path = fig_rel_path
 
-                                fig_obj = {
-                                    "page_number": page_num,
-                                    "caption": f"Diagram / Matrix (Page {page_num})",
-                                    "image_path": fig_rel_path,
-                                    "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
-                                    "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
-                                    "bounding_box": [round(x0, 2), round(y0, 2), round(x1, 2), round(y1, 2)],
-                                    "width": crop_pix.width,
-                                    "height": crop_pix.height,
-                                    "bytes": crop_bytes,
-                                    "mime_type": "image/png",
-                                    "display_order": 1
-                                }
-                                extracted_figures.append(fig_obj)
-                                dom_elements.append({
-                                    "type": "figure",
-                                    "page": page_num,
-                                    "caption": fig_obj["caption"],
-                                    "image_url": fig_obj["image_url"],
-                                    "bbox": fig_obj["bounding_box"]
-                                })
+                            rects = page.get_image_rects(xref)
+                            bbox = [round(c, 2) for c in rects[0]] if rects else [0, 0, w, h]
 
-                # DOM Text Blocks
-                text_blocks = page.get_text("blocks")
-                for b in text_blocks:
-                    if b[4].strip():
-                        dom_elements.append({
-                            "type": "text_block",
-                            "page": page_num,
-                            "text": b[4].strip(),
-                            "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
-                        })
+                            fig_obj = {
+                                "page_number": page_num,
+                                "caption": f"Figure {img_idx+1} (Page {page_num})",
+                                "image_path": fig_rel_path,
+                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
+                                "bounding_box": bbox,
+                                "width": w,
+                                "height": h,
+                                "bytes": image_bytes,
+                                "mime_type": f"image/{image_ext}",
+                                "display_order": img_idx + 1
+                            }
+                            extracted_figures.append(fig_obj)
+                            dom_elements.append({
+                                "type": "figure",
+                                "page": page_num,
+                                "caption": fig_obj["caption"],
+                                "image_url": fig_obj["image_url"],
+                                "bbox": bbox
+                            })
+
+                    # 3. Vector Drawing Box Cropping for Vector Diagrams / Matrices
+                    if not img_list and not page_tables:
+                        drawings = page.get_drawings()
+                        if drawings:
+                            rect_boxes = [d["rect"] for d in drawings if "rect" in d]
+                            if rect_boxes:
+                                x0 = min(r[0] for r in rect_boxes)
+                                y0 = min(r[1] for r in rect_boxes)
+                                x1 = max(r[2] for r in rect_boxes)
+                                y1 = max(r[3] for r in rect_boxes)
+                                pw, ph = page.rect.width, page.rect.height
+                                if (x1 - x0) > 40 and (y1 - y0) > 40 and not ((x1 - x0) > 0.85 * pw and (y1 - y0) > 0.85 * ph):
+                                    crop_rect = fitz.Rect(x0, y0, x1, y1)
+                                    crop_pix = page.get_pixmap(clip=crop_rect, dpi=300)
+                                    crop_bytes = crop_pix.tobytes("png")
+
+                                    import cv2
+                                    import numpy as np
+                                    crop_np = np.frombuffer(crop_bytes, np.uint8)
+                                    crop_cv = cv2.imdecode(crop_np, cv2.IMREAD_COLOR)
+
+                                    table_struct = cls.extract_table_structure_and_cells(crop_cv, page_num=page_num, tbl_idx=1)
+                                    if table_struct and table_struct.get("element_type") in ["MATRIX", "TABLE", "GRID"]:
+                                        tbl_filename = f"table_crop_p{page_num}_1.png"
+                                        tbl_rel_path = f"exam_tables/{subfolder}/{tbl_filename}" if subfolder else f"exam_tables/{tbl_filename}"
+                                        tbl_full_path = os.path.join(save_dir, tbl_filename)
+                                        os.makedirs(os.path.dirname(tbl_full_path), exist_ok=True)
+                                        with open(tbl_full_path, "wb") as f:
+                                            f.write(crop_bytes)
+
+                                        tbl_obj = {
+                                            "type": table_struct["classification"].lower(),
+                                            "element_type": table_struct["element_type"],
+                                            "page_number": page_num,
+                                            "caption": f"Matrix (Page {page_num})" if table_struct["element_type"] == "MATRIX" else f"Table / Grid (Page {page_num})",
+                                            "image_path": tbl_rel_path,
+                                            "image_url": f"{settings.MEDIA_URL}{tbl_rel_path}",
+                                            "bounding_box": [round(x0, 2), round(y0, 2), round(x1, 2), round(y1, 2)],
+                                            "rows": table_struct["rows"],
+                                            "columns": table_struct["cols"],
+                                            "cell_json": table_struct["cell_json"],
+                                            "bytes": crop_bytes,
+                                            "is_matrix": (table_struct["element_type"] == "MATRIX"),
+                                            "display_order": 1
+                                        }
+                                        extracted_tables.append(tbl_obj)
+                                        dom_elements.append({
+                                            "type": "table",
+                                            "page": page_num,
+                                            "caption": tbl_obj["caption"],
+                                            "image_url": tbl_obj["image_url"],
+                                            "bbox": tbl_obj["bounding_box"]
+                                        })
+                                    else:
+                                        fig_filename = f"fig_crop_p{page_num}_1.png"
+                                        fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
+                                        fig_full_path = os.path.join(save_dir, fig_filename)
+                                        os.makedirs(os.path.dirname(fig_full_path), exist_ok=True)
+                                        with open(fig_full_path, "wb") as f:
+                                            f.write(crop_bytes)
+
+                                        fig_obj = {
+                                            "page_number": page_num,
+                                            "caption": f"Figure (Page {page_num})",
+                                            "image_path": fig_rel_path,
+                                            "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                            "bounding_box": [round(x0, 2), round(y0, 2), round(x1, 2), round(y1, 2)],
+                                            "bytes": crop_bytes,
+                                            "mime_type": "image/png",
+                                            "display_order": 1
+                                        }
+                                        extracted_figures.append(fig_obj)
+                                        dom_elements.append({
+                                            "type": "figure",
+                                            "page": page_num,
+                                            "caption": fig_obj["caption"],
+                                            "image_url": fig_obj["image_url"],
+                                            "bbox": fig_obj["bounding_box"]
+                                        })
+
+                    # DOM Text Blocks
+                    text_blocks = page.get_text("blocks")
+                    for b in text_blocks:
+                        if b[4].strip():
+                            dom_elements.append({
+                                "type": "text_block",
+                                "page": page_num,
+                                "text": b[4].strip(),
+                                "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
+                            })
+            except Exception as pdf_err:
+                print(f"[DOCUMENT SERVICE WARNING] PDF graphics extraction error: {pdf_err}")
+
         elif not doc_bytes.startswith(b'%PDF'):
-            # Direct Image Upload (.jpg / .png) - Treat as Full Page Document
+            # Direct Image Upload (.jpg / .png) - Treat as Full Page Document Canvas
             page_renders.append(doc_bytes)
-            all_contours = []
             try:
                 import cv2
                 import numpy as np
@@ -293,11 +329,29 @@ class DocumentService:
                 img_cv = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
                 h, w, _ = img_cv.shape
 
-                # Convert to grayscale and Canny edge detection for graphical density
+                # 1. Detect Tables & Grids in Image
+                img_tables = cls.detect_tables_and_grids(doc_bytes, page_num=1, save_dir=save_dir, subfolder=subfolder)
+                table_bboxes = []
+                for tbl in img_tables:
+                    extracted_tables.append(tbl)
+                    table_bboxes.append(tbl["bounding_box"])
+                    all_contours.append({
+                        "type": "REJECT_TABLE",
+                        "bbox": tbl["bounding_box"],
+                        "area": (tbl["bounding_box"][2]-tbl["bounding_box"][0]) * (tbl["bounding_box"][3]-tbl["bounding_box"][1]),
+                        "reason": "Classified as Structured Table / Matrix"
+                    })
+                    dom_elements.append({
+                        "type": "table",
+                        "page": 1,
+                        "caption": tbl["caption"],
+                        "bbox": tbl["bounding_box"]
+                    })
+
+                # 2. Contour Analysis for Internal Figures & Page Border Rejection
                 gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
                 edges = cv2.Canny(gray, 50, 150)
                 
-                # Morphological close to group internal diagram graphics/lines
                 kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
                 closed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
                 contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -313,12 +367,12 @@ class DocumentService:
                             "type": "REJECT_PAGE_BORDER",
                             "bbox": [cx, cy, cx + cw, cy + ch],
                             "area": area,
-                            "reason": "Page Boundary Contour (>90% page area)"
+                            "reason": "Document Boundary (>90% page area)"
                         })
-                        print(f"[LAYOUT ENGINE] Contour Rejected (PAGE BORDER): bbox=[{cx},{cy},{cw},{ch}], area={area}")
+                        print(f"[LAYOUT ENGINE] Contour Rejected (DOCUMENT_BOUNDARY): bbox=[{cx},{cy},{cw},{ch}], area={area}")
                         continue
 
-                    # Check 2: Reject Small Text Lines / Small Strokes
+                    # Check 2: Reject small text lines / small noise
                     if cw < 50 or ch < 50:
                         all_contours.append({
                             "type": "REJECT_TEXT_LINE",
@@ -328,7 +382,17 @@ class DocumentService:
                         })
                         continue
 
-                    # Check 3: Graphical Edge Density Check (Distinguish text blocks from figures)
+                    # Check 3: Ignore region if it overlaps significantly with a detected table
+                    is_table_overlap = False
+                    for t_box in table_bboxes:
+                        tx0, ty0, tx1, ty1 = t_box
+                        if not (cx + cw < tx0 or cx > tx1 or cy + ch < ty0 or cy > ty1):
+                            is_table_overlap = True
+                            break
+                    if is_table_overlap:
+                        continue
+
+                    # Check 4: Edge density check to distinguish text paragraphs from figures
                     roi_edges = edges[cy:cy+ch, cx:cx+cw]
                     edge_density = np.sum(roi_edges > 0) / float(area)
 
@@ -339,7 +403,6 @@ class DocumentService:
                             "area": area,
                             "reason": f"Low Graphical Edge Density ({edge_density:.4f})"
                         })
-                        print(f"[LAYOUT ENGINE] Contour Rejected (TEXT BLOCK): bbox=[{cx},{cy},{cw},{ch}], density={edge_density:.4f}")
                         continue
 
                     # Valid Internal Graphical Figure Contour
@@ -396,8 +459,397 @@ class DocumentService:
 
         return {
             "figures": extracted_figures,
+            "tables": extracted_tables,
+            "formulas": extracted_formulas,
             "page_renders": page_renders,
             "dom_elements": dom_elements,
-            "all_contours": locals().get("all_contours", []),
+            "all_contours": all_contours,
             "total_pages": len(page_renders)
         }
+
+    @classmethod
+    def extract_table_structure_and_cells(cls, crop_cv, page_num: int = 1, tbl_idx: int = 1) -> Optional[Dict[str, Any]]:
+        """
+        True Table Structure Recognition Pipeline:
+        Candidate ROI -> Adaptive Threshold -> Horizontal/Vertical Morphology -> Cell Bounding Box Extraction
+        -> Cluster Rows & Sort Cells -> Independent Cell OCR -> Construct 2D Matrix JSON
+        """
+        try:
+            import cv2
+            import numpy as np
+            import json
+            import os
+
+            h, w, _ = crop_cv.shape
+            gray = cv2.cvtColor(crop_cv, cv2.COLOR_BGR2GRAY)
+            thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+
+            # Fixed 25px / 15px morphology kernels to extract grid lines inside ROI crop
+            h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1))
+            horizontal = cv2.erode(thresh, h_kernel, iterations=1)
+            horizontal = cv2.dilate(horizontal, h_kernel, iterations=1)
+
+            v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 15))
+            vertical = cv2.erode(thresh, v_kernel, iterations=1)
+            vertical = cv2.dilate(vertical, v_kernel, iterations=1)
+
+            table_grid = cv2.add(horizontal, vertical)
+            trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
+            os.makedirs(trace_dir, exist_ok=True)
+
+            # Save debug table_grid.png
+            cv2.imwrite(os.path.join(trace_dir, "table_grid.png"), table_grid)
+
+            # Find internal cell contours
+            contours, _ = cv2.findContours(table_grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cell_boxes = []
+
+            for c in contours:
+                x, y, cw, ch = cv2.boundingRect(c)
+                # Filter internal cell boxes (ignore outer table frame & tiny noise)
+                if 10 < cw < 0.95 * w and 8 < ch < 0.95 * h:
+                    cell_boxes.append((x, y, cw, ch))
+
+            if len(cell_boxes) < 4:
+                print(f"  [TABLE STRUCTURE REJECTED] Found only {len(cell_boxes)} cell boxes (< 4 required for grid)")
+                return None
+
+            # Group cells into rows by Y-center clustering (threshold = 15px)
+            cell_boxes = sorted(cell_boxes, key=lambda b: b[1] + (b[3] / 2.0))
+            rows = []
+            current_row = []
+            last_y_center = None
+
+            for box in cell_boxes:
+                y_center = box[1] + (box[3] / 2.0)
+                if last_y_center is None or abs(y_center - last_y_center) <= 15:
+                    current_row.append(box)
+                    last_y_center = y_center
+                else:
+                    rows.append(current_row)
+                    current_row = [box]
+                    last_y_center = y_center
+            if current_row:
+                rows.append(current_row)
+
+            # Sort cells within each row left-to-right by X-center
+            grid_cells_2d = []
+            cell_boxes_img = crop_cv.copy()
+            cell_counter = 0
+
+            for r_idx, r_boxes in enumerate(rows):
+                r_boxes_sorted = sorted(r_boxes, key=lambda b: b[0] + (b[2] / 2.0))
+                row_cell_texts = []
+                for c_idx, box in enumerate(r_boxes_sorted):
+                    cell_counter += 1
+                    bx, by, bw, bh = box
+
+                    # Draw debug cell box overlay
+                    cv2.rectangle(cell_boxes_img, (bx, by), (bx + bw, by + bh), (0, 0, 255), 2)
+                    cv2.putText(cell_boxes_img, f"C{cell_counter}", (bx + 2, max(12, by + 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
+
+                    # Crop cell ROI image
+                    cell_crop = crop_cv[by:by+bh, bx:bx+bw]
+                    cell_filename = f"cell_{cell_counter:03d}.png"
+                    cell_filepath = os.path.join(trace_dir, cell_filename)
+                    cv2.imwrite(cell_filepath, cell_crop)
+
+                    # OCR cell slice independently
+                    cell_text = ""
+                    try:
+                        import easyocr
+                        reader = easyocr.Reader(['en'], gpu=False)
+                        res = reader.readtext(cell_crop)
+                        if res:
+                            cell_text = " ".join([r[1].strip() for r in res])
+                    except Exception:
+                        pass
+
+                    if not cell_text:
+                        is_ok, buf = cv2.imencode(".png", cell_crop)
+                        if is_ok:
+                            try:
+                                import fitz
+                                cdoc = fitz.open(stream=buf.tobytes(), filetype="png")
+                                cell_text = cdoc[0].get_text().strip()
+                            except Exception:
+                                pass
+
+                    row_cell_texts.append(cell_text)
+                grid_cells_2d.append(row_cell_texts)
+
+            # Save cell_boxes.png
+            cv2.imwrite(os.path.join(trace_dir, f"cell_boxes.png"), cell_boxes_img)
+
+            # Save table.json
+            num_rows = len(grid_cells_2d)
+            num_cols = max(len(r) for r in grid_cells_2d) if grid_cells_2d else 0
+            table_json_content = {
+                "rows": num_rows,
+                "cols": num_cols,
+                "cells": grid_cells_2d
+            }
+            with open(os.path.join(trace_dir, "table.json"), "w", encoding="utf-8") as f:
+                json.dump(table_json_content, f, indent=2)
+
+            # Content-driven Classification Rules
+            all_cell_tokens = [cell for row in grid_cells_2d for cell in row if cell.strip()]
+            if not all_cell_tokens:
+                print("  [TABLE CLASSIFIER] All cell OCR returned empty -> UNKNOWN (confidence=0)")
+                return None
+
+            joined_text = " ".join(all_cell_tokens).upper()
+            header_keywords = ['QUESTION', 'MARKS', 'CO', 'PO', 'BLOOM', 'COURSE', 'STUDENT', 'FACULTY', 'SECTION', 'MODULE', 'WEEK']
+            has_headers = any(kw in joined_text for kw in header_keywords)
+
+            has_tuples = any(('(' in cell and ')' in cell and ',' in cell) for cell in all_cell_tokens)
+            numeric_count = sum(1 for cell in all_cell_tokens if cell.replace('.', '').replace('-', '').replace('(', '').replace(')', '').replace(',', '').strip().isdigit())
+            num_ratio = numeric_count / float(len(all_cell_tokens))
+
+            if has_headers:
+                classification = "TABLE"
+                element_type = "TABLE"
+            elif has_tuples:
+                classification = "NUMERIC GRID"
+                element_type = "GRID"
+            elif num_ratio >= 0.95:
+                classification = "MATRIX"
+                element_type = "MATRIX"
+            else:
+                classification = "TABLE"
+                element_type = "TABLE"
+
+            return {
+                "classification": classification,
+                "element_type": element_type,
+                "rows": num_rows,
+                "cols": num_cols,
+                "cell_json": grid_cells_2d,
+                "confidence": 0.98 if all_cell_tokens else 0.0
+            }
+        except Exception as e:
+            print(f"[TABLE STRUCTURE ENGINE ERROR] {e}")
+            return None
+
+    @staticmethod
+    def calculate_iou(boxA: List[float], boxB: List[float]) -> float:
+        """
+        Calculates Intersection Over Union (IoU) between two bounding boxes [x1, y1, x2, y2].
+        """
+        if not boxA or not boxB or len(boxA) < 4 or len(boxB) < 4:
+            return 0.0
+
+        xA = max(boxA[0], boxB[0])
+        yA = max(boxA[1], boxB[1])
+        xB = min(boxA[2], boxB[2])
+        yB = min(boxA[3], boxB[3])
+
+        interArea = max(0, xB - xA) * max(0, yB - yA)
+        boxAArea = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
+        boxBArea = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
+
+        denominator = float(boxAArea + boxBArea - interArea)
+        if denominator <= 0:
+            return 0.0
+
+        return interArea / denominator
+
+    @classmethod
+    def apply_nms_deduplication(cls, candidate_regions: List[Dict[str, Any]], iou_threshold: float = 0.70) -> Dict[str, Any]:
+        """
+        Applies Non-Maximum Suppression (NMS) to eliminate duplicate overlapping bounding box detections.
+        Logs every region's bbox, area, IoU, and ACCEPTED/REJECTED status.
+        """
+        if not candidate_regions:
+            return {"accepted": [], "rejected": []}
+
+        # Sort candidate regions by area descending (largest / most complete grid first)
+        sorted_candidates = sorted(
+            candidate_regions,
+            key=lambda r: (r.get("bounding_box", [0,0,0,0])[2]-r.get("bounding_box", [0,0,0,0])[0]) * 
+                         (r.get("bounding_box", [0,0,0,0])[3]-r.get("bounding_box", [0,0,0,0])[1]),
+            reverse=True
+        )
+
+        accepted = []
+        rejected = []
+
+        print("=" * 80)
+        print(f"[NMS REGION DEDUPLICATION ENGINE] Evaluating {len(sorted_candidates)} Candidate Regions (IoU Threshold={iou_threshold})...")
+        print("=" * 80)
+
+        for idx, candidate in enumerate(sorted_candidates):
+            c_box = candidate.get("bounding_box", [0, 0, 0, 0])
+            c_w = c_box[2] - c_box[0]
+            c_h = c_box[3] - c_box[1]
+            c_area = c_w * c_h
+            c_type = candidate.get("type", "table")
+
+            max_iou = 0.0
+            overlapping_box = None
+
+            for acc in accepted:
+                acc_box = acc.get("bounding_box", [0, 0, 0, 0])
+                iou = cls.calculate_iou(c_box, acc_box)
+                if iou > max_iou:
+                    max_iou = iou
+                    overlapping_box = acc_box
+
+            if max_iou > iou_threshold:
+                rejected_item = {
+                    "type": "REJECT_DUPLICATE_NMS",
+                    "bbox": c_box,
+                    "area": c_area,
+                    "iou": round(max_iou, 4),
+                    "reason": f"NMS Duplicate (IoU={max_iou:.4f} > {iou_threshold})"
+                }
+                rejected.append(rejected_item)
+                print(f"  [REJECTED] Candidate {idx+1}: bbox={c_box} | area={c_area} | IoU={max_iou:.4f} -> REJECTED (Duplicate NMS)")
+            else:
+                accepted.append(candidate)
+                print(f"  [ACCEPTED] Candidate {idx+1}: bbox={c_box} | area={c_area} | IoU={max_iou:.4f} -> ACCEPTED ({c_type.upper()})")
+
+        print("=" * 80)
+        print(f"[NMS DEDUPLICATION COMPLETE] Accepted: {len(accepted)} | Rejected Duplicates: {len(rejected)}")
+        print("=" * 80)
+
+        return {"accepted": accepted, "rejected": rejected}
+
+    @classmethod
+    def detect_tables_and_grids(cls, image_bytes: bytes, page_num: int = 1, save_dir: str = "", subfolder: str = "") -> List[Dict[str, Any]]:
+        """
+        OpenCV Table & Matrix Grid Detector using horizontal and vertical morphology kernels.
+        Applies NMS deduplication pass to eliminate duplicate grid contours.
+        Extracts 2D cell_json matrix and classifies region as MATRIX vs TABLE.
+        """
+        raw_tables = []
+        try:
+            import cv2
+            import numpy as np
+
+            img_np = np.frombuffer(image_bytes, np.uint8)
+            img_cv = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+            if img_cv is None:
+                return []
+
+            h, w, _ = img_cv.shape
+            gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+            thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+
+            # Kernels tuned to isolate continuous structural grid lines (ignoring letter stems)
+            h_scale = 10  # Horizontal lines must span >= 1/10th page width (~250px)
+            v_scale = 12  # Vertical lines must span >= 1/12th page height (~290px)
+            
+            h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(1, w // h_scale), 1))
+            horizontal = cv2.erode(thresh, h_kernel, iterations=1)
+            horizontal = cv2.dilate(horizontal, h_kernel, iterations=1)
+
+            v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(1, h // v_scale)))
+            vertical = cv2.erode(thresh, v_kernel, iterations=1)
+            vertical = cv2.dilate(vertical, v_kernel, iterations=1)
+
+            table_grid = cv2.add(horizontal, vertical)
+            grid_intersections = cv2.bitwise_and(horizontal, vertical)
+            contours, _ = cv2.findContours(table_grid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            tbl_idx = 0
+            page_roi_md5_set = set()
+
+            for c in contours:
+                cx, cy, cw, ch = cv2.boundingRect(c)
+                aspect_ratio = cw / float(ch) if ch > 0 else 0
+                # Task 4 & 5 Validation Gate:
+                if aspect_ratio > 3.5:
+                    print(f"  [TABLE REJECTED] bbox=[{cx},{cy},{cw},{ch}] -> REJECTED (Banner Aspect Ratio {aspect_ratio:.2f} > 3.5)")
+                    continue
+
+                if ch >= 0.50 * h:
+                    print(f"  [TABLE REJECTED] bbox=[{cx},{cy},{cw},{ch}] -> REJECTED (Page Container Box: height {ch}px >= 50% page height)")
+                    continue
+
+                if cw > 150 and ch > 100 and not (cw >= 0.90 * w and ch >= 0.90 * h):
+                    roi_intersections = grid_intersections[cy:cy+ch, cx:cx+cw]
+                    intersection_count = np.sum(roi_intersections > 0)
+                    if intersection_count < 4:
+                        print(f"  [TABLE REJECTED] bbox=[{cx},{cy},{cw},{ch}] -> REJECTED (Insufficient Grid Intersections: {intersection_count} < 4)")
+                        continue
+
+                    tbl_idx += 1
+                    # Extract exact ROI slice from image
+                    table_crop = img_cv[cy:cy+ch, cx:cx+cw]
+                    roi_shape = table_crop.shape
+                    is_success, buffer = cv2.imencode(".png", table_crop)
+
+                    if is_success:
+                        crop_bytes = buffer.tobytes()
+                        import hashlib
+                        md5_hash = hashlib.md5(crop_bytes).hexdigest()
+
+                        tbl_filename = f"candidate_{tbl_idx:03d}.png"
+                        tbl_rel_path = f"exam_tables/{subfolder}/{tbl_filename}" if subfolder else f"exam_tables/{tbl_filename}"
+                        tbl_full_path = os.path.join(save_dir, tbl_filename)
+                        trace_candidate_path = os.path.join('d:/Projects/IntelliGrade/mainproject/request_trace', tbl_filename)
+
+                        os.makedirs(os.path.dirname(tbl_full_path), exist_ok=True)
+                        os.makedirs(os.path.dirname(trace_candidate_path), exist_ok=True)
+
+                        with open(tbl_full_path, "wb") as f:
+                            f.write(crop_bytes)
+                        with open(trace_candidate_path, "wb") as f:
+                            f.write(crop_bytes)
+
+                        # Pre-OCR Log & MD5 Collision Verification
+                        print("-" * 70)
+                        print(f"Candidate ID        : Candidate {tbl_idx}")
+                        print(f"bbox                : [{cx}, {cy}, {cx + cw}, {cy + ch}]")
+                        print(f"ROI shape           : {roi_shape}")
+                        print(f"ROI filename        : {tbl_filename}")
+                        print(f"ROI md5 hash        : {md5_hash}")
+
+                        if md5_hash in page_roi_md5_set:
+                            raise RuntimeError(f"Duplicate ROI detected on Page {page_num}: MD5 Hash collision '{md5_hash}' for bbox [{cx}, {cy}, {cx+cw}, {cy+ch}]")
+                        page_roi_md5_set.add(md5_hash)
+
+                        # Task 1-5: True Table Structure Recognition Pipeline (Cell Extraction & 2D Grid Construction)
+                        table_struct = cls.extract_table_structure_and_cells(table_crop, page_num=page_num, tbl_idx=tbl_idx)
+                        if not table_struct:
+                            print(f"  [TABLE REJECTED] Candidate {tbl_idx} -> REJECTED (Failed Table Structure Recognition or Empty OCR)")
+                            continue
+
+                        predicted_class = table_struct["classification"].lower()
+                        element_type = table_struct["element_type"]
+                        cell_json = table_struct["cell_json"]
+                        rows_cnt = table_struct["rows"]
+                        cols_cnt = table_struct["cols"]
+                        caption_label = f"Matrix (Page {page_num})" if element_type == "MATRIX" else f"Table / Grid (Page {page_num})"
+
+                        # Post-OCR Log
+                        print(f"OCR 2D Matrix        : {cell_json}")
+                        print(f"rows | columns      : {rows_cnt} x {cols_cnt}")
+                        print(f"predicted class     : {element_type}")
+                        print(f"confidence          : {table_struct['confidence']:.2f}")
+                        print("-" * 70)
+
+                        tbl_obj = {
+                            "type": predicted_class,
+                            "element_type": element_type,
+                            "page_number": page_num,
+                            "caption": caption_label,
+                            "image_path": tbl_rel_path,
+                            "image_url": f"{settings.MEDIA_URL}{tbl_rel_path}",
+                            "bounding_box": [cx, cy, cx + cw, cy + ch],
+                            "rows": rows_cnt,
+                            "columns": cols_cnt,
+                            "cell_json": cell_json,
+                            "bytes": crop_bytes,
+                            "is_matrix": (element_type == "MATRIX"),
+                            "display_order": tbl_idx
+                        }
+                        raw_tables.append(tbl_obj)
+
+        except Exception as tbl_err:
+            print(f"[DOCUMENT SERVICE WARNING] Table detection error: {tbl_err}")
+
+        # Task 1 & 2: Apply NMS Deduplication Pass
+        nms_result = cls.apply_nms_deduplication(raw_tables, iou_threshold=0.70)
+        return nms_result["accepted"]
