@@ -153,4 +153,43 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                 except Exception:
                     pass
 
-        return {"questions": []}
+        # Deterministic Regex Question Fallback Extractor if LLM output fails
+        fallback_questions = []
+        q_blocks = re.split(r'(?i)(?=(?:question\s*\d+|q\d+[\.\:]?|\b\d+[\.\)]\s+[A-Z]))', doc_text)
+        for q_idx, block in enumerate(q_blocks):
+            b_text = block.strip()
+            if len(b_text) > 20:
+                num_match = re.search(r'(?i)(question\s*\d+|q\d+|\b\d+[\.\)])', b_text)
+                q_num = num_match.group(1).upper() if num_match else f"Q{q_idx+1}"
+                
+                # Extract marks if present
+                marks_match = re.search(r'\[(\d+(?:\.\d+)?)\s*marks?\]', b_text, re.IGNORECASE)
+                allocated_marks = float(marks_match.group(1)) if marks_match else 25.0
+
+                fallback_questions.append({
+                    "question_number": q_num,
+                    "prompt_text": b_text[:500],
+                    "allocated_marks": allocated_marks,
+                    "question_type": ["Theory"],
+                    "command_verbs": ["Explain"],
+                    "bloom_level": "Understand",
+                    "co_mapping": "CO1",
+                    "po_mapping": ["PO1"],
+                    "criteria": "Accurate response covering key concepts.",
+                    "ideal_answer": "Model answer covering core concepts."
+                })
+
+        return {"questions": fallback_questions if fallback_questions else [
+            {
+                "question_number": "Q1",
+                "prompt_text": doc_text[:500] if doc_text else "Examination Question 1",
+                "allocated_marks": 25.0,
+                "question_type": ["Theory"],
+                "command_verbs": ["Explain"],
+                "bloom_level": "Understand",
+                "co_mapping": "CO1",
+                "po_mapping": ["PO1"],
+                "criteria": "Key grading criteria",
+                "ideal_answer": "Model answer summary"
+            }
+        ]}

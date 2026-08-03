@@ -363,13 +363,20 @@
 
         <!-- Right Col: List of Questions Configured for Selected Exam -->
         <div class="lg:col-span-5 space-y-4">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
                 <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
                     <i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Configured Exam Paper Items ({{ questions|length }})
                 </h3>
-                <button type="button" onclick="openIUBATPreviewModal()" class="text-xs font-bold text-brand-500 hover:underline inline-flex items-center gap-1">
-                    <i data-lucide="eye" class="w-3.5 h-3.5"></i> Full Paper Preview &rarr;
-                </button>
+                <div class="flex items-center gap-2">
+                    {% if questions %}
+                    <a href="{% url 'delete_all_questions' selected_exam.id %}" onclick="return confirm('Are you sure you want to remove ALL {{ questions|length }} configured questions from this examination paper?');" class="px-2.5 py-1 text-xs font-bold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 border border-rose-500/20 rounded-lg transition-all inline-flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove All
+                    </a>
+                    {% endif %}
+                    <button type="button" onclick="openIUBATPreviewModal()" class="text-xs font-bold text-brand-500 hover:underline inline-flex items-center gap-1">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i> Full Paper Preview &rarr;
+                    </button>
+                </div>
             </div>
 
             <div class="space-y-4 max-h-[850px] overflow-y-auto pr-1">

@@ -8,6 +8,13 @@ from core.models import AIConfiguration
 from core.ai_engine.providers.gemini import GeminiProvider
 from django.conf import settings
 
+try:
+    import fitz
+    FITZ_AVAILABLE = True
+except ImportError as e:
+    FITZ_AVAILABLE = False
+    print(f"[ENGINE SYSTEM CRITICAL] PyMuPDF (fitz) import failed: {e}")
+
 class OCREngineManager:
     """
     Production OCR Engine Manager supporting PyMuPDF PDF stream extraction, 300 DPI page rendering,
