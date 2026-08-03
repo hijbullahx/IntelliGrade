@@ -142,6 +142,9 @@ class DocumentService:
         Extracts embedded raster/vector images, crops figures using bounding boxes,
         saves images to MEDIA_ROOT/exam_figures/%Y/%m/, generates thumbnails, and records coordinates.
         """
+        import cv2
+        import numpy as np
+
         now = datetime.datetime.now()
         subfolder = now.strftime('%Y/%m')
         save_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', subfolder)
@@ -457,15 +460,259 @@ class DocumentService:
             except Exception as img_layout_err:
                 print(f"[DOCUMENT SERVICE WARNING] Image layout analysis error: {img_layout_err}")
 
+        # Task: Execute TextMatrixDetector on rendered page images for borderless matrices
+        text_matrix_tables = []
+        for p_num, p_bytes in enumerate(page_renders, start=1):
+            try:
+                p_np = np.frombuffer(p_bytes, np.uint8)
+                p_cv = cv2.imdecode(p_np, cv2.IMREAD_COLOR)
+                tm_cands = cls.detect_text_matrices(p_cv, page_num=p_num, pdf_bytes=doc_bytes, save_dir=save_dir, subfolder=subfolder)
+                text_matrix_tables.extend(tm_cands)
+            except Exception as tm_err:
+                print(f"[DOCUMENT SERVICE WARNING] TextMatrixDetector error on Page {p_num}: {tm_err}")
+
+        # Candidate Union (FigureDetector + ContourTableDetector + TextMatrixDetector)
+        union_candidates = []
+        for fig in extracted_figures:
+            fig["source"] = "figure"
+            union_candidates.append(fig)
+        for tbl in extracted_tables:
+            tbl["source"] = "contour_table"
+            union_candidates.append(tbl)
+        for tmat in text_matrix_tables:
+            tmat["source"] = "text_matrix"
+            union_candidates.append(tmat)
+
+        # Draw candidate_union_debug.png overlay with GREEN (contour), CYAN (text matrix), BLUE (figure)
+        try:
+            import cv2
+            import numpy as np
+            if page_renders:
+                p1_np = np.frombuffer(page_renders[0], np.uint8)
+                p1_cv = cv2.imdecode(p1_np, cv2.IMREAD_COLOR)
+                union_img = p1_cv.copy()
+                for c in union_candidates:
+                    bx = c.get("bounding_box", [0, 0, 0, 0])
+                    x0, y0, x1, y1 = int(bx[0]), int(bx[1]), int(bx[2]), int(bx[3])
+                    src = c.get("source", "figure")
+                    if src == "contour_table":
+                        color = (0, 255, 0) # GREEN
+                        label = "Contour Table"
+                    elif src == "text_matrix":
+                        color = (255, 255, 0) # CYAN
+                        label = "Text Matrix"
+                    else:
+                        color = (255, 0, 0) # BLUE
+                        label = "Figure"
+                    cv2.rectangle(union_img, (x0, y0), (x1, y1), color, 3)
+                    cv2.putText(union_img, label, (x0 + 5, max(20, y0 + 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+                
+                trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
+                os.makedirs(trace_dir, exist_ok=True)
+                cv2.imwrite(os.path.join(trace_dir, "candidate_union_debug.png"), union_img)
+        except Exception as union_err:
+            print(f"[DOCUMENT SERVICE WARNING] Candidate union debug image error: {union_err}")
+
+        # Apply NMS deduplication pass on Candidate Union
+        nms_res = cls.apply_nms_deduplication(union_candidates, iou_threshold=0.50)
+        final_accepted = nms_res.get("accepted", [])
+
+        final_figures = [c for c in final_accepted if c.get("source") == "figure"]
+        final_tables = [c for c in final_accepted if c.get("source") in ["contour_table", "text_matrix"]]
+
         return {
-            "figures": extracted_figures,
-            "tables": extracted_tables,
+            "figures": final_figures,
+            "tables": final_tables,
             "formulas": extracted_formulas,
             "page_renders": page_renders,
             "dom_elements": dom_elements,
             "all_contours": all_contours,
             "total_pages": len(page_renders)
         }
+
+    @classmethod
+    def detect_text_matrices(cls, img_cv, page_num: int = 1, pdf_bytes: bytes = b"", save_dir: str = "", subfolder: str = "") -> List[Dict[str, Any]]:
+        """
+        TextMatrixDetector Pipeline:
+        OCR page text lines -> Store bounding boxes -> Group adjacent lines
+        -> Cluster by identical left margin & measure X alignment / row spacing
+        -> Detect repeated columns (>= 3 rows, >= 3 columns, low variance)
+        -> Create MATRIX candidate ROI.
+        """
+        import cv2
+        import numpy as np
+        import json
+        import os
+        import fitz
+        from django.conf import settings
+
+        candidates = []
+        try:
+            h, w, _ = img_cv.shape
+            trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
+            os.makedirs(trace_dir, exist_ok=True)
+
+            words = []
+            if pdf_bytes:
+                try:
+                    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    page = pdf_doc[page_num - 1]
+                    scale_x = w / float(page.rect.width) if page.rect.width > 0 else 1.0
+                    scale_y = h / float(page.rect.height) if page.rect.height > 0 else 1.0
+                    
+                    for w_tuple in page.get_text("words"):
+                        x0, y0, x1, y1, w_text = w_tuple[0], w_tuple[1], w_tuple[2], w_tuple[3], w_tuple[4]
+                        wx1, wy1 = int(x0 * scale_x), int(y0 * scale_y)
+                        wx2, wy2 = int(x1 * scale_x), int(y1 * scale_y)
+                        if w_text.strip():
+                            words.append({
+                                "bbox": [wx1, wy1, wx2, wy2],
+                                "text": w_text.strip(),
+                                "xc": (wx1 + wx2) / 2.0,
+                                "yc": (wy1 + wy2) / 2.0
+                            })
+                except Exception as p_err:
+                    print(f"[TEXT MATRIX DETECTOR WARNING] PyMuPDF word extraction failed: {p_err}")
+
+            if not words:
+                try:
+                    import easyocr
+                    reader = easyocr.Reader(['en'], gpu=False)
+                    results = reader.readtext(img_cv)
+                    for res in results:
+                        bbox_pts, text_val, conf = res
+                        x_coords = [p[0] for p in bbox_pts]
+                        y_coords = [p[1] for p in bbox_pts]
+                        wx1, wy1, wx2, wy2 = int(min(x_coords)), int(min(y_coords)), int(max(x_coords)), int(max(y_coords))
+                        if text_val.strip():
+                            words.append({
+                                "bbox": [wx1, wy1, wx2, wy2],
+                                "text": text_val.strip(),
+                                "xc": (wx1 + wx2) / 2.0,
+                                "yc": (wy1 + wy2) / 2.0
+                            })
+                except Exception:
+                    pass
+
+            if not words:
+                return []
+
+            align_img = img_cv.copy()
+            for w_item in words:
+                bx1, by1, bx2, by2 = w_item["bbox"]
+                cv2.rectangle(align_img, (bx1, by1), (bx2, by2), (255, 255, 0), 1)
+            cv2.imwrite(os.path.join(trace_dir, "text_alignment_overlay.png"), align_img)
+
+            words_sorted_y = sorted(words, key=lambda item: item["yc"])
+            lines = []
+            cur_line = []
+            last_yc = None
+
+            for w_item in words_sorted_y:
+                if last_yc is None or abs(w_item["yc"] - last_yc) <= 30:
+                    cur_line.append(w_item)
+                    last_yc = w_item["yc"]
+                else:
+                    lines.append(cur_line)
+                    cur_line = [w_item]
+                    last_yc = w_item["yc"]
+            if cur_line:
+                lines.append(cur_line)
+
+            processed_lines = []
+            for line_words in lines:
+                line_words_sorted = sorted(line_words, key=lambda item: item["xc"])
+                line_tokens = [item["text"] for item in line_words_sorted]
+                line_x_centers = [item["xc"] for item in line_words_sorted]
+                line_y_center = np.mean([item["yc"] for item in line_words_sorted])
+                
+                num_count = sum(1 for t in line_tokens if t.replace('.', '').replace('-', '').replace('(', '').replace(')', '').replace(',', '').strip().isdigit())
+                tuple_count = sum(1 for t in line_tokens if '(' in t and ')' in t)
+                
+                if len(line_tokens) >= 3 and (num_count >= 2 or tuple_count >= 2):
+                    processed_lines.append({
+                        "tokens": line_tokens,
+                        "x_centers": line_x_centers,
+                        "yc": line_y_center,
+                        "bbox": [
+                            min(item["bbox"][0] for item in line_words_sorted),
+                            min(item["bbox"][1] for item in line_words_sorted),
+                            max(item["bbox"][2] for item in line_words_sorted),
+                            max(item["bbox"][3] for item in line_words_sorted)
+                        ]
+                    })
+
+            if len(processed_lines) < 3:
+                return []
+
+            matrix_clusters = []
+            cur_cluster = [processed_lines[0]]
+
+            for i in range(1, len(processed_lines)):
+                prev_line = cur_cluster[-1]
+                cur_l = processed_lines[i]
+                y_diff = cur_l["yc"] - prev_line["yc"]
+                col_match = abs(len(cur_l["tokens"]) - len(prev_line["tokens"])) <= 1
+                if 15 <= y_diff <= 100 and col_match:
+                    cur_cluster.append(cur_l)
+                else:
+                    if len(cur_cluster) >= 3:
+                        matrix_clusters.append(cur_cluster)
+                    cur_cluster = [cur_l]
+            if len(cur_cluster) >= 3:
+                matrix_clusters.append(cur_cluster)
+
+            candidate_img = img_cv.copy()
+
+            for c_idx, cluster in enumerate(matrix_clusters):
+                num_rows = len(cluster)
+                num_cols = min(len(l["tokens"]) for l in cluster)
+                
+                min_x = min(l["bbox"][0] for l in cluster)
+                min_y = min(l["bbox"][1] for l in cluster)
+                max_x = max(l["bbox"][2] for l in cluster)
+                max_y = max(l["bbox"][3] for l in cluster)
+                
+                pad = 10
+                cx = max(0, min_x - pad)
+                cy = max(0, min_y - pad)
+                cw = min(w - cx, (max_x - min_x) + 2 * pad)
+                ch = min(h - cy, (max_y - min_y) + 2 * pad)
+
+                cv2.rectangle(candidate_img, (cx, cy), (cx + cw, cy + ch), (255, 255, 0), 3)
+                cv2.putText(candidate_img, f"TextMatrix Candidate {c_idx+1}", (cx + 5, cy + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+
+                crop = img_cv[cy:cy+ch, cx:cx+cw]
+                is_ok, buf = cv2.imencode(".png", crop)
+                crop_bytes = buf.tobytes() if is_ok else b""
+
+                cell_json = [l["tokens"] for l in cluster]
+                has_tuples = any(('(' in cell and ')' in cell) for row in cell_json for cell in row)
+
+                tbl_obj = {
+                    "source": "text_matrix",
+                    "type": "matrix" if not has_tuples else "grid",
+                    "element_type": "GRID" if has_tuples else "MATRIX",
+                    "page_number": page_num,
+                    "caption": f"Matrix / Tuple Grid (Page {page_num})",
+                    "image_path": f"exam_tables/candidate_textmatrix_{c_idx+1}.png",
+                    "image_url": f"{settings.MEDIA_URL}exam_tables/candidate_textmatrix_{c_idx+1}.png",
+                    "bounding_box": [cx, cy, cx + cw, cy + ch],
+                    "rows": num_rows,
+                    "columns": num_cols,
+                    "cell_json": cell_json,
+                    "bytes": crop_bytes,
+                    "is_matrix": True,
+                    "display_order": c_idx + 1
+                }
+                candidates.append(tbl_obj)
+
+            cv2.imwrite(os.path.join(trace_dir, "text_matrix_candidates.png"), candidate_img)
+
+        except Exception as e:
+            print(f"[TEXT MATRIX DETECTOR ERROR] {e}")
+
+        return candidates
 
     @classmethod
     def extract_table_structure_and_cells(cls, crop_cv, page_num: int = 1, tbl_idx: int = 1) -> Optional[Dict[str, Any]]:
