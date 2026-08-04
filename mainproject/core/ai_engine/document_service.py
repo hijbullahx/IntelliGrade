@@ -553,7 +553,26 @@ class DocumentService:
             os.makedirs(trace_dir, exist_ok=True)
 
             words = []
-            if pdf_bytes:
+            try:
+                import easyocr
+                reader = easyocr.Reader(['en'], gpu=False)
+                results = reader.readtext(img_cv)
+                for res in results:
+                    bbox_pts, text_val, conf = res
+                    x_coords = [p[0] for p in bbox_pts]
+                    y_coords = [p[1] for p in bbox_pts]
+                    wx1, wy1, wx2, wy2 = int(min(x_coords)), int(min(y_coords)), int(max(x_coords)), int(max(y_coords))
+                    if text_val.strip():
+                        words.append({
+                            "bbox": [wx1, wy1, wx2, wy2],
+                            "text": text_val.strip(),
+                            "xc": (wx1 + wx2) / 2.0,
+                            "yc": (wy1 + wy2) / 2.0
+                        })
+            except Exception as e_err:
+                print(f"[TEXT MATRIX DETECTOR WARNING] EasyOCR word extraction failed: {e_err}")
+
+            if not words and pdf_bytes:
                 try:
                     pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                     page = pdf_doc[page_num - 1]
@@ -575,26 +594,6 @@ class DocumentService:
                     print(f"[TEXT MATRIX DETECTOR WARNING] PyMuPDF word extraction failed: {p_err}")
 
             if not words:
-                try:
-                    import easyocr
-                    reader = easyocr.Reader(['en'], gpu=False)
-                    results = reader.readtext(img_cv)
-                    for res in results:
-                        bbox_pts, text_val, conf = res
-                        x_coords = [p[0] for p in bbox_pts]
-                        y_coords = [p[1] for p in bbox_pts]
-                        wx1, wy1, wx2, wy2 = int(min(x_coords)), int(min(y_coords)), int(max(x_coords)), int(max(y_coords))
-                        if text_val.strip():
-                            words.append({
-                                "bbox": [wx1, wy1, wx2, wy2],
-                                "text": text_val.strip(),
-                                "xc": (wx1 + wx2) / 2.0,
-                                "yc": (wy1 + wy2) / 2.0
-                            })
-                except Exception:
-                    pass
-
-            if not words:
                 return []
 
             align_img = img_cv.copy()
@@ -606,34 +605,82 @@ class DocumentService:
             words_sorted_y = sorted(words, key=lambda item: item["yc"])
             lines = []
             cur_line = []
-            last_yc = None
 
             for w_item in words_sorted_y:
-                if last_yc is None or abs(w_item["yc"] - last_yc) <= 30:
+                if not cur_line:
                     cur_line.append(w_item)
-                    last_yc = w_item["yc"]
                 else:
-                    lines.append(cur_line)
-                    cur_line = [w_item]
-                    last_yc = w_item["yc"]
+                    line_first_yc = cur_line[0]["yc"]
+                    if abs(w_item["yc"] - line_first_yc) <= 25.0:
+                        cur_line.append(w_item)
+                    else:
+                        lines.append(cur_line)
+                        cur_line = [w_item]
             if cur_line:
                 lines.append(cur_line)
 
             processed_lines = []
             for line_words in lines:
-                line_words_sorted = sorted(line_words, key=lambda item: item["xc"])
-                line_tokens = [item["text"] for item in line_words_sorted]
-                line_x_centers = [item["xc"] for item in line_words_sorted]
-                line_y_center = np.mean([item["yc"] for item in line_words_sorted])
-                
-                num_count = sum(1 for t in line_tokens if t.replace('.', '').replace('-', '').replace('(', '').replace(')', '').replace(',', '').strip().isdigit())
-                tuple_count = sum(1 for t in line_tokens if '(' in t and ')' in t)
-                
-                if len(line_tokens) >= 3 and (num_count >= 2 or tuple_count >= 2):
+                line_words_sorted = sorted(line_words, key=lambda item: item["bbox"][0])
+                if not line_words_sorted:
+                    continue
+
+                merged_cells = []
+                curr_cell_words = [line_words_sorted[0]]
+
+                for next_w in line_words_sorted[1:]:
+                    prev_w = curr_cell_words[-1]
+                    prev_x1 = prev_w["bbox"][2]
+                    next_x0 = next_w["bbox"][0]
+                    gap = next_x0 - prev_x1
+
+                    total_chars = sum(len(w["text"]) for w in curr_cell_words)
+                    cell_w_px = prev_x1 - curr_cell_words[0]["bbox"][0]
+                    avg_char_w = (cell_w_px / float(max(1, total_chars))) if total_chars > 0 else 10.0
+
+                    prev_text = " ".join([w["text"] for w in curr_cell_words]).strip()
+                    next_text = next_w["text"].strip()
+                    unclosed_paren = ('(' in prev_text and ')' not in prev_text)
+
+                    # Rule 1: Do NOT merge separate tuple expressions e.g. "(...)" and "(...)"
+                    is_tuple_boundary = (prev_text.endswith(')') and next_text.startswith('('))
+                    
+                    # Rule 2: Do NOT merge separate numeric tokens if gap >= 12px
+                    prev_is_num = prev_w["text"].replace('.', '').replace('-', '').isdigit()
+                    next_is_num = next_w["text"].replace('.', '').replace('-', '').isdigit()
+                    is_num_boundary = (prev_is_num and next_is_num and gap >= 12.0)
+
+                    if not is_tuple_boundary and not is_num_boundary and (gap < max(12.0, avg_char_w * 1.2) or unclosed_paren):
+                        curr_cell_words.append(next_w)
+                    else:
+                        merged_cells.append(curr_cell_words)
+                        curr_cell_words = [next_w]
+                if curr_cell_words:
+                    merged_cells.append(curr_cell_words)
+
+                line_cell_strings = []
+                line_x_centers = []
+                for cell_w_group in merged_cells:
+                    raw_str = " ".join([w["text"] for w in cell_w_group]).strip()
+                    clean_str = re.sub(r'\(\s+', '(', raw_str)
+                    clean_str = re.sub(r'\s+\)', ')', clean_str)
+                    clean_str = re.sub(r'\s*,\s*', ',', clean_str)
+                    clean_str = re.sub(r'\s*\+\s*', ' + ', clean_str)
+                    clean_str = re.sub(r'\s*=\s*', ' = ', clean_str)
+                    
+                    c_x0 = min(w["bbox"][0] for w in cell_w_group)
+                    c_x1 = max(w["bbox"][2] for w in cell_w_group)
+                    line_cell_strings.append(clean_str)
+                    line_x_centers.append((c_x0 + c_x1) / 2.0)
+
+                num_count = sum(1 for t in line_cell_strings if any(c.isdigit() for c in t))
+                tuple_count = sum(1 for t in line_cell_strings if '(' in t or ')' in t or ',' in t)
+
+                if len(line_cell_strings) >= 3 and (num_count >= 2 or tuple_count >= 2):
                     processed_lines.append({
-                        "tokens": line_tokens,
+                        "tokens": line_cell_strings,
                         "x_centers": line_x_centers,
-                        "yc": line_y_center,
+                        "yc": np.mean([item["yc"] for item in line_words_sorted]),
                         "bbox": [
                             min(item["bbox"][0] for item in line_words_sorted),
                             min(item["bbox"][1] for item in line_words_sorted),
@@ -652,8 +699,8 @@ class DocumentService:
                 prev_line = cur_cluster[-1]
                 cur_l = processed_lines[i]
                 y_diff = cur_l["yc"] - prev_line["yc"]
-                col_match = abs(len(cur_l["tokens"]) - len(prev_line["tokens"])) <= 1
-                if 15 <= y_diff <= 100 and col_match:
+                col_match = abs(len(cur_l["tokens"]) - len(prev_line["tokens"])) <= 2
+                if 12 <= y_diff <= 120 and col_match:
                     cur_cluster.append(cur_l)
                 else:
                     if len(cur_cluster) >= 3:
@@ -665,9 +712,35 @@ class DocumentService:
             candidate_img = img_cv.copy()
 
             for c_idx, cluster in enumerate(matrix_clusters):
+                # Step 3: Column Detection - Cluster X-centers across all lines in candidate matrix
+                all_line_x_centers = [l["x_centers"] for l in cluster]
+                flat_x_centers = sorted([xc for line_xcs in all_line_x_centers for xc in line_xcs])
+
+                col_clusters = []
+                for xc in flat_x_centers:
+                    if not col_clusters:
+                        col_clusters.append([xc])
+                    else:
+                        if abs(xc - np.mean(col_clusters[-1])) <= 40.0:
+                            col_clusters[-1].append(xc)
+                        else:
+                            col_clusters.append([xc])
+
+                col_centers = [float(np.mean(c)) for c in col_clusters]
+                num_cols = len(col_centers)
                 num_rows = len(cluster)
-                num_cols = min(len(l["tokens"]) for l in cluster)
-                
+
+                grid_cells_2d = []
+                for line_info in cluster:
+                    row_tokens = [""] * num_cols
+                    for cell_str, x_center in zip(line_info["tokens"], line_info["x_centers"]):
+                        closest_col_idx = int(np.argmin([abs(x_center - cc) for cc in col_centers]))
+                        if not row_tokens[closest_col_idx]:
+                            row_tokens[closest_col_idx] = cell_str
+                        else:
+                            row_tokens[closest_col_idx] += " " + cell_str
+                    grid_cells_2d.append(row_tokens)
+
                 min_x = min(l["bbox"][0] for l in cluster)
                 min_y = min(l["bbox"][1] for l in cluster)
                 max_x = max(l["bbox"][2] for l in cluster)
@@ -686,8 +759,8 @@ class DocumentService:
                 is_ok, buf = cv2.imencode(".png", crop)
                 crop_bytes = buf.tobytes() if is_ok else b""
 
-                cell_json = [l["tokens"] for l in cluster]
-                has_tuples = any(('(' in cell and ')' in cell) for row in cell_json for cell in row)
+                cell_json = grid_cells_2d
+                has_tuples = any(('(' in cell and ')' in cell) for row in cell_json for cell in row if cell)
 
                 tbl_obj = {
                     "source": "text_matrix",
@@ -930,17 +1003,21 @@ class DocumentService:
             c_w = c_box[2] - c_box[0]
             c_h = c_box[3] - c_box[1]
             c_area = c_w * c_h
-            c_type = candidate.get("type", "table")
+            c_type = str(candidate.get("type", candidate.get("source", "table")))
+            c_is_fig = (candidate.get("source") == "figure" or candidate.get("type") == "figure" or candidate.get("element_type") == "FIGURE")
 
             max_iou = 0.0
             overlapping_box = None
 
             for acc in accepted:
-                acc_box = acc.get("bounding_box", [0, 0, 0, 0])
-                iou = cls.calculate_iou(c_box, acc_box)
-                if iou > max_iou:
-                    max_iou = iou
-                    overlapping_box = acc_box
+                acc_is_fig = (acc.get("source") == "figure" or acc.get("type") == "figure" or acc.get("element_type") == "FIGURE")
+                # NMS deduplicates overlapping regions within the SAME element category (Figure vs Figure, Table vs Table)
+                if c_is_fig == acc_is_fig:
+                    acc_box = acc.get("bounding_box", [0, 0, 0, 0])
+                    iou = cls.calculate_iou(c_box, acc_box)
+                    if iou > max_iou:
+                        max_iou = iou
+                        overlapping_box = acc_box
 
             if max_iou > iou_threshold:
                 rejected_item = {
@@ -1060,7 +1137,29 @@ class DocumentService:
                         # Task 1-5: True Table Structure Recognition Pipeline (Cell Extraction & 2D Grid Construction)
                         table_struct = cls.extract_table_structure_and_cells(table_crop, page_num=page_num, tbl_idx=tbl_idx)
                         if not table_struct:
-                            print(f"  [TABLE REJECTED] Candidate {tbl_idx} -> REJECTED (Failed Table Structure Recognition or Empty OCR)")
+                            print(f"  [CONTOUR REGION CONVERTED] Candidate {tbl_idx} -> Classified as FIGURE (No 2D Grid lines detected)")
+                            fig_rel_path = f"exam_figures/{subfolder}/fig_contour_p{page_num}_{tbl_idx}.png" if subfolder else f"exam_figures/fig_contour_p{page_num}_{tbl_idx}.png"
+                            fig_full_path = os.path.join(save_dir, f"fig_contour_p{page_num}_{tbl_idx}.png")
+                            with open(fig_full_path, "wb") as f:
+                                f.write(crop_bytes)
+
+                            tbl_obj = {
+                                "source": "figure",
+                                "type": "figure",
+                                "element_type": "FIGURE",
+                                "page_number": page_num,
+                                "caption": f"Figure {tbl_idx} (Page {page_num})",
+                                "image_path": fig_rel_path,
+                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                "thumbnail_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                "bounding_box": [cx, cy, cx + cw, cy + ch],
+                                "width": cw,
+                                "height": ch,
+                                "bytes": crop_bytes,
+                                "mime_type": "image/png",
+                                "display_order": tbl_idx
+                            }
+                            raw_tables.append(tbl_obj)
                             continue
 
                         predicted_class = table_struct["classification"].lower()

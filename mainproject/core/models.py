@@ -348,3 +348,148 @@ class AIMemoryLog(models.Model):
         return f"AIMemoryLog [{self.provider}/{self.model_version}] - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
 
+# ==========================================
+# Production AI Answer Script Evaluation Models
+# ==========================================
+
+class StudentSubmission(models.Model):
+    class Status(models.TextChoices):
+        UPLOADED = 'UPLOADED', 'Uploaded'
+        SEGMENTED = 'SEGMENTED', 'Answer Segmented'
+        EVALUATED = 'EVALUATED', 'AI Evaluated'
+        REVIEWED = 'REVIEWED', 'Teacher Reviewed & Finalized'
+
+    examination = models.ForeignKey(Examination, on_delete=models.CASCADE, related_name='student_submissions')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='student_submissions', null=True, blank=True)
+    student_name = models.CharField(max_length=200, default='Anonymous Student')
+    student_roll_no = models.CharField(max_length=100, blank=True)
+    script_file = models.FileField(upload_to='student_submissions/%Y/%m/')
+    total_obtained_marks = models.DecimalField(max_digits=6, decimal_places=2, default=0.0)
+    total_max_marks = models.DecimalField(max_digits=6, decimal_places=2, default=0.0)
+    percentage = models.FloatField(default=0.0)
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.UPLOADED)
+    requires_manual_review = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Submission: {self.student_name} ({self.student_roll_no}) - {self.examination.title}"
+
+
+class SubmissionPage(models.Model):
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='pages')
+    page_number = models.IntegerField(default=1)
+    page_image = models.ImageField(upload_to='submission_pages/%Y/%m/')
+    ocr_raw_text = models.TextField(blank=True)
+    ocr_confidence = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Page {self.page_number} for {self.submission.student_name}"
+
+
+class SubmissionAnswer(models.Model):
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='answers')
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='submission_answers')
+    extracted_text = models.TextField(blank=True)
+    ocr_confidence = models.FloatField(default=0.0)
+    bounding_box_json = models.JSONField(default=dict, blank=True)
+    page = models.ForeignKey(SubmissionPage, on_delete=models.SET_NULL, null=True, blank=True, related_name='answers')
+    requires_manual_review = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Answer Q{self.question.question_number} - {self.submission.student_name}"
+
+
+class EvaluationResult(models.Model):
+    class ReviewStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending Teacher Review'
+        APPROVED = 'APPROVED', 'Approved by Teacher'
+        OVERRIDDEN = 'OVERRIDDEN', 'Overridden by Teacher'
+        REJECTED = 'REJECTED', 'Rejected / Re-evaluate'
+
+    submission_answer = models.OneToOneField(SubmissionAnswer, on_delete=models.CASCADE, related_name='evaluation_result')
+    obtained_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    maximum_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    percentage = models.FloatField(default=0.0)
+    strengths_json = models.JSONField(default=list, blank=True)
+    mistakes_json = models.JSONField(default=list, blank=True)
+    missing_points_json = models.JSONField(default=list, blank=True)
+    rubric_breakdown_json = models.JSONField(default=list, blank=True)
+    feedback_text = models.TextField(blank=True)
+    confidence = models.FloatField(default=0.0)
+    requires_manual_review = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=ReviewStatus.choices, default=ReviewStatus.PENDING)
+    evaluated_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Result Q{self.submission_answer.question.question_number}: {self.obtained_marks}/{self.maximum_marks}"
+
+
+class EvaluationFeedback(models.Model):
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name='detailed_feedbacks')
+    criteria_name = models.CharField(max_length=255)
+    allocated_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    awarded_marks = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)
+    comments = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"{self.criteria_name}: {self.awarded_marks}/{self.allocated_marks}"
+
+
+class TeacherReview(models.Model):
+    class Action(models.TextChoices):
+        APPROVE = 'APPROVE', 'Approved AI Score'
+        OVERRIDE = 'OVERRIDE', 'Overrode Marks'
+        REJECT = 'REJECT', 'Rejected Score'
+        RE_EVALUATE = 'RE_EVALUATE', 'Requested AI Re-evaluation'
+
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name='reviews')
+    teacher = models.ForeignKey(User, on_delete=models.CASCADE)
+    action = models.CharField(max_length=20, choices=Action.choices)
+    previous_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    new_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    review_comments = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Review by {self.teacher.username}: {self.previous_marks} -> {self.new_marks} ({self.action})"
+
+
+class EvaluationHistory(models.Model):
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name='history')
+    modified_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    old_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    new_marks = models.DecimalField(max_digits=5, decimal_places=2)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"History: {self.old_marks} -> {self.new_marks} at {self.created_at}"
+
+
+class EvaluationAttachment(models.Model):
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name='attachments')
+    file_name = models.CharField(max_length=255)
+    attachment_file = models.FileField(upload_to='evaluation_attachments/%Y/%m/')
+    caption = models.CharField(max_length=255, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Attachment: {self.file_name}"
+
+
+class EvaluationAuditLog(models.Model):
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='audit_logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=100)
+    details_json = models.JSONField(default=dict)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"AuditLog: {self.action} on {self.submission.id} at {self.timestamp}"
+
+

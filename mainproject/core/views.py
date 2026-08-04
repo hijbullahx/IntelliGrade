@@ -1653,9 +1653,9 @@ def question_rubric_manage(request, exam_id=None):
             messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
 
-        # Handle 3 Document Upload Options (Question Paper, Rubric File, Course Outline)
+        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Supplementary Document)
         qp_file = request.FILES.get('question_paper_file')
-        rf_file = request.FILES.get('rubric_file')
+        rf_file = request.FILES.get('rubric_file') or request.FILES.get('rubric_reference_file')
         co_file = request.FILES.get('course_outline_file')
 
         if qp_file:
@@ -1719,6 +1719,19 @@ def question_rubric_manage(request, exam_id=None):
                     'common_mistakes': cm_list,
                 }
             )
+
+            # Handle Manual Question Figure Upload from Section 5 & 6
+            manual_figure_file = request.FILES.get('manual_figure_file')
+            if manual_figure_file:
+                from core.models import QuestionFigure
+                QuestionFigure.objects.create(
+                    question=q_obj,
+                    image=manual_figure_file,
+                    caption=f"Manual Figure for Q{q_obj.question_number} ({manual_figure_file.name})",
+                    page_number=1,
+                    display_order=1
+                )
+                messages.success(request, f"Attached manual figure ({manual_figure_file.name}) to Question {q_obj.question_number}!")
 
             messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
@@ -2131,138 +2144,8 @@ def api_scan_question_paper(request):
                         fig_chk = PILImage.open(fig_path)
                         print(f"  [TRACE VERIFIED] Saved {fig_path.name} | Caption: {fig.get('caption')} | Dimensions: {fig_chk.width}x{fig_chk.height}px")
 
-                # 6. Save Question Blocks JSON
-                with open(trace_dir / 'question_blocks.json', 'w', encoding='utf-8') as f:
-                    json.dump(parsed_questions, f, indent=2, default=str)
-
             except Exception as debug_err:
                 print(f"[DEBUG TRACE WARNING] {debug_err}")
-
-            if exam:
-                DocumentDOM.objects.update_or_create(
-                    examination=exam,
-                    defaults={
-                        'elements_json': dom_elements,
-                        'total_pages': total_pages
-                    }
-                )
-
-                # Clear old QuestionFigure, QuestionTable, and QuestionFormula records for this exam
-                from core.models import QuestionTable, QuestionFormula
-                QuestionFigure.objects.filter(question__examination=exam).delete()
-                QuestionTable.objects.filter(question__examination=exam).delete()
-                QuestionFormula.objects.filter(question__examination=exam).delete()
-
-                print(f"[DETERMINISTIC PIPELINE] Persisting {len(parsed_questions)} questions to Examination ID {exam.id}...")
-                for q_idx, item in enumerate(parsed_questions):
-                    q_num = item.get('question_number') or f"Q{q_idx+1}"
-                    q_marks = float(item.get('allocated_marks') or 10.0)
-                    q_prompt = item.get('prompt_text') or ''
-                    q_bloom = item.get('bloom_level') or 'Understand'
-                    q_co = item.get('co_mapping') or 'CO1'
-                    q_po = item.get('po_mapping') or ['PO1']
-                    q_criteria = item.get('criteria') or ''
-                    q_answer = item.get('ideal_answer') or ''
-
-                    q_obj, _ = Question.objects.update_or_create(
-                        examination=exam,
-                        question_number=q_num,
-                        defaults={
-                            'prompt_text': q_prompt,
-                            'max_marks': q_marks,
-                            'bloom_level': q_bloom,
-                            'co_mapping': q_co,
-                            'po_mapping': q_po if isinstance(q_po, list) else [q_po],
-                            'question_type': item.get('question_type', []),
-                            'command_verbs': item.get('command_verbs', [])
-                        }
-                    )
-                    Rubric.objects.update_or_create(
-                        question=q_obj,
-                        defaults={
-                            'criteria': q_criteria,
-                            'expected_answer': q_answer
-                        }
-                    )
-
-                    # Persist single-owner QuestionFigure records
-                    for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
-                        QuestionFigure.objects.create(
-                            question=q_obj,
-                            display_order=fig_idx + 1,
-                            page_number=fig_data.get('page_number', 1),
-                            caption=fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
-                            image=fig_data.get('image_path', ''),
-                            thumbnail=fig_data.get('thumbnail_url', ''),
-                            bounding_box=fig_data.get('bounding_box', [])
-                        )
-
-                    # Persist single-owner QuestionTable records with Task 6 Database IoU Protection
-                    persisted_table_bboxes = []
-                    for tbl_idx, tbl_data in enumerate(item.get('associated_tables', [])):
-                        tbl_bbox = tbl_data.get('bounding_box', [])
-                        is_duplicate_db = False
-                        for prev_bbox in persisted_table_bboxes:
-                            iou_score = DocumentService.calculate_iou(tbl_bbox, prev_bbox)
-                            if iou_score > 0.80:
-                                is_duplicate_db = True
-                                print(f"  [DB IOU PROTECTION] Skipping duplicate table insertion (IoU={iou_score:.4f} > 0.80)")
-                                break
-
-                        if not is_duplicate_db:
-                            persisted_table_bboxes.append(tbl_bbox)
-                            QuestionTable.objects.create(
-                                question=q_obj,
-                                display_order=len(persisted_table_bboxes),
-                                page_number=tbl_data.get('page_number', 1),
-                                element_type=tbl_data.get('element_type', 'TABLE'),
-                                caption=tbl_data.get('caption', f'Table {tbl_idx+1} for {q_num}'),
-                                image=tbl_data.get('image_path', ''),
-                                bounding_box=tbl_bbox,
-                                rows=tbl_data.get('rows', 0),
-                                columns=tbl_data.get('columns', 0),
-                                cell_json=tbl_data.get('cell_json', [])
-                            )
-
-                    # Persist single-owner QuestionFormula records
-                    for form_idx, form_data in enumerate(item.get('associated_formulas', [])):
-                        QuestionFormula.objects.create(
-                            question=q_obj,
-                            display_order=form_idx + 1,
-                            page_number=form_data.get('page_number', 1),
-                            caption=form_data.get('caption', f'Formula {form_idx+1} for {q_num}'),
-                            image=form_data.get('image_path', ''),
-                            bounding_box=form_data.get('bounding_box', []),
-                            raw_latex=form_data.get('raw_latex', '')
-                        )
-
-                # 1-to-1 Detection vs Persistence Enforcement
-                db_figs = QuestionFigure.objects.filter(question__examination=exam).count()
-                db_tbls = QuestionTable.objects.filter(question__examination=exam).count()
-                db_forms = QuestionFormula.objects.filter(question__examination=exam).count()
-                total_persisted = db_figs + db_tbls + db_forms
-                total_detected = len(extracted_figures) + len(extracted_tables) + len(extracted_formulas)
-
-                print("=" * 80)
-                print("DETECTED CANDIDATE REGIONS VS PERSISTED DATABASE ROWS")
-                print("=" * 80)
-                print("Detected candidate regions:")
-                for c_idx, fig in enumerate(extracted_figures):
-                    print(f"  ID {c_idx+1} | bbox={fig.get('bounding_box')} | crop={fig.get('image_path')} | classification=FIGURE | owner=Q{fig.get('question_number', 1)}")
-                for c_idx, tbl in enumerate(extracted_tables):
-                    print(f"  ID {len(extracted_figures)+c_idx+1} | bbox={tbl.get('bounding_box')} | crop={tbl.get('image_path')} | classification={tbl.get('element_type', 'TABLE')} | owner=Q{tbl.get('question_number', 1)}")
-                print("-" * 80)
-                print("Persisted DB rows:")
-                print(f"  QuestionFigure count  : {db_figs}")
-                print(f"  QuestionTable count   : {db_tbls}")
-                print(f"  QuestionFormula count : {db_forms}")
-                print(f"  Total Persisted       : {total_persisted} (Total Detected Candidates: {total_detected})")
-                print("=" * 80)
-
-                if total_detected != total_persisted:
-                    raise RuntimeError(f"1-to-1 Persistence Failure: Detected Candidate Count ({total_detected}) != Persisted DB Rows Count ({total_persisted}).")
-
-                print("[DETERMINISTIC PIPELINE] Transaction Committed Successfully.")
 
             def _sanitize_for_json(obj):
                 if isinstance(obj, bytes):
@@ -2273,18 +2156,46 @@ def api_scan_question_paper(request):
                     return [_sanitize_for_json(i) for i in obj if not isinstance(i, bytes)]
                 return obj
 
-            clean_res_data = _sanitize_for_json(res_data)
+            clean_questions = _sanitize_for_json(parsed_questions)
             clean_figures = _sanitize_for_json(extracted_figures)
+            clean_tables = _sanitize_for_json(extracted_tables)
+            clean_formulas = _sanitize_for_json(extracted_formulas)
+            clean_dom = _sanitize_for_json(dom_elements)
+
+            # Stage scan data in session without writing to DB until user clicks Finalize
+            staged_data = {
+                'exam_id': exam.id if exam else None,
+                'qp_filename': qp_file.name if qp_file else 'scanned_doc.pdf',
+                'parsed_questions': clean_questions,
+                'extracted_figures': clean_figures,
+                'extracted_tables': clean_tables,
+                'extracted_formulas': clean_formulas,
+                'dom_elements': clean_dom,
+                'total_pages': total_pages
+            }
+            if exam:
+                request.session[f'staged_scan_data_{exam.id}'] = staged_data
+                request.session.modified = True
+
+            print(f"[STAGED SCAN EXTRACTION COMPLETE] Staged {len(parsed_questions)} questions, {len(extracted_figures)} figures, {len(extracted_tables)} tables in session for Exam ID {exam.id if exam else 'N/A'}.")
 
             return JsonResponse({
                 'success': True,
-                'data': clean_res_data if isinstance(clean_res_data, dict) else {},
+                'staged': True,
                 'extracted_count': len(parsed_questions),
-                'figures_count': len(clean_figures) if isinstance(clean_figures, list) else 0,
+                'figures_count': len(extracted_figures) + len(extracted_tables),
                 'ocr_chars': len(doc_text),
                 'ocr_engine': ocr_res['engine'],
-                'total_pages': total_pages
+                'total_pages': total_pages,
+                'data': {
+                    'questions': clean_questions if isinstance(clean_questions, list) else [],
+                    'figures': clean_figures if isinstance(clean_figures, list) else [],
+                    'tables': clean_tables if isinstance(clean_tables, list) else [],
+                    'dom_elements': dom_elements,
+                    'total_pages': total_pages
+                }
             })
+
     except PipelineValidationError as pve:
         print(f"[DETERMINISTIC PIPELINE ABORTED] {pve}")
         return JsonResponse({'success': False, 'error': str(pve)}, status=400)
@@ -2293,6 +2204,352 @@ def api_scan_question_paper(request):
         traceback.print_exc()
         print(f"[DETERMINISTIC PIPELINE EXCEPTION] {e}")
         return JsonResponse({'success': False, 'error': f"Document AI Pipeline Exception: {str(e)}"}, status=500)
+
+
+def api_finalize_scanned_paper(request):
+    """AJAX endpoint to commit staged scanned question paper items to the database and lock the exam paper."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+
+    exam_id = request.POST.get('examination_id')
+    if not exam_id or not exam_id.isdigit():
+        return JsonResponse({'error': 'Valid examination_id is required.'}, status=400)
+
+    exam = Examination.objects.filter(id=int(exam_id)).first()
+    if not exam:
+        return JsonResponse({'error': 'Examination not found.'}, status=404)
+
+    staged_data = request.session.get(f'staged_scan_data_{exam.id}')
+    if not staged_data or not staged_data.get('parsed_questions'):
+        return JsonResponse({'error': 'No staged scan data found for this examination. Please run the scanner first.'}, status=400)
+
+    parsed_questions = staged_data.get('parsed_questions', [])
+    extracted_figures = staged_data.get('extracted_figures', [])
+    extracted_tables = staged_data.get('extracted_tables', [])
+    extracted_formulas = staged_data.get('extracted_formulas', [])
+    dom_elements = staged_data.get('dom_elements', [])
+    total_pages = staged_data.get('total_pages', 1)
+
+    from django.db import transaction
+    from core.models import Question, Rubric, QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
+    from core.ai_engine.document_service import DocumentService
+
+    try:
+        with transaction.atomic():
+            DocumentDOM.objects.update_or_create(
+                examination=exam,
+                defaults={
+                    'elements_json': dom_elements,
+                    'total_pages': total_pages
+                }
+            )
+
+            # Clear old QuestionFigure, QuestionTable, and QuestionFormula records for this exam
+            QuestionFigure.objects.filter(question__examination=exam).delete()
+            QuestionTable.objects.filter(question__examination=exam).delete()
+            QuestionFormula.objects.filter(question__examination=exam).delete()
+
+            print(f"[FINALIZE SCANNED PAPER] Persisting {len(parsed_questions)} questions to Examination ID {exam.id}...")
+            for q_idx, item in enumerate(parsed_questions):
+                q_num = item.get('question_number') or f"Q{q_idx+1}"
+                q_marks = float(item.get('allocated_marks') or 10.0)
+                q_prompt = item.get('prompt_text') or ''
+                q_bloom = item.get('bloom_level') or 'Understand'
+                q_co = item.get('co_mapping') or 'CO1'
+                q_po = item.get('po_mapping') or ['PO1']
+                q_criteria = item.get('criteria') or ''
+                q_answer = item.get('ideal_answer') or ''
+
+                q_obj, _ = Question.objects.update_or_create(
+                    examination=exam,
+                    question_number=q_num,
+                    defaults={
+                        'prompt_text': q_prompt,
+                        'max_marks': q_marks,
+                        'bloom_level': q_bloom,
+                        'co_mapping': q_co,
+                        'po_mapping': q_po if isinstance(q_po, list) else [q_po],
+                        'question_type': item.get('question_type', []),
+                        'command_verbs': item.get('command_verbs', [])
+                    }
+                )
+                Rubric.objects.update_or_create(
+                    question=q_obj,
+                    defaults={
+                        'criteria': q_criteria,
+                        'expected_answer': q_answer
+                    }
+                )
+
+                # Persist single-owner QuestionFigure records
+                for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
+                    QuestionFigure.objects.create(
+                        question=q_obj,
+                        display_order=fig_idx + 1,
+                        page_number=fig_data.get('page_number', 1),
+                        caption=fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
+                        image=fig_data.get('image_path', ''),
+                        thumbnail=fig_data.get('thumbnail_url', ''),
+                        bounding_box=fig_data.get('bounding_box', [])
+                    )
+
+                # Persist single-owner QuestionTable records
+                persisted_table_bboxes = []
+                for tbl_idx, tbl_data in enumerate(item.get('associated_tables', [])):
+                    tbl_bbox = tbl_data.get('bounding_box', [])
+                    is_duplicate_db = False
+                    for prev_bbox in persisted_table_bboxes:
+                        iou_score = DocumentService.calculate_iou(tbl_bbox, prev_bbox)
+                        if iou_score > 0.80:
+                            is_duplicate_db = True
+                            break
+
+                    if not is_duplicate_db:
+                        persisted_table_bboxes.append(tbl_bbox)
+                        QuestionTable.objects.create(
+                            question=q_obj,
+                            display_order=len(persisted_table_bboxes),
+                            page_number=tbl_data.get('page_number', 1),
+                            element_type=tbl_data.get('element_type', 'TABLE'),
+                            caption=tbl_data.get('caption', f'Table {tbl_idx+1} for {q_num}'),
+                            image=tbl_data.get('image_path', ''),
+                            bounding_box=tbl_bbox,
+                            rows=tbl_data.get('rows', 0),
+                            columns=tbl_data.get('columns', 0),
+                            cell_json=tbl_data.get('cell_json', [])
+                        )
+
+            # Clear session staging key
+            if f'staged_scan_data_{exam.id}' in request.session:
+                del request.session[f'staged_scan_data_{exam.id}']
+                request.session.modified = True
+
+            print(f"[FINALIZE SUCCESS] Examination ID {exam.id} paper committed to DB.")
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully finalized and saved {len(parsed_questions)} questions to examination.',
+                'persisted_count': len(parsed_questions)
+            })
+
+    except Exception as e:
+        import traceback
         traceback.print_exc()
-        print(f"[QUESTION PAPER SCAN EXCEPTION] {e}")
-        return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)
+        return JsonResponse({'success': False, 'error': f'Failed to commit finalized paper: {str(e)}'}, status=500)
+
+
+# ==========================================
+# Production AI Script Evaluation & Teacher Review Views
+# ==========================================
+
+from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, EvaluationResult, EvaluationFeedback, TeacherReview, EvaluationHistory, EvaluationAuditLog
+from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+from core.ai_engine.reports.report_generator import EvaluationReportGenerator
+from django.http import HttpResponse
+
+def evaluate_answer_scripts_list(request, exam_id):
+    """Lists all student submissions for a specific examination."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
+
+    return render(request, 'core/evaluate_answer_scripts_list.html', {
+        'exam': exam,
+        'submissions': submissions
+    })
+
+
+def upload_student_submission(request, exam_id):
+    """Handles PDF, ZIP, or Image upload for a student answer script."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    if request.method == 'POST':
+        student_name = request.POST.get('student_name', 'Student').strip()
+        roll_no = request.POST.get('roll_no', '').strip()
+        script_file = request.FILES.get('script_file')
+
+        if not script_file:
+            return JsonResponse({'success': False, 'error': 'No script file provided.'}, status=400)
+
+        sub = StudentSubmission.objects.create(
+            examination=exam,
+            student_name=student_name,
+            student_roll_no=roll_no,
+            script_file=script_file
+        )
+
+        try:
+            # Process & Evaluate Submission asynchronously / synchronously
+            evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
+                submission_id=sub.id,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+
+            return JsonResponse({
+                'success': True,
+                'submission_id': evaluated_sub.id,
+                'total_obtained': float(evaluated_sub.total_obtained_marks),
+                'total_max': float(evaluated_sub.total_max_marks),
+                'percentage': evaluated_sub.percentage,
+                'requires_manual_review': evaluated_sub.requires_manual_review,
+                'message': 'Student script successfully processed and AI evaluated.'
+            })
+        except Exception as e_eval:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Failed during evaluation: {str(e_eval)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def evaluation_workspace(request, submission_id):
+    """Interactive side-by-side Evaluation Workspace for Teacher Review & Overrides."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    exam = submission.examination
+    answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
+
+    return render(request, 'core/evaluation_workspace.html', {
+        'submission': submission,
+        'exam': exam,
+        'answers': answers
+    })
+
+
+def review_evaluation_answer(request, result_id):
+    """API Endpoint for Teacher Override (Approve, Override Marks, Reject, Re-evaluate)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    eval_result = get_object_or_404(EvaluationResult, id=result_id)
+    answer = eval_result.submission_answer
+    submission = answer.submission
+
+    if request.method == 'POST':
+        action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
+        new_marks_val = request.POST.get('new_marks')
+        comments = request.POST.get('comments', '').strip()
+
+        old_marks = eval_result.obtained_marks
+
+        if action == 'APPROVE':
+            eval_result.status = EvaluationResult.ReviewStatus.APPROVED
+            eval_result.requires_manual_review = False
+            eval_result.save()
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.APPROVE,
+                previous_marks=old_marks,
+                new_marks=old_marks,
+                review_comments=comments or 'Approved by teacher.'
+            )
+
+        elif action == 'OVERRIDE':
+            try:
+                new_m = float(new_marks_val)
+                new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
+            except (TypeError, ValueError):
+                return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
+
+            eval_result.obtained_marks = new_m
+            eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
+            eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
+            eval_result.requires_manual_review = False
+            eval_result.save()
+
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.OVERRIDE,
+                previous_marks=old_marks,
+                new_marks=new_m,
+                review_comments=comments
+            )
+            EvaluationHistory.objects.create(
+                evaluation_result=eval_result,
+                modified_by=request.user,
+                old_marks=old_marks,
+                new_marks=new_m,
+                reason=comments or 'Teacher score override'
+            )
+
+        elif action == 'RE_EVALUATE':
+            # Re-run AI evaluation for this specific answer
+            AIScriptEvaluator._evaluate_single_answer(answer)
+            eval_result.refresh_from_db()
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.RE_EVALUATE,
+                previous_marks=old_marks,
+                new_marks=eval_result.obtained_marks,
+                review_comments='Requested AI re-evaluation'
+            )
+
+        # Recalculate submission totals
+        all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
+        total_obtained = sum(float(e.obtained_marks) for e in all_evals)
+        total_max = sum(float(e.maximum_marks) for e in all_evals)
+
+        submission.total_obtained_marks = total_obtained
+        submission.total_max_marks = total_max
+        submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
+        submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
+        if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
+            submission.status = StudentSubmission.Status.REVIEWED
+        submission.save()
+
+        EvaluationAuditLog.objects.create(
+            submission=submission,
+            user=request.user,
+            action=f"TEACHER_REVIEW_{action}",
+            details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        return JsonResponse({
+            'success': True,
+            'new_obtained_marks': float(eval_result.obtained_marks),
+            'new_submission_total': float(submission.total_obtained_marks),
+            'submission_percentage': submission.percentage,
+            'submission_status': submission.status,
+            'message': f'Evaluation successfully updated ({action}).'
+        })
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def export_evaluation_report(request, exam_id):
+    """Exports CSV or Report view for an Examination."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    format_type = request.GET.get('format', 'csv').lower()
+
+    if format_type == 'csv':
+        csv_data = EvaluationReportGenerator.generate_csv_report(exam)
+        response = HttpResponse(csv_data, content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="evaluation_report_exam_{exam.id}.csv"'
+        return response
+
+    analytics = EvaluationReportGenerator.generate_analytics_summary(exam)
+    submissions = StudentSubmission.objects.filter(examination=exam).order_by('-total_obtained_marks')
+
+    return render(request, 'core/evaluation_report.html', {
+        'exam': exam,
+        'analytics': analytics,
+        'submissions': submissions
+    })
+
