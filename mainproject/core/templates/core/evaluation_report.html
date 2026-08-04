@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluation Report - {{ exam.title }} | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Top Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
+        <div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="text-xs font-bold text-brand-500 hover:underline flex items-center gap-1">&larr; Evaluation Hub</a>
+                <span class="theme-text-muted">/</span>
+                <span class="text-xs font-semibold theme-text-muted">{{ exam.course.code }}</span>
+            </div>
+            <h1 class="text-2xl font-extrabold theme-text-primary mt-1">Examination Assessment Analytics Report</h1>
+            <p class="text-xs theme-text-muted mt-1">Examination: <strong>{{ exam.title }}</strong> | Course: <strong>{{ exam.course.name }}</strong></p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'export_evaluation_report' exam.id %}?format=csv" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <i data-lucide="download" class="w-4 h-4"></i> Export CSV Report
+            </a>
+        </div>
+    </div>
+
+    <!-- Analytics Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-card p-5 rounded-2xl space-y-2">
+            <span class="text-xs font-bold theme-text-muted uppercase tracking-wider block">Total Students Evaluated</span>
+            <span class="text-3xl font-extrabold theme-text-primary">{{ analytics.total_students }}</span>
+        </div>
+        <div class="glass-card p-5 rounded-2xl space-y-2">
+            <span class="text-xs font-bold theme-text-muted uppercase tracking-wider block">Class Average Score</span>
+            <span class="text-3xl font-extrabold text-emerald-500">{{ analytics.avg_percentage }}%</span>
+        </div>
+        <div class="glass-card p-5 rounded-2xl space-y-2">
+            <span class="text-xs font-bold theme-text-muted uppercase tracking-wider block">Bloom Taxonomy Distribution</span>
+            <div class="flex flex-wrap gap-2 pt-1">
+                {% for b_key, b_val in analytics.bloom_distribution.items %}
+                <span class="px-2.5 py-1 rounded-lg bg-brand-500/10 text-brand-500 font-bold text-xs">{{ b_key }}: {{ b_val }}</span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- CO / PO Attainment Breakdown -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass-card p-5 rounded-2xl space-y-3">
+            <h2 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="target" class="w-4 h-4 text-brand-500"></i> Course Outcome (CO) Attainment
+            </h2>
+            <div class="space-y-2">
+                {% for co_key, co_val in analytics.co_attainment.items %}
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span>{{ co_key }}</span>
+                        <span class="text-emerald-500">{{ co_val }}%</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                        <div class="h-full bg-emerald-500 rounded-full" style="width: {{ co_val }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="glass-card p-5 rounded-2xl space-y-3">
+            <h2 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="award" class="w-4 h-4 text-purple-500"></i> Program Outcome (PO) Attainment
+            </h2>
+            <div class="space-y-2">
+                {% for po_key, po_val in analytics.po_attainment.items %}
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span>{{ po_key }}</span>
+                        <span class="text-purple-500">{{ po_val }}%</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                        <div class="h-full bg-purple-500 rounded-full" style="width: {{ po_val }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Score Table -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-800">
+            <h2 class="font-bold text-sm theme-text-primary">Individual Student Score Results</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Student Name</th>
+                        <th class="px-5 py-4">Roll No</th>
+                        <th class="px-5 py-4">Obtained Marks</th>
+                        <th class="px-5 py-4">Max Marks</th>
+                        <th class="px-5 py-4">Percentage</th>
+                        <th class="px-5 py-4">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for sub in submissions %}
+                    <tr>
+                        <td class="px-5 py-4 font-bold theme-text-primary">{{ sub.student_name }}</td>
+                        <td class="px-5 py-4 font-mono">{{ sub.student_roll_no|default:"N/A" }}</td>
+                        <td class="px-5 py-4 font-extrabold text-emerald-500">{{ sub.total_obtained_marks }}</td>
+                        <td class="px-5 py-4">{{ sub.total_max_marks }}</td>
+                        <td class="px-5 py-4 font-bold">{{ sub.percentage }}%</td>
+                        <td class="px-5 py-4">{{ sub.get_status_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-5 py-8 text-center theme-text-muted">No student evaluation data found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

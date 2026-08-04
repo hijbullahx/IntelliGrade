@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluate Answer Scripts - {{ exam.title }} | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Top Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
+        <div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'teacher_dashboard' %}" class="text-xs font-bold text-brand-500 hover:underline flex items-center gap-1">&larr; Dashboard</a>
+                <span class="theme-text-muted">/</span>
+                <span class="text-xs font-semibold theme-text-muted">{{ exam.course.code }}</span>
+            </div>
+            <h1 class="text-2xl font-extrabold theme-text-primary mt-1">Answer Script Evaluation Hub</h1>
+            <p class="text-xs theme-text-muted mt-1">Examination: <strong>{{ exam.title }}</strong> | Total Questions: <strong>{{ exam.questions.count }}</strong></p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Answer Script (PDF / ZIP / Image)
+            </button>
+            <a href="{% url 'export_evaluation_report' exam.id %}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary font-bold rounded-xl transition-all flex items-center gap-2 text-xs">
+                <i data-lucide="download" class="w-4 h-4"></i> Download Report (CSV)
+            </a>
+        </div>
+    </div>
+
+    <!-- Student Submissions Table -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <h2 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="file-check-2" class="w-4 h-4 text-emerald-500"></i> Evaluated Student Submissions ({{ submissions.count }})
+            </h2>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Student Name</th>
+                        <th class="px-5 py-4">Roll Number</th>
+                        <th class="px-5 py-4">Score</th>
+                        <th class="px-5 py-4">Percentage</th>
+                        <th class="px-5 py-4">Status</th>
+                        <th class="px-5 py-4">Review Needed?</th>
+                        <th class="px-5 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for sub in submissions %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-bold theme-text-primary">{{ sub.student_name }}</td>
+                        <td class="px-5 py-4 font-mono text-[11px]">{{ sub.student_roll_no|default:"N/A" }}</td>
+                        <td class="px-5 py-4 font-extrabold text-emerald-600 dark:text-emerald-400">{{ sub.total_obtained_marks }} / {{ sub.total_max_marks }}</td>
+                        <td class="px-5 py-4 font-bold">{{ sub.percentage }}%</td>
+                        <td class="px-5 py-4">
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border 
+                                {% if sub.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
+                                {% elif sub.status == 'EVALUATED' %}bg-blue-500/10 text-blue-600 border-blue-500/20
+                                {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
+                                {{ sub.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4">
+                            {% if sub.requires_manual_review %}
+                            <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold flex items-center gap-1 w-max">
+                                <i data-lucide="alert-triangle" class="w-3 h-3"></i> Manual Review
+                            </span>
+                            {% else %}
+                            <span class="text-xs theme-text-muted flex items-center gap-1"><i data-lucide="check" class="w-3 h-3 text-emerald-500"></i> Clear</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <a href="{% url 'evaluation_workspace' sub.id %}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]">
+                                <i data-lucide="layout" class="w-3.5 h-3.5"></i> Open Workspace
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-5 py-12 text-center theme-text-muted">
+                            <div class="max-w-sm mx-auto space-y-3">
+                                <div class="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center mx-auto">
+                                    <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+                                </div>
+                                <p class="font-bold text-sm theme-text-primary">No student answer scripts uploaded yet.</p>
+                                <p class="text-xs">Upload student answer scripts (PDF, ZIP of images, or individual JPEG/PNG files) to initiate AI grading.</p>
+                                <button onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 shadow-lg">
+                                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Answer Script Now
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Script Modal -->
+<div id="uploadModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl relative space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base theme-text-primary flex items-center gap-2">
+                <i data-lucide="upload-cloud" class="w-5 h-5 text-brand-500"></i> Upload Student Answer Script
+            </h3>
+            <button onclick="document.getElementById('uploadModal').classList.add('hidden')" class="theme-text-muted hover:theme-text-primary">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <form id="uploadForm" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Student Name</label>
+                <input type="text" name="student_name" required placeholder="e.g. John Doe" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
+            </div>
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
+                <input type="text" name="roll_no" placeholder="e.g. CSE-2026-042" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
+            </div>
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Answer Script File (PDF / ZIP / Image)</label>
+                <input type="file" name="script_file" required accept=".pdf,.zip,.jpg,.jpeg,.png" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
+            </div>
+
+            <div id="uploadStatus" class="hidden text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-medium">
+                Processing script & running AI evaluation...
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="document.getElementById('uploadModal').classList.add('hidden')" class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
+                <button type="submit" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold shadow-lg">Start AI Evaluation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const statusDiv = document.getElementById('uploadStatus');
+    statusDiv.classList.remove('hidden');
+    statusDiv.innerText = "Ingesting pages & running AI evaluation...";
+
+    try {
+        const resp = await fetch("{% url 'upload_student_submission' exam.id %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold";
+            statusDiv.innerText = "Evaluation completed successfully! Reloading...";
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold";
+            statusDiv.innerText = "Error: " + data.error;
+        }
+    } catch(err) {
+        statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold";
+        statusDiv.innerText = "Submission failed: " + err.message;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Engine & Provider Health Monitor | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-8">
+    
+    <!-- Title Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
+                <i data-lucide="cpu" class="w-6 h-6 text-purple-500"></i> AI Engine & Provider Health Monitor
+            </h1>
+            <p class="theme-text-muted text-sm mt-1">Real-time status, declared capabilities, quota health, rate-limit monitors, and auto-failover routing.</p>
+        </div>
+        <a href="{% url 'exam_controller_dashboard' %}" class="text-xs theme-text-muted hover:text-purple-500 flex items-center gap-1 transition-colors">
+            &larr; Back to Control Portal
+        </a>
+    </div>
+
+    <!-- Active AI Provider Health Matrix Card -->
+    <div class="glass-card p-6 rounded-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="activity" class="w-4 h-4 text-emerald-500"></i> Real-Time Provider Health & Capability Matrix
+            </h3>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 font-bold text-xs border border-emerald-500/20">
+                ✓ Failover Auto-Routing Active
+            </span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="border-b border-slate-200 dark:border-slate-800 theme-text-muted font-bold">
+                        <th class="pb-2 px-3">AI Provider</th>
+                        <th class="pb-2 px-3">Active Model</th>
+                        <th class="pb-2 px-3">Status</th>
+                        <th class="pb-2 px-3">Capabilities</th>
+                        <th class="pb-2 px-3">Latency</th>
+                        <th class="pb-2 px-3">Errors</th>
+                        <th class="pb-2 px-3">Last Success / Error</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 dark:divide-slate-800/50">
+                    {% for h in health_monitors %}
+                    <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="py-3 px-3 font-bold theme-text-primary font-mono">
+                            {{ h.provider_name }}
+                        </td>
+                        <td class="py-3 px-3 theme-text-secondary font-mono text-[11px]">
+                            {{ h.current_model|default:"AUTO" }}
+                        </td>
+                        <td class="py-3 px-3">
+                            {% if h.status == 'HEALTHY' %}
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/20">
+                                ● Healthy
+                            </span>
+                            {% elif h.status == 'RATE_LIMITED' %}
+                            <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold text-[10px] border border-amber-500/20">
+                                ⚠️ Rate Limited (429)
+                            </span>
+                            {% elif h.status == 'EXPIRED' %}
+                            <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-500 font-bold text-[10px] border border-rose-500/20">
+                                🚫 Invalid Key / Expired
+                            </span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded bg-slate-500/10 text-slate-500 font-bold text-[10px] border border-slate-500/20">
+                                🔌 Offline
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3 px-3 space-x-1">
+                            <span class="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[9px] font-bold">Text</span>
+                            <span class="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 font-mono text-[9px] font-bold">Vision</span>
+                            <span class="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 font-mono text-[9px] font-bold">PDF 300DPI</span>
+                            <span class="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono text-[9px] font-bold">JSON</span>
+                        </td>
+                        <td class="py-3 px-3 font-mono theme-text-secondary text-[11px]">
+                            {% if h.avg_response_time_ms %}{{ h.avg_response_time_ms }} ms{% else %}N/A{% endif %}
+                        </td>
+                        <td class="py-3 px-3 font-mono font-bold text-rose-500 text-[11px]">
+                            {{ h.error_count }}
+                        </td>
+                        <td class="py-3 px-3 theme-text-muted text-[10px] font-mono">
+                            {% if h.last_success_at %}<div>✓ Success: {{ h.last_success_at|date:"H:i:s" }}</div>{% endif %}
+                            {% if h.last_failure_at %}<div class="text-rose-400">✗ Failure: {{ h.last_failure_at|date:"H:i:s" }}</div>{% endif %}
+                            {% if not h.last_success_at and not h.last_failure_at %}<div>No activity logged yet</div>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="py-6 text-center theme-text-muted italic">
+                            No AI Provider Health events recorded yet. Perform a scan or AI evaluation to initialize monitoring.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

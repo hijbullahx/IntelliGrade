@@ -1,0 +1,117 @@
+Student Class Routine
+Spring 2026
+Name of Student:
+Md. Taher Bin Omar Hijbullah
+Student ID#
+22303142
+Program:
+BCSE
+Class Routine Information
+ Course Code | Section
+ Day
+ Class Time
+CSC 437 (Q)
+Saturday
+ 11:45am 12:45pm
+Room# 1009
+ Course Code | Section
+ Day
+ Class Time
+CSC 465 (K)
+Saturday
+ 01:10pm 02:10pm
+Room# 821
+ Course Code | Section
+ Day
+ Class Time
+CSE 4317 (C)
+Saturday
+ 03:20pm 04:20pm
+Room# 606
+ Course Code | Section
+ Day
+ Class Time
+CSC 437 (Q)
+Sunday
+ 11:45am 12:45pm
+Room# 1003
+ Course Code | Section
+ Day
+ Class Time
+CSC 465 (K)
+Sunday
+ 01:10pm 02:10pm
+Room# 1004
+
+ Course Code | Section
+ Day
+ Class Time
+CSE 4317 (C)
+Sunday
+ 03:20pm 04:20pm
+Room# 913
+ Course Code | Section
+ Day
+ Class Time
+CSE 4383 (E)
+Sunday
+ 04:25pm 05:25pm
+Room# 1008
+ Course Code | Section
+ Day
+ Class Time
+CSC 465 (K)
+Monday
+ 01:10pm 02:10pm
+Room# 821
+ Course Code | Section
+ Day
+ Class Time
+CSE 4383 (E)
+Monday
+ 04:25pm 05:25pm
+Room# 913
+ Course Code | Section
+ Day
+ Class Time
+CSE 4317 (C)
+Tuesday
+ 03:20pm 04:20pm
+Room# 607
+ Course Code | Section
+ Day
+ Class Time
+CSE 4383 (E)
+Tuesday
+ 04:25pm 05:25pm
+Room# 913
+ Course Code | Section
+ Day
+ Class Time
+CSC 437 (Q)
+Wednesday
+ 11:45am 12:45pm
+Room# 621
+ Course Code | Section
+ Day
+ Class Time
+
+CSC 466 (K)
+Wednesday
+ 01:10pm 02:10pm
+Room# Comlab9
+ Course Code | Section
+ Day
+ Class Time
+CSC 466 (K)
+Wednesday
+ 02:15pm 03:15pm
+Room# Comlab9
+ Course Code | Section
+ Day
+ Class Time
+CSC 488 (M2)
+Friday
+ 08:30am 09:30am
+Room#
+Developed by IUBAT Automation

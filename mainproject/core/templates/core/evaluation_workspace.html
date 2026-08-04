@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluation Workspace - {{ submission.student_name }} | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="h-[calc(100vh-5rem)] flex flex-col space-y-4 max-w-[1600px] mx-auto px-4 py-4">
+
+    <!-- Top Workspace Navigation Bar -->
+    <div class="glass-card p-4 rounded-2xl flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="p-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary transition-all">
+                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </a>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-brand-500">{{ exam.course.code }}</span>
+                    <span class="theme-text-muted">•</span>
+                    <span class="text-xs font-semibold theme-text-muted">{{ exam.title }}</span>
+                </div>
+                <h1 class="text-lg font-extrabold theme-text-primary">Evaluation Workspace: <span class="text-brand-500">{{ submission.student_name }}</span> (Roll: {{ submission.student_roll_no|default:"N/A" }})</h1>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-6">
+            <div class="text-right">
+                <span class="text-xs font-medium theme-text-muted block">Total Score</span>
+                <span id="submissionTotal" class="text-xl font-black text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks }} / {{ submission.total_max_marks }} ({{ submission.percentage }}%)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="px-3 py-1 rounded-full text-xs font-bold border 
+                    {% if submission.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
+                    {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
+                    {{ submission.get_status_display }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workspace Split Panel -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+        
+        <!-- Left Panel (5 Cols): Original Student Script Viewer -->
+        <div class="lg:col-span-5 glass-card p-4 rounded-2xl flex flex-col min-h-0">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                <h2 class="font-bold text-xs theme-text-primary flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-brand-500"></i> Student Answer Script Pages ({{ submission.pages.count }})
+                </h2>
+            </div>
+            <div class="flex-1 overflow-y-auto mt-3 space-y-4 pr-1">
+                {% for p in submission.pages.all %}
+                <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-900/50 p-2 space-y-2">
+                    <div class="flex items-center justify-between text-[11px] font-bold theme-text-muted px-1">
+                        <span>Page {{ p.page_number }}</span>
+                        <span>OCR Conf: {{ p.ocr_confidence }}</span>
+                    </div>
+                    {% if p.page_image %}
+                    <img src="{{ p.page_image.url }}" alt="Page {{ p.page_number }}" class="w-full h-auto rounded-lg shadow-md border border-slate-700/50">
+                    {% else %}
+                    <div class="p-8 text-center theme-text-muted text-xs">Page Image Rendered</div>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="p-8 text-center theme-text-muted text-xs">No script pages found.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right Panel (7 Cols): Per-Question Evaluation Cards & Override Workbench -->
+        <div class="lg:col-span-7 glass-card p-4 rounded-2xl flex flex-col min-h-0">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                <h2 class="font-bold text-xs theme-text-primary flex items-center gap-2">
+                    <i data-lucide="check-square" class="w-4 h-4 text-emerald-500"></i> Question-by-Question AI Evaluation & Teacher Review
+                </h2>
+            </div>
+
+            <div class="flex-1 overflow-y-auto mt-3 space-y-6 pr-1">
+                {% for ans in answers %}
+                {% with eval=ans.evaluation_result q=ans.question %}
+                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-900/40 space-y-4 shadow-lg">
+                    
+                    <!-- Question Header & Badges -->
+                    <div class="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-500 font-extrabold text-xs">Q{{ q.question_number }}</span>
+                                <span class="text-xs font-semibold theme-text-muted">CO: {{ q.co_mapping|default:"CO1" }} | PO: {{ q.po_mapping|default:"PO1" }} | Bloom: {{ q.bloom_level|default:"Understand" }}</span>
+                            </div>
+                            <h3 class="text-sm font-bold theme-text-primary mt-1">{{ q.text }}</h3>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="text-xs theme-text-muted block font-semibold">Allocated Marks</span>
+                            <span class="text-lg font-black text-brand-500">{{ q.max_marks }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Stored Attachments (Figures, Tables, Formulas) -->
+                    {% if q.figures.exists or q.tables.exists or q.formulas.exists %}
+                    <div class="p-3 rounded-xl bg-slate-800/40 space-y-2 border border-slate-700/40 text-xs">
+                        <span class="font-bold theme-text-muted block text-[11px] uppercase tracking-wider">Stored Question Attachments</span>
+                        
+                        {% for fig in q.figures.all %}
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold text-brand-400">Figure:</span>
+                            {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-24 rounded border border-slate-700">{% endif %}
+                            <span class="theme-text-muted text-[11px]">{{ fig.caption }}</span>
+                        </div>
+                        {% endfor %}
+
+                        {% for tbl in q.tables.all %}
+                        <div class="space-y-1">
+                            <span class="font-bold text-emerald-400">Table / Matrix ({{ tbl.rows }}x{{ tbl.columns }}):</span>
+                            <div class="overflow-x-auto">
+                                <table class="text-[10px] border-collapse border border-slate-700">
+                                    {% for row in tbl.cell_json %}
+                                    <tr>
+                                        {% for cell in row %}
+                                        <td class="border border-slate-700 px-2 py-1 bg-slate-900 font-mono">{{ cell }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Student Extracted Answer (OCR) -->
+                    <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                        <span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Student Extracted Answer (OCR)</span>
+                        <p class="text-xs theme-text-primary font-mono whitespace-pre-wrap leading-relaxed">{{ ans.extracted_text|default:"[No answer text extracted]" }}</p>
+                    </div>
+
+                    <!-- AI Evaluation Breakdown -->
+                    {% if eval %}
+                    <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
+                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">AI Evaluation Feedback</span>
+                                <span class="text-[10px] theme-text-muted">(Confidence: {{ eval.confidence }})</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-base font-black text-emerald-600 dark:text-emerald-400" id="marks_disp_{{ eval.id }}">{{ eval.obtained_marks }} / {{ eval.maximum_marks }}</span>
+                            </div>
+                        </div>
+
+                        <p class="text-xs theme-text-primary leading-relaxed font-medium">{{ eval.feedback_text }}</p>
+
+                        <!-- Strengths & Mistakes lists -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+                            {% if eval.strengths_json %}
+                            <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                                <span class="font-bold text-emerald-500 block mb-1">Strengths</span>
+                                <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
+                                    {% for s in eval.strengths_json %}<li>{{ s }}</li>{% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+
+                            {% if eval.mistakes_json %}
+                            <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                                <span class="font-bold text-rose-500 block mb-1">Mistakes / Missing</span>
+                                <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
+                                    {% for m in eval.mistakes_json %}<li>{{ m }}</li>{% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Teacher Review & Override Controls -->
+                        <div class="pt-3 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
+                            <div class="flex items-center gap-2">
+                                <input type="number" step="0.5" min="0" max="{{ q.max_marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary text-center">
+                                <span class="text-xs theme-text-muted">/ {{ q.max_marks }}</span>
+                                <button onclick="submitReview({{ eval.id }}, 'OVERRIDE')" class="px-3 py-1 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs transition-all shadow">
+                                    Override Score
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
+                                    <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
+                                </button>
+                                <button onclick="submitReview({{ eval.id }}, 'RE_EVALUATE')" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs transition-all shadow">
+                                    Re-Evaluate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                </div>
+                {% endwith %}
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+async function submitReview(resultId, action) {
+    const overrideInput = document.getElementById(`override_input_${resultId}`);
+    const newMarks = overrideInput ? overrideInput.value : null;
+
+    const formData = new FormData();
+    formData.append('action', action);
+    if(newMarks !== null) formData.append('new_marks', newMarks);
+
+    try {
+        const resp = await fetch(`/api/evaluation-result/${resultId}/review/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            document.getElementById(`marks_disp_${resultId}`).innerText = `${data.new_obtained_marks} / ${data.new_submission_total}`;
+            document.getElementById('submissionTotal').innerText = `${data.new_submission_total} (Updated)`;
+            alert(`Score updated successfully! (${action})`);
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch(err) {
+        alert('Action failed: ' + err.message);
+    }
+}
+</script>
+{% endblock %}

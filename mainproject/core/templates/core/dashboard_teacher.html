@@ -120,10 +120,13 @@
                                 <td class="px-5 py-4 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <a href="{% url 'question_rubric_manage' exam.id %}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors inline-flex items-center gap-1 font-bold text-[11px]">
-                                            <i data-lucide="file-text" class="w-3 h-3"></i> Questions & Rubric
+                                            <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Paper Builder
                                         </a>
-                                        <a href="{% url 'script_upload' %}" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg transition-colors inline-flex items-center gap-1 font-bold text-[11px]">
-                                            <i data-lucide="upload-cloud" class="w-3 h-3"></i> Upload
+                                        <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors inline-flex items-center gap-1 font-bold text-[11px]">
+                                            <i data-lucide="check-square" class="w-3.5 h-3.5"></i> Evaluate Answer Scripts
+                                        </a>
+                                        <a href="{% url 'export_evaluation_report' exam.id %}" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg transition-colors inline-flex items-center gap-1 font-bold text-[11px]">
+                                            <i data-lucide="download" class="w-3.5 h-3.5"></i> Report
                                         </a>
                                     </div>
                                 </td>

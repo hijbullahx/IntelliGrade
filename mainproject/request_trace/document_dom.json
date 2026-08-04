@@ -1,0 +1,610 @@
+[
+  {
+    "type": "figure",
+    "page": 1,
+    "caption": "Diagram / Matrix (Page 1)",
+    "image_url": "/media/exam_figures/2026/08/fig_crop_p1_1.png",
+    "bbox": [
+      39.75,
+      40.12,
+      556.5,
+      814.5
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Student Class Routine",
+    "bbox": [
+      240.04,
+      46.69,
+      356.21,
+      61.78
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Spring 2026",
+    "bbox": [
+      266.79,
+      60.19,
+      329.44,
+      75.28
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Name of Student:\nMd. Taher Bin Omar Hijbullah",
+    "bbox": [
+      60.43,
+      108.94,
+      423.88,
+      124.03
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Student ID#\n22303142",
+    "bbox": [
+      74.82,
+      138.94,
+      374.48,
+      154.03
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Program:\nBCSE",
+    "bbox": [
+      81.12,
+      168.94,
+      363.79,
+      184.03
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Class Routine Information",
+    "bbox": [
+      229.32,
+      240.19,
+      366.9,
+      255.28
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      115.71,
+      292.64,
+      477.86,
+      303.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "CSC 437 (Q)\nSaturday\n\uf017 11:45am 12:45pm",
+    "bbox": [
+      141.42,
+      318.14,
+      490.02,
+      329.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Room# 1009",
+    "bbox": [
+      428.79,
+      331.64,
+      475.2,
+      342.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      115.5,
+      394.64,
+      477.55,
+      405.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "CSC 465 (K)\nSaturday\n\uf017 01:10pm 02:10pm",
+    "bbox": [
+      141.6,
+      420.14,
+      489.94,
+      431.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Room# 821",
+    "bbox": [
+      430.72,
+      432.89,
+      472.66,
+      444.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      115.5,
+      495.89,
+      477.55,
+      507.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "CSE 4317 (C)\nSaturday\n\uf017 03:20pm 04:20pm",
+    "bbox": [
+      139.59,
+      521.39,
+      489.94,
+      532.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Room# 606",
+    "bbox": [
+      430.72,
+      534.14,
+      472.66,
+      545.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      118.27,
+      597.89,
+      475.76,
+      609.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "CSC 437 (Q)\nSunday\n\uf017 11:45am 12:45pm",
+    "bbox": [
+      143.98,
+      623.39,
+      487.92,
+      634.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Room# 1003",
+    "bbox": [
+      426.69,
+      636.14,
+      473.1,
+      647.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      118.04,
+      699.14,
+      475.45,
+      710.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "CSC 465 (K)\nSunday\n\uf017 01:10pm 02:10pm",
+    "bbox": [
+      144.13,
+      724.64,
+      487.84,
+      735.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 1,
+    "text": "Room# 1004",
+    "bbox": [
+      426.39,
+      737.39,
+      472.8,
+      748.71
+    ]
+  },
+  {
+    "type": "figure",
+    "page": 2,
+    "caption": "Diagram / Matrix (Page 2)",
+    "image_url": "/media/exam_figures/2026/08/fig_crop_p2_1.png",
+    "bbox": [
+      39.75,
+      28.5,
+      556.5,
+      814.5
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      118.04,
+      39.89,
+      475.45,
+      51.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSE 4317 (C)\nSunday\n\uf017 03:20pm 04:20pm",
+    "bbox": [
+      142.14,
+      65.39,
+      487.84,
+      76.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 913",
+    "bbox": [
+      428.62,
+      78.14,
+      470.57,
+      89.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      118.04,
+      141.14,
+      475.45,
+      152.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSE 4383 (E)\nSunday\n\uf017 04:25pm 05:25pm",
+    "bbox": [
+      142.32,
+      167.39,
+      487.84,
+      178.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 1008",
+    "bbox": [
+      426.39,
+      180.14,
+      472.8,
+      191.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      117.25,
+      243.14,
+      476.11,
+      254.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSC 465 (K)\nMonday\n\uf017 01:10pm 02:10pm",
+    "bbox": [
+      143.33,
+      268.64,
+      488.5,
+      279.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 821",
+    "bbox": [
+      429.28,
+      281.39,
+      471.22,
+      292.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      117.25,
+      344.39,
+      476.11,
+      355.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSE 4383 (E)\nMonday\n\uf017 04:25pm 05:25pm",
+    "bbox": [
+      141.53,
+      369.89,
+      488.5,
+      381.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 913",
+    "bbox": [
+      429.28,
+      383.39,
+      471.22,
+      394.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      116.7,
+      446.39,
+      476.57,
+      457.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSE 4317 (C)\nTuesday\n\uf017 03:20pm 04:20pm",
+    "bbox": [
+      140.79,
+      471.89,
+      488.95,
+      483.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 607",
+    "bbox": [
+      429.74,
+      484.64,
+      471.68,
+      495.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      116.7,
+      547.64,
+      476.57,
+      558.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSE 4383 (E)\nTuesday\n\uf017 04:25pm 05:25pm",
+    "bbox": [
+      140.99,
+      573.14,
+      488.95,
+      584.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 913",
+    "bbox": [
+      429.74,
+      585.89,
+      471.68,
+      597.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      111.63,
+      649.64,
+      481.23,
+      660.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "CSC 437 (Q)\nWednesday\n\uf017 11:45am 12:45pm",
+    "bbox": [
+      137.34,
+      675.14,
+      493.39,
+      686.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "Room# 621",
+    "bbox": [
+      434.4,
+      687.89,
+      476.34,
+      699.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 2,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      111.43,
+      750.89,
+      480.94,
+      762.21
+    ]
+  },
+  {
+    "type": "figure",
+    "page": 3,
+    "caption": "Diagram / Matrix (Page 3)",
+    "image_url": "/media/exam_figures/2026/08/fig_crop_p3_1.png",
+    "bbox": [
+      28.5,
+      28.5,
+      567.75,
+      342.75
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "CSC 466 (K)\nWednesday\n\uf017 01:10pm 02:10pm",
+    "bbox": [
+      137.53,
+      36.14,
+      493.32,
+      47.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "Room# Comlab9",
+    "bbox": [
+      423.94,
+      48.89,
+      486.22,
+      60.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      111.43,
+      111.89,
+      480.94,
+      123.21
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "CSC 466 (K)\nWednesday\n\uf017 02:15pm 03:15pm",
+    "bbox": [
+      137.53,
+      137.39,
+      493.32,
+      148.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "Room# Comlab9",
+    "bbox": [
+      423.94,
+      150.14,
+      486.22,
+      161.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "\uf021 Course Code | Section\n\uf185 Day\n\uf017 Class Time",
+    "bbox": [
+      119.61,
+      213.14,
+      475.11,
+      224.46
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "CSC 488 (M2)\nFriday\n\uf017 08:30am 09:30am",
+    "bbox": [
+      142.8,
+      238.64,
+      487.05,
+      249.96
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "Room#",
+    "bbox": [
+      435.89,
+      251.39,
+      462.61,
+      262.71
+    ]
+  },
+  {
+    "type": "text_block",
+    "page": 3,
+    "text": "Developed by IUBAT Automation",
+    "bbox": [
+      226.39,
+      354.92,
+      369.85,
+      368.12
+    ]
+  }
+]

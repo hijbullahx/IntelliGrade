@@ -8,6 +8,13 @@ from core.models import AIConfiguration
 from core.ai_engine.providers.gemini import GeminiProvider
 from django.conf import settings
 
+try:
+    import fitz
+    FITZ_AVAILABLE = True
+except ImportError as e:
+    FITZ_AVAILABLE = False
+    print(f"[ENGINE SYSTEM CRITICAL] PyMuPDF (fitz) import failed: {e}")
+
 class OCREngineManager:
     """
     Production OCR Engine Manager supporting PyMuPDF PDF stream extraction, 300 DPI page rendering,
@@ -39,6 +46,123 @@ class OCREngineManager:
             return "\n".join(text_pages).strip()
         except Exception:
             return ""
+
+    @staticmethod
+    def extract_document_layout_and_figures(doc_bytes: bytes, mime_type: str = "application/pdf") -> Dict[str, Any]:
+        """
+        Extracts high-resolution rendered pages (300 DPI), embedded figures/diagrams,
+        layout bounding boxes, captions, and constructs a page-by-page Document DOM tree.
+        """
+        import datetime
+        from PIL import Image
+        now = datetime.datetime.now()
+        subfolder = now.strftime('%Y/%m')
+        save_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', subfolder)
+        thumb_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', 'thumbs', subfolder)
+        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(thumb_dir, exist_ok=True)
+
+        extracted_figures = []
+        page_renders = []
+        dom_elements = []
+
+        try:
+            import fitz
+            if doc_bytes.startswith(b'%PDF'):
+                doc = fitz.open(stream=doc_bytes, filetype="pdf")
+                for page_idx, page in enumerate(doc):
+                    page_num = page_idx + 1
+                    
+                    # 1. High-DPI Render (300 DPI)
+                    pix = page.get_pixmap(dpi=300)
+                    page_png = pix.tobytes("png")
+                    page_renders.append(page_png)
+
+                    # 2. Extract Embedded Vector/Raster Images
+                    img_list = page.get_images(full=True)
+                    for img_idx, img_info in enumerate(img_list):
+                        xref = img_info[0]
+                        base_img = doc.extract_image(xref)
+                        image_bytes = base_img.get("image")
+                        image_ext = base_img.get("ext", "png")
+
+                        if image_bytes and len(image_bytes) > 500: # Filter out 1x1 tiny icons
+                            fig_filename = f"fig_p{page_num}_{img_idx+1}_{xref}.{image_ext}"
+                            fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
+                            fig_full_path = os.path.join(save_dir, fig_filename)
+
+                            with open(fig_full_path, "wb") as f:
+                                f.write(image_bytes)
+
+                            # Generate Thumbnail
+                            thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
+                            thumb_full_path = os.path.join(thumb_dir, fig_filename)
+                            try:
+                                im = Image.open(io.BytesIO(image_bytes))
+                                im.thumbnail((300, 300))
+                                im.save(thumb_full_path)
+                            except Exception:
+                                thumb_rel_path = fig_rel_path
+
+                            # Get Bounding Box Coordinates if available
+                            rects = page.get_image_rects(xref)
+                            bbox = [round(c, 2) for c in rects[0]] if rects else [0, 0, 0, 0]
+
+                            extracted_figures.append({
+                                "page_number": page_num,
+                                "caption": f"Figure {img_idx+1} (Page {page_num})",
+                                "image_path": fig_rel_path,
+                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
+                                "bounding_box": bbox,
+                                "display_order": img_idx + 1
+                            })
+
+                            dom_elements.append({
+                                "type": "figure",
+                                "page": page_num,
+                                "caption": f"Figure {img_idx+1}",
+                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                "bbox": bbox
+                            })
+
+                    # DOM Page text blocks & coordinates
+                    text_blocks = page.get_text("blocks")
+                    for b in text_blocks:
+                        if b[4].strip():
+                            dom_elements.append({
+                                "type": "text_block",
+                                "page": page_num,
+                                "text": b[4].strip(),
+                                "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
+                            })
+            else:
+                # Direct Image Upload (JPEG/PNG)
+                page_renders.append(doc_bytes)
+                im = Image.open(io.BytesIO(doc_bytes))
+                fig_filename = f"fig_upload_{now.strftime('%H%M%S')}.png"
+                fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
+                fig_full_path = os.path.join(save_dir, fig_filename)
+                im.save(fig_full_path)
+
+                extracted_figures.append({
+                    "page_number": 1,
+                    "caption": "Attached Figure 1",
+                    "image_path": fig_rel_path,
+                    "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                    "thumbnail_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                    "bounding_box": [0, 0, im.width, im.height],
+                    "display_order": 1
+                })
+        except Exception as e:
+            print(f"[DOCUMENT AI EXTRACTION WARNING] {e}")
+
+        return {
+            "figures": extracted_figures,
+            "page_renders": page_renders,
+            "dom_elements": dom_elements,
+            "total_pages": len(page_renders) or 1
+        }
 
     def extract_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> Dict[str, Any]:
         """

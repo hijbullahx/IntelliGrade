@@ -1615,7 +1615,7 @@ def question_rubric_manage(request, exam_id=None):
 
     questions = []
     if selected_exam:
-        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').order_by('question_number')
+        questions = Question.objects.filter(examination=selected_exam).select_related('rubric').prefetch_related('figures_rel', 'tables_rel', 'formulas_rel').order_by('question_number')
 
     if request.method == 'POST':
         target_exam_id = request.POST.get('examination_id')
@@ -1653,9 +1653,9 @@ def question_rubric_manage(request, exam_id=None):
             messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
 
-        # Handle 3 Document Upload Options (Question Paper, Rubric File, Course Outline)
+        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Supplementary Document)
         qp_file = request.FILES.get('question_paper_file')
-        rf_file = request.FILES.get('rubric_file')
+        rf_file = request.FILES.get('rubric_file') or request.FILES.get('rubric_reference_file')
         co_file = request.FILES.get('course_outline_file')
 
         if qp_file:
@@ -1719,6 +1719,19 @@ def question_rubric_manage(request, exam_id=None):
                     'common_mistakes': cm_list,
                 }
             )
+
+            # Handle Manual Question Figure Upload from Section 5 & 6
+            manual_figure_file = request.FILES.get('manual_figure_file')
+            if manual_figure_file:
+                from core.models import QuestionFigure
+                QuestionFigure.objects.create(
+                    question=q_obj,
+                    image=manual_figure_file,
+                    caption=f"Manual Figure for Q{q_obj.question_number} ({manual_figure_file.name})",
+                    page_number=1,
+                    display_order=1
+                )
+                messages.success(request, f"Attached manual figure ({manual_figure_file.name}) to Question {q_obj.question_number}!")
 
             messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
@@ -1802,6 +1815,26 @@ def delete_question(request, question_id):
     return redirect('question_rubric_manage', exam_id=exam.id)
 
 
+def delete_all_questions(request, exam_id):
+    """Allows Faculty to remove ALL configured questions from an examination paper."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Permission Denied: You cannot delete questions from exams not assigned to you.")
+        return redirect('teacher_dashboard')
+
+    q_count = exam.questions.count()
+    exam.questions.all().delete()
+
+    messages.success(request, f"Successfully removed all {q_count} configured exam paper items.")
+    return redirect('question_rubric_manage', exam_id=exam.id)
+
+
 def api_generate_ai_rubric(request):
     """AJAX endpoint for AI-assisted rubric creation using active LLM provider."""
     if not request.user.is_authenticated:
@@ -1828,6 +1861,30 @@ def api_generate_ai_rubric(request):
             return JsonResponse({'success': True, 'rubric': rubric_data})
         except Exception as e:
             return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
+
+
+def ai_config_view(request):
+    """Interface to view system-wide AI configuration, model keys, and Provider Health Monitors."""
+    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
+        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
+        return redirect('landing_page')
+
+    from core.models import AIConfiguration, AIProviderHealth
+    config, _ = AIConfiguration.objects.get_or_create(id=1)
+    health_monitors = AIProviderHealth.objects.all().order_by('provider_name')
+
+    if request.method == 'POST':
+        config.active_provider = request.POST.get('active_provider', config.active_provider)
+        config.gemini_model = request.POST.get('gemini_model', config.gemini_model)
+        config.save()
+        messages.success(request, "AI Engine Configuration updated successfully!")
+        return redirect('ai_config_view')
+
+    return render(request, 'core/ai_config.html', {
+        'config': config,
+        'health_monitors': health_monitors,
+    })
+
 
 def api_scan_question_paper(request):
     """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
@@ -1889,31 +1946,315 @@ def api_scan_question_paper(request):
         print(f"[QUESTION PAPER SCAN ERROR] Read failed: {e}")
         return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
 
+    from django.db import transaction
     from core.ai_engine.providers.factory import AIProviderFactory
-    from core.ai_engine.ocr.engine import OCREngineManager
+    from core.ai_engine.document_service import DocumentService
+    from core.ai_engine.parser.academic_parser import AcademicParserService, PipelineValidationError
+    from core.models import QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
+
     provider = AIProviderFactory.get_provider()
 
+    # 1. Environment & Module Diagnostics inside Django Request Handler
+    import sys
+    import subprocess
+    from PIL import Image as PILImage
+
+    print("=" * 80)
+    print("[DJANGO SERVER REQUEST DIAGNOSTICS]")
+    print(f"  sys.executable: {sys.executable}")
+    print(f"  sys.version: {sys.version}")
+
     try:
-        print("[QUESTION PAPER SCAN] Step 1: Starting OCR text extraction...")
-        ocr_res = OCREngineManager().extract_text(qp_bytes, mime_type=mime_type)
-        doc_text = ocr_res.get('text', '').strip() or "Academic Examination Paper"
-        print(f"[QUESTION PAPER SCAN] OCR Complete. Extracted Text Length: {len(doc_text)} chars")
+        import fitz
+        print("  FITZ OK")
+        print(f"  fitz.__file__: {fitz.__file__}")
+        print(f"  fitz.__doc__: {fitz.__doc__[:80].strip() if fitz.__doc__ else 'N/A'}")
+    except Exception as fitz_err:
+        print("  FITZ FAILED")
+        print(f"  Import Error: {repr(fitz_err)}")
+        try:
+            res = subprocess.run([sys.executable, "-m", "pip", "show", "PyMuPDF"], capture_output=True, text=True)
+            print(f"  pip show PyMuPDF stdout:\n{res.stdout}")
+        except Exception as p_err:
+            print(f"  pip show error: {p_err}")
+        return JsonResponse({
+            'success': False,
+            'error': f'PyMuPDF (fitz) import failed inside Django server process: {repr(fitz_err)}'
+        }, status=500)
 
-        print(f"[QUESTION PAPER SCAN] Step 2: Querying AI Provider ({provider.__class__.__name__})...")
-        res_data = provider.analyze_academic_exam_paper(
-            doc_text,
-            image_bytes=qp_bytes,
-            mime_type=mime_type
-        )
+    # 2. Render Page 1 to request_trace/page1.png FIRST & Verify PIL Readability
+    trace_dir = settings.BASE_DIR / 'request_trace'
+    os.makedirs(trace_dir, exist_ok=True)
+    page1_path = trace_dir / 'page1.png'
 
-        extracted_questions = res_data.get('questions', [])
-        print(f"[QUESTION PAPER SCAN] Step 3: AI Extraction Complete. Total Questions: {len(extracted_questions)}")
+    try:
+        doc = fitz.open(stream=qp_bytes, filetype="pdf")
+        if len(doc) == 0:
+            return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
+        
+        page0 = doc.load_page(0)
+        pix = page0.get_pixmap(dpi=300)
+        pix.save(str(page1_path))
+    except Exception as render_err:
+        print(f"[RENDERER FAILED] {render_err}")
+        return JsonResponse({'success': False, 'error': f'Page 1 rendering failed: {render_err}'}, status=500)
 
-        # Automatically save all extracted questions & rubrics to the database for this exam
-        if exam and extracted_questions:
-            print(f"[QUESTION PAPER SCAN] Step 4: Persisting {len(extracted_questions)} questions to Examination ID {exam.id}...")
-            for item in extracted_questions:
-                q_num = item.get('question_number') or 'Q1'
+    if not os.path.exists(page1_path):
+        return JsonResponse({'success': False, 'error': 'page1.png failed to save to disk'}, status=500)
+
+    try:
+        pil_img = PILImage.open(page1_path)
+        print(f"[PAGE 1 RENDER VERIFIED] Width: {pil_img.width}px | Height: {pil_img.height}px | Mode: {pil_img.mode}")
+    except Exception as pil_err:
+        print(f"[PIL READ FAILED] {pil_err}")
+        return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
+
+    # 3. EasyOCR directly on verified page1.png
+    print("[EASYOCR START] Running EasyOCR directly on page1.png...")
+    easy_text = ""
+    easy_conf = 0.0
+    try:
+        import easyocr
+        reader = easyocr.Reader(['en'], gpu=False)
+        e_results = reader.readtext(str(page1_path))
+        lines = [r[1] for r in e_results]
+        scores = [r[2] for r in e_results]
+        easy_text = "\n".join(lines).strip()
+        easy_conf = sum(scores) / len(scores) if scores else 0.85
+        print(f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)}")
+    except Exception as easy_err:
+        print(f"[EASYOCR FAILED] Traceback: {easy_err}")
+
+    if len(easy_text) == 0 and len(doc) > 0 and len(doc[0].get_text("text").strip()) < 10:
+        page1_before_path = trace_dir / 'page1_before_ocr.png'
+        pil_img.save(page1_before_path)
+        return JsonResponse({
+            'success': False,
+            'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.'
+        }, status=400)
+
+    try:
+        with transaction.atomic():
+            print("=" * 80)
+            print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
+            print(f"  INPUT FILE: {qp_file.name} ({len(qp_bytes)} bytes)")
+            print(f"  MIME TYPE: {mime_type}")
+            print(f"  PYTHON EXEC: {sys.executable}")
+            print("=" * 80)
+
+            print("[PIPELINE STAGE 2] DocumentService: Rendering 300 DPI Page Images & Extracting Graphics...")
+            graphics_res = DocumentService.process_graphics_and_figures(qp_bytes, mime_type=mime_type)
+            extracted_figures = graphics_res.get('figures', [])
+            extracted_tables = graphics_res.get('tables', [])
+            extracted_formulas = graphics_res.get('formulas', [])
+            dom_elements = graphics_res.get('dom_elements', [])
+            total_pages = graphics_res.get('total_pages', len(graphics_res.get('page_renders', [])))
+            page_renders = graphics_res.get('page_renders', [])
+
+            print(f"  Renderer Selected: PyMuPDF (fitz) 300 DPI")
+            print(f"  Rendered Pages: {total_pages}")
+            print(f"  Graphics Figures Detected: {len(extracted_figures)}")
+
+            print("[PIPELINE STAGE 3] DocumentService: Executing Deterministic OCR on Rendered Page Images...")
+            ocr_res = DocumentService.extract_deterministic_ocr(qp_bytes, page_renders=page_renders, mime_type=mime_type)
+            doc_text = ocr_res.get('text', '').strip()
+
+            print(f"  OCR Engine Selected: {ocr_res['engine']}")
+            print(f"  OCR Result Text Length: {len(doc_text)} chars (Confidence: {ocr_res['confidence']})")
+
+            # STRICT OCR GATEWAY: Halt pipeline BEFORE calling LLM if OCR text is insufficient
+            if len(doc_text) < 50:
+                raise PipelineValidationError(
+                    f"[STRICT PIPELINE FAILURE] OCR Failure: Extracted text length ({len(doc_text)} chars) "
+                    f"is below required minimum (50 chars). LLM & Database Save halted."
+                )
+
+            print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
+            res_data = provider.analyze_academic_exam_paper(
+                doc_text,
+                image_bytes=qp_bytes,
+                mime_type=mime_type,
+                extra_files=extracted_figures
+            )
+
+            print("[PIPELINE STAGE 5] AcademicParserService: Validating Question Schema & Figure Mapping...")
+            parsed_result = AcademicParserService.validate_and_parse(
+                ocr_res,
+                graphics_res,
+                res_data,
+                min_ocr_chars=50
+            )
+
+            parsed_questions = parsed_result['parsed_questions']
+
+            # Write Debug Trace Artifacts & Physical Verification Files
+            try:
+                from PIL import Image as PILImage
+                from core.ai_engine.visualizer import LayoutVisualizer
+
+                trace_dir = settings.BASE_DIR / 'request_trace'
+                os.makedirs(trace_dir, exist_ok=True)
+                ext = '.pdf' if mime_type == 'application/pdf' else '.png'
+                with open(trace_dir / f'original_upload{ext}', 'wb') as f:
+                    f.write(qp_bytes)
+
+                # 1. Save and Verify Rendered Page PNGs
+                for idx, p_bytes in enumerate(page_renders):
+                    p_path = trace_dir / f'rendered_page_{idx+1}.png'
+                    with open(p_path, 'wb') as f:
+                        f.write(p_bytes)
+                    img_chk = PILImage.open(p_path)
+                    print(f"  [TRACE VERIFIED] Saved {p_path.name} | Dimensions: {img_chk.width}x{img_chk.height}px | Bytes: {len(p_bytes)}")
+
+                # 2. Render layout_debug.png overlay image (Blue=Questions, Green=Valid Figures, Red=Ignored Text Lines, Gray=Rejected Page Border)
+                if page_renders:
+                    debug_overlay_path = trace_dir / 'layout_debug.png'
+                    LayoutVisualizer.render_layout_debug_overlay(
+                        page_renders[0],
+                        dom_elements,
+                        parsed_questions,
+                        str(debug_overlay_path),
+                        all_contours=graphics_res.get('all_contours', [])
+                    )
+
+                # 3. Save OCR Text Output
+                with open(trace_dir / 'ocr_output.txt', 'w', encoding='utf-8') as f:
+                    f.write(doc_text)
+
+                # 4. Save Structured layout.json
+                structured_layout = {
+                    "page": 1,
+                    "questions": parsed_questions,
+                    "figures": extracted_figures,
+                    "tables": [e for e in dom_elements if e.get('type') == 'table'],
+                    "reading_order": dom_elements,
+                    "all_contours": graphics_res.get('all_contours', [])
+                }
+                with open(trace_dir / 'layout.json', 'w', encoding='utf-8') as f:
+                    json.dump(structured_layout, f, indent=2, default=str)
+
+                # 5. Save Cropped Figures & Matrices
+                for f_idx, fig in enumerate(extracted_figures):
+                    fig_bytes = fig.get('bytes')
+                    if fig_bytes:
+                        fname = 'matrix_1.png' if 'Matrix' in fig.get('caption', '') else f'figure_{f_idx+1}.png'
+                        fig_path = trace_dir / fname
+                        with open(fig_path, 'wb') as f:
+                            f.write(fig_bytes)
+                        fig_chk = PILImage.open(fig_path)
+                        print(f"  [TRACE VERIFIED] Saved {fig_path.name} | Caption: {fig.get('caption')} | Dimensions: {fig_chk.width}x{fig_chk.height}px")
+
+            except Exception as debug_err:
+                print(f"[DEBUG TRACE WARNING] {debug_err}")
+
+            def _sanitize_for_json(obj):
+                if isinstance(obj, bytes):
+                    return None
+                elif isinstance(obj, dict):
+                    return {k: _sanitize_for_json(v) for k, v in obj.items() if not isinstance(v, bytes)}
+                elif isinstance(obj, list):
+                    return [_sanitize_for_json(i) for i in obj if not isinstance(i, bytes)]
+                return obj
+
+            clean_questions = _sanitize_for_json(parsed_questions)
+            clean_figures = _sanitize_for_json(extracted_figures)
+            clean_tables = _sanitize_for_json(extracted_tables)
+            clean_formulas = _sanitize_for_json(extracted_formulas)
+            clean_dom = _sanitize_for_json(dom_elements)
+
+            # Stage scan data in session without writing to DB until user clicks Finalize
+            staged_data = {
+                'exam_id': exam.id if exam else None,
+                'qp_filename': qp_file.name if qp_file else 'scanned_doc.pdf',
+                'parsed_questions': clean_questions,
+                'extracted_figures': clean_figures,
+                'extracted_tables': clean_tables,
+                'extracted_formulas': clean_formulas,
+                'dom_elements': clean_dom,
+                'total_pages': total_pages
+            }
+            if exam:
+                request.session[f'staged_scan_data_{exam.id}'] = staged_data
+                request.session.modified = True
+
+            print(f"[STAGED SCAN EXTRACTION COMPLETE] Staged {len(parsed_questions)} questions, {len(extracted_figures)} figures, {len(extracted_tables)} tables in session for Exam ID {exam.id if exam else 'N/A'}.")
+
+            return JsonResponse({
+                'success': True,
+                'staged': True,
+                'extracted_count': len(parsed_questions),
+                'figures_count': len(extracted_figures) + len(extracted_tables),
+                'ocr_chars': len(doc_text),
+                'ocr_engine': ocr_res['engine'],
+                'total_pages': total_pages,
+                'data': {
+                    'questions': clean_questions if isinstance(clean_questions, list) else [],
+                    'figures': clean_figures if isinstance(clean_figures, list) else [],
+                    'tables': clean_tables if isinstance(clean_tables, list) else [],
+                    'dom_elements': dom_elements,
+                    'total_pages': total_pages
+                }
+            })
+
+    except PipelineValidationError as pve:
+        print(f"[DETERMINISTIC PIPELINE ABORTED] {pve}")
+        return JsonResponse({'success': False, 'error': str(pve)}, status=400)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[DETERMINISTIC PIPELINE EXCEPTION] {e}")
+        return JsonResponse({'success': False, 'error': f"Document AI Pipeline Exception: {str(e)}"}, status=500)
+
+
+def api_finalize_scanned_paper(request):
+    """AJAX endpoint to commit staged scanned question paper items to the database and lock the exam paper."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+
+    exam_id = request.POST.get('examination_id')
+    if not exam_id or not exam_id.isdigit():
+        return JsonResponse({'error': 'Valid examination_id is required.'}, status=400)
+
+    exam = Examination.objects.filter(id=int(exam_id)).first()
+    if not exam:
+        return JsonResponse({'error': 'Examination not found.'}, status=404)
+
+    staged_data = request.session.get(f'staged_scan_data_{exam.id}')
+    if not staged_data or not staged_data.get('parsed_questions'):
+        return JsonResponse({'error': 'No staged scan data found for this examination. Please run the scanner first.'}, status=400)
+
+    parsed_questions = staged_data.get('parsed_questions', [])
+    extracted_figures = staged_data.get('extracted_figures', [])
+    extracted_tables = staged_data.get('extracted_tables', [])
+    extracted_formulas = staged_data.get('extracted_formulas', [])
+    dom_elements = staged_data.get('dom_elements', [])
+    total_pages = staged_data.get('total_pages', 1)
+
+    from django.db import transaction
+    from core.models import Question, Rubric, QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
+    from core.ai_engine.document_service import DocumentService
+
+    try:
+        with transaction.atomic():
+            DocumentDOM.objects.update_or_create(
+                examination=exam,
+                defaults={
+                    'elements_json': dom_elements,
+                    'total_pages': total_pages
+                }
+            )
+
+            # Clear old QuestionFigure, QuestionTable, and QuestionFormula records for this exam
+            QuestionFigure.objects.filter(question__examination=exam).delete()
+            QuestionTable.objects.filter(question__examination=exam).delete()
+            QuestionFormula.objects.filter(question__examination=exam).delete()
+
+            print(f"[FINALIZE SCANNED PAPER] Persisting {len(parsed_questions)} questions to Examination ID {exam.id}...")
+            for q_idx, item in enumerate(parsed_questions):
+                q_num = item.get('question_number') or f"Q{q_idx+1}"
                 q_marks = float(item.get('allocated_marks') or 10.0)
                 q_prompt = item.get('prompt_text') or ''
                 q_bloom = item.get('bloom_level') or 'Understand'
@@ -1942,11 +2283,273 @@ def api_scan_question_paper(request):
                         'expected_answer': q_answer
                     }
                 )
-            print("[QUESTION PAPER SCAN] Step 5: Database Save Successful.")
 
-        return JsonResponse({'success': True, 'data': res_data, 'extracted_count': len(extracted_questions)})
+                # Persist single-owner QuestionFigure records
+                for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
+                    QuestionFigure.objects.create(
+                        question=q_obj,
+                        display_order=fig_idx + 1,
+                        page_number=fig_data.get('page_number', 1),
+                        caption=fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
+                        image=fig_data.get('image_path', ''),
+                        thumbnail=fig_data.get('thumbnail_url', ''),
+                        bounding_box=fig_data.get('bounding_box', [])
+                    )
+
+                # Persist single-owner QuestionTable records
+                persisted_table_bboxes = []
+                for tbl_idx, tbl_data in enumerate(item.get('associated_tables', [])):
+                    tbl_bbox = tbl_data.get('bounding_box', [])
+                    is_duplicate_db = False
+                    for prev_bbox in persisted_table_bboxes:
+                        iou_score = DocumentService.calculate_iou(tbl_bbox, prev_bbox)
+                        if iou_score > 0.80:
+                            is_duplicate_db = True
+                            break
+
+                    if not is_duplicate_db:
+                        persisted_table_bboxes.append(tbl_bbox)
+                        QuestionTable.objects.create(
+                            question=q_obj,
+                            display_order=len(persisted_table_bboxes),
+                            page_number=tbl_data.get('page_number', 1),
+                            element_type=tbl_data.get('element_type', 'TABLE'),
+                            caption=tbl_data.get('caption', f'Table {tbl_idx+1} for {q_num}'),
+                            image=tbl_data.get('image_path', ''),
+                            bounding_box=tbl_bbox,
+                            rows=tbl_data.get('rows', 0),
+                            columns=tbl_data.get('columns', 0),
+                            cell_json=tbl_data.get('cell_json', [])
+                        )
+
+            # Clear session staging key
+            if f'staged_scan_data_{exam.id}' in request.session:
+                del request.session[f'staged_scan_data_{exam.id}']
+                request.session.modified = True
+
+            print(f"[FINALIZE SUCCESS] Examination ID {exam.id} paper committed to DB.")
+            return JsonResponse({
+                'success': True,
+                'message': f'Successfully finalized and saved {len(parsed_questions)} questions to examination.',
+                'persisted_count': len(parsed_questions)
+            })
+
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[QUESTION PAPER SCAN EXCEPTION] {e}")
-        return JsonResponse({'error': f"Question Paper Scan Failed: {str(e)}"}, status=500)
+        return JsonResponse({'success': False, 'error': f'Failed to commit finalized paper: {str(e)}'}, status=500)
+
+
+# ==========================================
+# Production AI Script Evaluation & Teacher Review Views
+# ==========================================
+
+from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, EvaluationResult, EvaluationFeedback, TeacherReview, EvaluationHistory, EvaluationAuditLog
+from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+from core.ai_engine.reports.report_generator import EvaluationReportGenerator
+from django.http import HttpResponse
+
+def evaluate_answer_scripts_list(request, exam_id):
+    """Lists all student submissions for a specific examination."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
+
+    return render(request, 'core/evaluate_answer_scripts_list.html', {
+        'exam': exam,
+        'submissions': submissions
+    })
+
+
+def upload_student_submission(request, exam_id):
+    """Handles PDF, ZIP, or Image upload for a student answer script."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    if request.method == 'POST':
+        student_name = request.POST.get('student_name', 'Student').strip()
+        roll_no = request.POST.get('roll_no', '').strip()
+        script_file = request.FILES.get('script_file')
+
+        if not script_file:
+            return JsonResponse({'success': False, 'error': 'No script file provided.'}, status=400)
+
+        sub = StudentSubmission.objects.create(
+            examination=exam,
+            student_name=student_name,
+            student_roll_no=roll_no,
+            script_file=script_file
+        )
+
+        try:
+            # Process & Evaluate Submission asynchronously / synchronously
+            evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
+                submission_id=sub.id,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+
+            return JsonResponse({
+                'success': True,
+                'submission_id': evaluated_sub.id,
+                'total_obtained': float(evaluated_sub.total_obtained_marks),
+                'total_max': float(evaluated_sub.total_max_marks),
+                'percentage': evaluated_sub.percentage,
+                'requires_manual_review': evaluated_sub.requires_manual_review,
+                'message': 'Student script successfully processed and AI evaluated.'
+            })
+        except Exception as e_eval:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Failed during evaluation: {str(e_eval)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def evaluation_workspace(request, submission_id):
+    """Interactive side-by-side Evaluation Workspace for Teacher Review & Overrides."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    exam = submission.examination
+    answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
+
+    return render(request, 'core/evaluation_workspace.html', {
+        'submission': submission,
+        'exam': exam,
+        'answers': answers
+    })
+
+
+def review_evaluation_answer(request, result_id):
+    """API Endpoint for Teacher Override (Approve, Override Marks, Reject, Re-evaluate)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    eval_result = get_object_or_404(EvaluationResult, id=result_id)
+    answer = eval_result.submission_answer
+    submission = answer.submission
+
+    if request.method == 'POST':
+        action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
+        new_marks_val = request.POST.get('new_marks')
+        comments = request.POST.get('comments', '').strip()
+
+        old_marks = eval_result.obtained_marks
+
+        if action == 'APPROVE':
+            eval_result.status = EvaluationResult.ReviewStatus.APPROVED
+            eval_result.requires_manual_review = False
+            eval_result.save()
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.APPROVE,
+                previous_marks=old_marks,
+                new_marks=old_marks,
+                review_comments=comments or 'Approved by teacher.'
+            )
+
+        elif action == 'OVERRIDE':
+            try:
+                new_m = float(new_marks_val)
+                new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
+            except (TypeError, ValueError):
+                return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
+
+            eval_result.obtained_marks = new_m
+            eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
+            eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
+            eval_result.requires_manual_review = False
+            eval_result.save()
+
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.OVERRIDE,
+                previous_marks=old_marks,
+                new_marks=new_m,
+                review_comments=comments
+            )
+            EvaluationHistory.objects.create(
+                evaluation_result=eval_result,
+                modified_by=request.user,
+                old_marks=old_marks,
+                new_marks=new_m,
+                reason=comments or 'Teacher score override'
+            )
+
+        elif action == 'RE_EVALUATE':
+            # Re-run AI evaluation for this specific answer
+            AIScriptEvaluator._evaluate_single_answer(answer)
+            eval_result.refresh_from_db()
+            TeacherReview.objects.create(
+                evaluation_result=eval_result,
+                teacher=request.user,
+                action=TeacherReview.Action.RE_EVALUATE,
+                previous_marks=old_marks,
+                new_marks=eval_result.obtained_marks,
+                review_comments='Requested AI re-evaluation'
+            )
+
+        # Recalculate submission totals
+        all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
+        total_obtained = sum(float(e.obtained_marks) for e in all_evals)
+        total_max = sum(float(e.maximum_marks) for e in all_evals)
+
+        submission.total_obtained_marks = total_obtained
+        submission.total_max_marks = total_max
+        submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
+        submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
+        if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
+            submission.status = StudentSubmission.Status.REVIEWED
+        submission.save()
+
+        EvaluationAuditLog.objects.create(
+            submission=submission,
+            user=request.user,
+            action=f"TEACHER_REVIEW_{action}",
+            details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        return JsonResponse({
+            'success': True,
+            'new_obtained_marks': float(eval_result.obtained_marks),
+            'new_submission_total': float(submission.total_obtained_marks),
+            'submission_percentage': submission.percentage,
+            'submission_status': submission.status,
+            'message': f'Evaluation successfully updated ({action}).'
+        })
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def export_evaluation_report(request, exam_id):
+    """Exports CSV or Report view for an Examination."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    format_type = request.GET.get('format', 'csv').lower()
+
+    if format_type == 'csv':
+        csv_data = EvaluationReportGenerator.generate_csv_report(exam)
+        response = HttpResponse(csv_data, content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="evaluation_report_exam_{exam.id}.csv"'
+        return response
+
+    analytics = EvaluationReportGenerator.generate_analytics_summary(exam)
+    submissions = StudentSubmission.objects.filter(examination=exam).order_by('-total_obtained_marks')
+
+    return render(request, 'core/evaluation_report.html', {
+        'exam': exam,
+        'analytics': analytics,
+        'submissions': submissions
+    })
+

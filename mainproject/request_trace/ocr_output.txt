@@ -1,0 +1,172 @@
+IUBAT_inteRNATionAL University OE business
+Telld]
+AGRIcULTURE
+And Technology
+Fandl IQU/ hy Mlak  Ulinmltah Abun
+IUBAT School of Computer Seienee Mnd Eugincering
+Depurtment of Computer Scienee #nd Eugineering
+Mid Term Examinationof Summer Semester 2026
+ProgrM: Baehelor or Computer Seience nnd Engineering (UCSE)
+Course lustruetor: Ferdnus Anum Jibou
+Time: 04 Hour 30 Minules
+Course Code: CSE 4385
+Full Marks: [00
+Coursc Title: Copmuter Vision and Imge Processing
+Dute: 05
+07 _ 2026
+Scction: E < F
+Instruetions:
+1 Answer all the questions; I. Murks allocated ure indieuted in the right margin:
+PO
+I
+Co
+1.
+represented by the matrix
+C02
+C}
+25
+1.
+Consider the 8-bit grayscale image shown in Figure
+FOI
+given beside: Apply the histogram equalization shifling lechnique to this image and
+detenine the
+resulting pixel value of the Srd row after the transformation:
+f0
+56
+60
+61
+100
+68
+72
+70
+120
+140
+90
+76
+16
+96
+150
+76
+10
+120
+I:
+128
+96
+90
+98
+140
+146
+14
+1J0
+70
+99
+1N4
+96
+99
+80
+13
+Figure 1: Foorball Ground and Corresponding Image Matrix
+Consider
+the
+following
+3x3
+matrix,
+which
+represents
+the
+RGB
+values
+C02
+C3
+15 + [0
+2.
+to Figure I. Convert the RGB value of the first pixel of the matrix
+POI
+E
+25
+corresponding
+into its equivalent HSI (Hue; Saturation, Intensity) and CMY (Cyan, Magenta;
+Yellow) representations   Justify
+answer  with
+an
+appropriate  mathematical
+derivalion
+(120,150,180)
+(130,0,0)
+(0,100,0)
+(200,0,0)
+(0,150,90)
+(0,0,180)
+(255,45,0)
+(100,0,180)
+(0,90,255)
+Page-| of ?
+your
+
+IUBAT_INTERNATIONAL
+UnIVERSiTY 0F
+BU SINESS
+AGRIcULTURE
+AND
+TEChNOLOGY
+Founded 1991 by Md Alimullah
+3.
+university oflice is preparing l0
+scan and
+store three documents:
+a black-and-
+CO1
+C2
+8 + 10
+POI
++7=25
+white attendance shcet;
+a colored
+eveni
+photo. and
+a student's ID card
+scan. The
+university authority has decided (0 prepare a report for technical specifications and
+future reusability, the report should i) explain the different types of digital images
+thal may correspond t0 the files described above, ii) explain the technique used for
+representing digital images in computers,
+stale the commonly used digital
+image formats suitable for storing and processing each of the above files. Write and
+prepare the report for the university.
+4
+Digital Image Processing consists of five fundamental steps: Image Formation,
+CO1
+C2
+10 + I5
+POI
+2
+25
+Image Acquisition, Image Transformalion, Feature Selection, and Classification.
+Briefly explain the core principles of Image Transformation and Feature Selection,
+and
+analyze
+the commonly used techniques and their applications in enhancing
+image analysis, pattern recognition, and classification tasks associated with these
+two steps:
+Blooms Taxonom Levels_in Cognitive Domaln;
+CI: Remember; C2: Understand; C3: Apply; C4: Analyze; CS: Evaluate; C6: Create
+Course Qutcomes:
+COI:Apply
+digital   image   processing   techniques   and
+computer
+vision   algorithms
+t0
+solve   image   analysis;
+identification, recognition, segmentation , detection, and classification operations
+CO2:Explain the  fundamental concepts of computer vision and digital image process
+for
+optimized solution,
+interpretation, and decision making:
+kogram Qutcomes:
+POI: Apply
+knowledge of mathematics, natural science, engineering fundamentals, and an engineering
+specialization as specified in K l to K4 respectively t0 the solution of complex engineering problems.
+Miyan
+and
+iii)
+sing

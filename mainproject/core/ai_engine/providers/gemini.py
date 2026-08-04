@@ -22,7 +22,8 @@ class GeminiProvider(BaseAIProvider):
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
 
-        candidate_models = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+        from .registry import ModelRegistryManager
+        candidate_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")
 
         # Deduplicate preserving order
         unique_models = []
@@ -92,7 +93,7 @@ class GeminiProvider(BaseAIProvider):
                     last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
                     print(f"[GEMINI MODEL {model} ERROR] {last_error}")
                     if e.code in [429, 404, 403]:
-                        # Immediately try next model in unique_models on quota or auth error
+                        ModelRegistryManager.handle_model_error("GeminiProvider", model, f"HTTP {e.code}: {error_body}")
                         break
                     time.sleep(2.0)
                 except Exception as e:

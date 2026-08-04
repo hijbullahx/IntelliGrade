@@ -9,6 +9,43 @@ class BaseAIProvider(ABC):
     Enforces SOLID principles (Interface Segregation & Dependency Inversion).
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": True,
+        "supports_json": True,
+        "supports_function_calling": False,
+        "supports_streaming": False
+    }
+
+    def get_capabilities(self) -> Dict[str, bool]:
+        """Returns declared capability matrix for provider routing."""
+        return getattr(self, 'capabilities', {
+            "supports_text": True, "supports_images": False, "supports_pdf": False, "supports_json": True
+        })
+
+    @staticmethod
+    def log_health_event(provider_name: str, status: str, model_name: str = "AUTO", error_msg: str = "", response_time_ms: int = 0):
+        """Logs provider health metrics, status changes, and rate limits to DB."""
+        try:
+            import datetime
+            from core.models import AIProviderHealth
+            now = datetime.datetime.now()
+            obj, _ = AIProviderHealth.objects.get_or_create(provider_name=provider_name)
+            obj.current_model = model_name
+            obj.status = status
+            if status == AIProviderHealth.HealthStatus.HEALTHY:
+                obj.last_success_at = now
+                if response_time_ms > 0:
+                    obj.avg_response_time_ms = int((obj.avg_response_time_ms + response_time_ms) / 2) if obj.avg_response_time_ms else response_time_ms
+            else:
+                obj.last_failure_at = now
+                obj.error_count += 1
+                obj.last_error_message = str(error_msg)[:500]
+            obj.save()
+        except Exception:
+            pass
+
     @abstractmethod
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         """Generates raw text completion from prompt."""
@@ -116,4 +153,43 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                 except Exception:
                     pass
 
-        return {"questions": []}
+        # Deterministic Regex Question Fallback Extractor if LLM output fails
+        fallback_questions = []
+        q_blocks = re.split(r'(?i)(?=(?:question\s*\d+|q\d+[\.\:]?|\b\d+[\.\)]\s+[A-Z]))', doc_text)
+        for q_idx, block in enumerate(q_blocks):
+            b_text = block.strip()
+            if len(b_text) > 20:
+                num_match = re.search(r'(?i)(question\s*\d+|q\d+|\b\d+[\.\)])', b_text)
+                q_num = num_match.group(1).upper() if num_match else f"Q{q_idx+1}"
+                
+                # Extract marks if present
+                marks_match = re.search(r'\[(\d+(?:\.\d+)?)\s*marks?\]', b_text, re.IGNORECASE)
+                allocated_marks = float(marks_match.group(1)) if marks_match else 25.0
+
+                fallback_questions.append({
+                    "question_number": q_num,
+                    "prompt_text": b_text[:500],
+                    "allocated_marks": allocated_marks,
+                    "question_type": ["Theory"],
+                    "command_verbs": ["Explain"],
+                    "bloom_level": "Understand",
+                    "co_mapping": "CO1",
+                    "po_mapping": ["PO1"],
+                    "criteria": "Accurate response covering key concepts.",
+                    "ideal_answer": "Model answer covering core concepts."
+                })
+
+        return {"questions": fallback_questions if fallback_questions else [
+            {
+                "question_number": "Q1",
+                "prompt_text": doc_text[:500] if doc_text else "Examination Question 1",
+                "allocated_marks": 25.0,
+                "question_type": ["Theory"],
+                "command_verbs": ["Explain"],
+                "bloom_level": "Understand",
+                "co_mapping": "CO1",
+                "po_mapping": ["PO1"],
+                "criteria": "Key grading criteria",
+                "ideal_answer": "Model answer summary"
+            }
+        ]}
