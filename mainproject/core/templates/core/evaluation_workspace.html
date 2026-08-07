@@ -26,12 +26,15 @@
                 <span class="text-xs font-medium theme-text-muted block">Total Score</span>
                 <span id="submissionTotal" class="text-xl font-black text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks }} / {{ submission.total_max_marks }} ({{ submission.percentage }}%)</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
                 <span class="px-3 py-1 rounded-full text-xs font-bold border 
                     {% if submission.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
                     {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
                     {{ submission.get_status_display }}
                 </span>
+                <a href="{% url 'api_download_evaluated_pdf' submission.id %}" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="file-down" class="w-4 h-4"></i> Download Evaluated Script (PDF)
+                </a>
             </div>
         </div>
     </div>

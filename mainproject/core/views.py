@@ -2833,3 +2833,29 @@ def api_reevaluate_v3(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
 
 
+def api_download_evaluated_pdf(request, submission_id):
+    """Generates and serves evaluated script PDF with page-by-page mark distribution overlays."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    try:
+        from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
+        from django.http import FileResponse
+
+        pdf_path = EvaluatedScriptPDFService.generate_evaluated_pdf(submission.id)
+        if not os.path.exists(pdf_path):
+            return JsonResponse({'success': False, 'error': 'Evaluated script PDF could not be generated.'}, status=500)
+
+        filename = f"Evaluated_Script_{submission.student_name.replace(' ', '_')}_Roll_{submission.student_roll_no or submission.id}.pdf"
+        response = FileResponse(open(pdf_path, 'rb'), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f'Failed generating evaluated PDF: {str(e)}'}, status=500)
+
+
