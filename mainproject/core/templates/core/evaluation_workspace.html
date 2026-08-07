@@ -181,8 +181,8 @@
                                 <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
                                     <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
                                 </button>
-                                <button onclick="submitReview({{ eval.id }}, 'RE_EVALUATE')" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs transition-all shadow">
-                                    Re-Evaluate
+                                <button onclick="openReevalModal()" class="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
+                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Evaluate Options
                                 </button>
                             </div>
                         </div>
@@ -198,7 +198,79 @@
     </div>
 </div>
 
+<!-- Re-Evaluation Options Modal -->
+<div id="reevalModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl border border-purple-500/30 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-400"></i> Re-Evaluation Settings (Without Re-uploading)
+            </h3>
+            <button onclick="closeReevalModal()" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Strictness Level</label>
+                <select id="reevalStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary">
+                    <option value="Lenient">Lenient</option>
+                    <option value="Balanced" selected>Balanced</option>
+                    <option value="Strict">Strict</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
+                <select id="reevalEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary">
+                    <option value="Rubric-based" selected>Rubric-based</option>
+                    <option value="Concept-based">Concept & Derivation Based</option>
+                    <option value="Keyword-based">Keyword-based</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Custom Teacher Prompt / Instructions</label>
+                <textarea id="reevalCustomPrompt" rows="3" placeholder="e.g. Ignore minor spelling mistakes. Award method marks for derivation." class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button onclick="closeReevalModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
+            <button onclick="submitReevalV3()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg">Run Re-Evaluation</button>
+        </div>
+    </div>
+</div>
+
 <script>
+function openReevalModal() {
+    document.getElementById('reevalModal').classList.remove('hidden');
+}
+function closeReevalModal() {
+    document.getElementById('reevalModal').classList.add('hidden');
+}
+
+async function submitReevalV3() {
+    const payload = {
+        strictness: document.getElementById('reevalStrictness').value,
+        eval_mode: document.getElementById('reevalEvalMode').value,
+        custom_prompt: document.getElementById('reevalCustomPrompt').value
+    };
+
+    try {
+        const resp = await fetch(`/api/submission/{{ submission.id }}/reevaluate-v3/`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("Re-Evaluation completed successfully!");
+            window.location.reload();
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Re-evaluation failed: " + err.message);
+    }
+}
+
 async function submitReview(resultId, action) {
     const overrideInput = document.getElementById(`override_input_${resultId}`);
     const newMarks = overrideInput ? overrideInput.value : null;

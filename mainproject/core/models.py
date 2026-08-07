@@ -493,3 +493,56 @@ class EvaluationAuditLog(models.Model):
         return f"AuditLog: {self.action} on {self.submission.id} at {self.timestamp}"
 
 
+class SubmissionPDF(models.Model):
+    submission = models.OneToOneField(StudentSubmission, on_delete=models.CASCADE, related_name='pdf_document')
+    pdf_file = models.FileField(upload_to='submission_pdfs/%Y/%m/')
+    page_count = models.IntegerField(default=1)
+    file_size_bytes = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Submission PDF for {self.submission.student_name} ({self.page_count} pages)"
+
+
+class SubmissionImage(models.Model):
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='raw_images')
+    original_file = models.ImageField(upload_to='submission_raw_images/%Y/%m/')
+    processed_file = models.ImageField(upload_to='submission_processed_images/%Y/%m/', null=True, blank=True)
+    sequence_order = models.IntegerField(default=1)
+    rotation_angle = models.IntegerField(default=0)
+    is_deleted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"SubmissionImage #{self.sequence_order} for {self.submission.student_name}"
+
+
+class OCRResult(models.Model):
+    submission_page = models.ForeignKey(SubmissionPage, on_delete=models.CASCADE, related_name='ocr_results')
+    engine_name = models.CharField(max_length=50, default='EASYOCR')
+    page_confidence = models.FloatField(default=0.0)
+    word_boxes_json = models.JSONField(default=list, help_text="Per-word bbox, text, and confidence ratings")
+    line_boxes_json = models.JSONField(default=list, help_text="Per-line bbox and text")
+    raw_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"OCRResult ({self.engine_name}) Page {self.submission_page.page_number} - Conf: {self.page_confidence}"
+
+
+class PromptHistory(models.Model):
+    evaluation_result = models.ForeignKey(EvaluationResult, on_delete=models.CASCADE, related_name='prompt_history')
+    teacher = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    custom_prompt = models.TextField(blank=True)
+    evaluation_mode = models.CharField(max_length=50, default='Rubric-based')
+    strictness_level = models.CharField(max_length=30, default='Balanced')
+    ai_provider = models.CharField(max_length=50, default='GEMINI')
+    model_name = models.CharField(max_length=100, default='AUTO')
+    temperature = models.FloatField(default=0.2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"PromptHistory for Result #{self.evaluation_result.id} at {self.created_at}"
+
+
+

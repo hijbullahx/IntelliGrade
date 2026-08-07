@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+from django.core.files.base import ContentFile
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
@@ -2344,8 +2345,9 @@ def api_finalize_scanned_paper(request):
 # Production AI Script Evaluation & Teacher Review Views
 # ==========================================
 
-from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, EvaluationResult, EvaluationFeedback, TeacherReview, EvaluationHistory, EvaluationAuditLog
+from core.models import StudentSubmission, SubmissionPDF, SubmissionImage, SubmissionPage, SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback, TeacherReview, EvaluationHistory, PromptHistory, EvaluationAuditLog
 from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+from core.ai_engine.preprocessing.image_processor import ImagePreprocessingService
 from core.ai_engine.reports.report_generator import EvaluationReportGenerator
 from django.http import HttpResponse
 
@@ -2552,4 +2554,216 @@ def export_evaluation_report(request, exam_id):
         'analytics': analytics,
         'submissions': submissions
     })
+
+
+def evaluation_wizard(request, exam_id):
+    """Multi-Step Submission & Evaluation Wizard (v3.0)."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    return render(request, 'core/evaluation_wizard.html', {
+        'exam': exam
+    })
+
+
+def api_upload_raw_images(request, exam_id):
+    """Ingests raw student script page images for Submission Builder."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    if request.method == 'POST':
+        student_name = request.POST.get('student_name', 'Student').strip()
+        roll_no = request.POST.get('roll_no', '').strip()
+        image_files = request.FILES.getlist('images')
+
+        if not image_files:
+            return JsonResponse({'success': False, 'error': 'No image files provided.'}, status=400)
+
+        sub = StudentSubmission.objects.create(
+            examination=exam,
+            student_name=student_name,
+            student_roll_no=roll_no
+        )
+
+        for seq, img_file in enumerate(image_files, 1):
+            SubmissionImage.objects.create(
+                submission=sub,
+                original_file=img_file,
+                sequence_order=seq
+            )
+
+        return JsonResponse({
+            'success': True,
+            'submission_id': sub.id,
+            'image_count': len(image_files),
+            'message': 'Raw page images uploaded successfully.'
+        })
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def api_get_submission_images(request, submission_id):
+    """Returns list of raw page images for a submission."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    raw_images = submission.raw_images.filter(is_deleted=False).order_by('sequence_order')
+    data = [{
+        'id': r.id,
+        'url': r.original_file.url if r.original_file else '',
+        'file_name': os.path.basename(r.original_file.name) if r.original_file else f"Page {r.sequence_order}",
+        'sequence_order': r.sequence_order,
+        'rotation_angle': r.rotation_angle
+    } for r in raw_images]
+    return JsonResponse({
+        'success': True,
+        'images': data,
+        'student_name': submission.student_name,
+        'roll_no': submission.student_roll_no
+    })
+
+
+def api_delete_all_submission_images(request, submission_id):
+    """Deletes all raw page images for a submission."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    submission.raw_images.all().delete()
+    return JsonResponse({'success': True, 'message': 'All page images removed.'})
+
+
+def api_create_submission_pdf(request, submission_id):
+    """Compiles uploaded/reordered raw images into submission_original.pdf and returns preview URL."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    try:
+        raw_images = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+        if not raw_images:
+            return JsonResponse({'success': False, 'error': 'No raw page images found.'}, status=400)
+
+        img_paths = [r.original_file.path for r in raw_images]
+        pdf_out_path = os.path.join(settings.MEDIA_ROOT, 'submission_pdfs', f'submission_{submission.id}_original.pdf')
+        compiled_path, page_count = ImagePreprocessingService.compile_images_to_pdf(img_paths, pdf_out_path)
+
+        with open(compiled_path, 'rb') as f_pdf:
+            sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
+            sub_pdf.pdf_file.save(f"submission_{submission.id}_original.pdf", ContentFile(f_pdf.read()), save=False)
+            sub_pdf.page_count = page_count
+            sub_pdf.file_size_bytes = os.path.getsize(compiled_path)
+            sub_pdf.save()
+
+        # Update main submission script_file
+        submission.script_file = sub_pdf.pdf_file.name
+        submission.save()
+
+        return JsonResponse({
+            'success': True,
+            'pdf_url': sub_pdf.pdf_file.url,
+            'page_count': page_count,
+            'message': 'Generated submission_original.pdf preview successfully.'
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f'Failed compiling PDF: {str(e)}'}, status=500)
+
+
+def api_run_evaluation_v3(request, submission_id):
+    """Executes Version 3.0 Computer Vision preprocessing, OCR, segmentation, and LLM evaluation."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            body_data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        except Exception:
+            body_data = request.POST.dict()
+
+        options = {
+            'ink_color': body_data.get('ink_color', 'None'),
+            'deskew': body_data.get('deskew', True),
+            'shadow_removal': body_data.get('shadow_removal', True),
+            'background_whitening': body_data.get('background_whitening', True),
+            'contrast_enhancement': body_data.get('contrast_enhancement', True),
+            'noise_removal': body_data.get('noise_removal', True),
+            'ocr_mode': body_data.get('ocr_mode', 'Balanced'),
+            'strictness': body_data.get('strictness', 'Balanced'),
+            'eval_mode': body_data.get('eval_mode', 'Rubric-based'),
+            'custom_prompt': body_data.get('custom_prompt', '').strip()
+        }
+
+        try:
+            evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
+                submission_id=submission.id,
+                options=options,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            return JsonResponse({
+                'success': True,
+                'submission_id': evaluated_sub.id,
+                'total_obtained': float(evaluated_sub.total_obtained_marks),
+                'total_max': float(evaluated_sub.total_max_marks),
+                'percentage': evaluated_sub.percentage,
+                'requires_manual_review': evaluated_sub.requires_manual_review,
+                'workspace_url': f"/teacher/submission/{evaluated_sub.id}/workspace/",
+                'message': 'Version 3.0 AI Evaluation completed successfully.'
+            })
+        except Exception as e_eval:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Evaluation failed: {str(e_eval)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
+
+def api_reevaluate_v3(request, submission_id):
+    """Re-evaluates a submission with new custom prompt / strictness settings without re-uploading."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            body_data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        except Exception:
+            body_data = request.POST.dict()
+
+        options = {
+            'custom_prompt': body_data.get('custom_prompt', '').strip(),
+            'strictness': body_data.get('strictness', 'Balanced'),
+            'eval_mode': body_data.get('eval_mode', 'Rubric-based')
+        }
+
+        try:
+            reevaluated_sub = AIScriptEvaluator.reevaluate_submission(
+                submission_id=submission.id,
+                options=options,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            return JsonResponse({
+                'success': True,
+                'new_total_obtained': float(reevaluated_sub.total_obtained_marks),
+                'percentage': reevaluated_sub.percentage,
+                'message': 'Re-evaluation completed successfully.'
+            })
+        except Exception as e_reeval:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Re-evaluation failed: {str(e_reeval)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+
 

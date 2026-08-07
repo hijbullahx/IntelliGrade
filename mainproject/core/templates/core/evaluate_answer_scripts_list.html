@@ -17,8 +17,11 @@
             <p class="text-xs theme-text-muted mt-1">Examination: <strong>{{ exam.title }}</strong> | Total Questions: <strong>{{ exam.questions.count }}</strong></p>
         </div>
         <div class="flex items-center gap-3">
+            <a href="{% url 'evaluation_wizard' exam.id %}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard (v3.0)
+            </a>
             <button onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
-                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Answer Script (PDF / ZIP / Image)
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Quick Upload
             </button>
             <a href="{% url 'export_evaluation_report' exam.id %}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary font-bold rounded-xl transition-all flex items-center gap-2 text-xs">
                 <i data-lucide="download" class="w-4 h-4"></i> Download Report (CSV)
