@@ -61,12 +61,12 @@
                         <span class="font-bold text-xs theme-text-primary">Multiple Page Images</span>
                         <p class="text-[11px] theme-text-muted">Drag & drop pages, mobile camera photos, or JPEG/PNG gallery files.</p>
                     </label>
-                    <label class="p-4 rounded-xl border border-slate-700 bg-slate-900/50 cursor-pointer space-y-1 block">
+                    <label class="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 cursor-pointer space-y-1 block">
                         <input type="radio" name="uploadType" value="pdf" onchange="toggleUploadMode()" class="mr-2">
                         <span class="font-bold text-xs theme-text-primary">Single PDF Document</span>
                         <p class="text-[11px] theme-text-muted">Upload a pre-scanned student answer script PDF.</p>
                     </label>
-                    <label class="p-4 rounded-xl border border-slate-700 bg-slate-900/50 cursor-pointer space-y-1 block">
+                    <label class="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 cursor-pointer space-y-1 block">
                         <input type="radio" name="uploadType" value="zip" onchange="toggleUploadMode()" class="mr-2">
                         <span class="font-bold text-xs theme-text-primary">ZIP Archive (Batch)</span>
                         <p class="text-[11px] theme-text-muted">Batch upload multiple student scripts inside one ZIP.</p>
@@ -90,11 +90,11 @@
                 </div>
             </div>
 
-            <div id="pdfDropzone" class="hidden border-2 border-dashed border-slate-700 rounded-2xl p-8 text-center bg-slate-900/50">
+            <div id="pdfDropzone" class="hidden border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center bg-slate-100/60 dark:bg-slate-900/50">
                 <i data-lucide="file-text" class="w-10 h-10 text-slate-400 mx-auto mb-2"></i>
                 <h4 class="font-extrabold text-sm theme-text-primary">Upload Answer Script PDF</h4>
                 <input type="file" id="pdfInput" accept=".pdf,.zip" class="hidden" onchange="handlePdfSelection(this)">
-                <button type="button" onclick="document.getElementById('pdfInput').click()" class="mt-4 px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                <button type="button" onclick="document.getElementById('pdfInput').click()" class="mt-4 px-5 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 theme-text-primary font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
                     <i data-lucide="file" class="w-4 h-4"></i> Select PDF File
                 </button>
             </div>
@@ -116,19 +116,19 @@
                 </h3>
                 <div class="flex items-center gap-3">
                     <span id="pageCounter" class="text-xs font-bold text-brand-500">0 Pages Uploaded</span>
-                    <button type="button" onclick="removeAllPages()" class="px-3 py-1 bg-rose-600/20 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                    <button type="button" onclick="removeAllPages()" class="px-3 py-1 bg-rose-600/20 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove All Pages
                     </button>
                 </div>
             </div>
 
             <!-- Page Grid Thumbnails -->
-            <div id="thumbnailContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[50vh] overflow-y-auto p-2 border border-slate-800 rounded-xl bg-slate-900/40">
+            <div id="thumbnailContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[50vh] overflow-y-auto p-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40">
                 <div class="col-span-full text-center py-12 theme-text-muted text-xs font-medium">No page images uploaded yet in Step 1.</div>
             </div>
 
             <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                <button type="button" onclick="goToStep(1)" class="px-5 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">&larr; Back to Files</button>
+                <button type="button" onclick="goToStep(1)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Files</button>
                 <div class="flex items-center gap-3">
                     <button type="button" onclick="compileAndPreviewPdf()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
                         <i data-lucide="eye" class="w-4 h-4"></i> Preview PDF Script
@@ -142,7 +142,7 @@
 
         <!-- STEP 3: Computer Vision Preprocessing & Custom Prompt Options -->
         <div id="step3Content" class="hidden space-y-6">
-            <h3 class="font-extrabold text-sm theme-text-primary border-b border-slate-800 pb-3 flex items-center gap-2">
+            <h3 class="font-extrabold text-sm theme-text-primary border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center gap-2">
                 <i data-lucide="sliders" class="w-4 h-4 text-emerald-500"></i> Image Preprocessing & Evaluation Configuration
             </h3>
 
@@ -169,14 +169,14 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div>
                     <label class="block text-xs font-bold theme-text-muted mb-1">OCR Mode</label>
-                    <select id="optOcrMode" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary">
+                    <select id="optOcrMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
                         <option value="Balanced" selected>Balanced (EasyOCR + PyMuPDF)</option>
                         <option value="High Accuracy">High Accuracy (Multi-Engine Ensemble)</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-xs font-bold theme-text-muted mb-1">LLM Strictness Level</label>
-                    <select id="optStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary">
+                    <select id="optStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
                         <option value="Lenient">Lenient (Give partial marks freely)</option>
                         <option value="Balanced" selected>Balanced (Standard University Grading)</option>
                         <option value="Strict">Strict (Exact technical accuracy)</option>
@@ -184,7 +184,7 @@
                 </div>
                 <div>
                     <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
-                    <select id="optEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary">
+                    <select id="optEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
                         <option value="Rubric-based" selected>Rubric-based Evaluation</option>
                         <option value="Concept-based">Concept & Derivation Based</option>
                         <option value="Keyword-based">Keyword Matching Based</option>
@@ -195,11 +195,11 @@
             <!-- Custom Multiline Prompt Textbox -->
             <div class="pt-2">
                 <label class="block text-xs font-bold theme-text-muted mb-1">Custom Teacher Prompt / Instructions (Optional)</label>
-                <textarea id="customPrompt" rows="3" placeholder="e.g. Ignore minor spelling mistakes. Award method marks if formula derivation steps are correct." class="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+                <textarea id="customPrompt" rows="3" placeholder="e.g. Ignore minor spelling mistakes. Award method marks if formula derivation steps are correct." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
             </div>
 
-            <div class="flex items-center justify-between pt-4 border-t border-slate-800">
-                <button type="button" onclick="goToStep(2)" class="px-5 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">&larr; Back to Builder</button>
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(2)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Builder</button>
                 <button type="button" onclick="startAiEvaluationV3()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
                     <i data-lucide="play" class="w-4 h-4"></i> Start AI Evaluation Pipeline
                 </button>
@@ -461,9 +461,9 @@ function renderThumbnails() {
     uploadedFiles.forEach((file, idx) => {
         const url = getImageUrl(file);
         const card = document.createElement('div');
-        card.className = "border border-slate-700 rounded-xl p-2.5 bg-slate-900/90 space-y-2 text-center relative group shadow-lg";
+        card.className = "border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900/90 space-y-2 text-center relative group shadow-lg";
         card.innerHTML = `
-            <div class="relative overflow-hidden rounded-lg bg-black/40 h-36 flex items-center justify-center cursor-pointer" onclick="previewPageModal(${idx})">
+            <div class="relative overflow-hidden rounded-lg bg-slate-100 dark:bg-black/40 h-36 flex items-center justify-center cursor-pointer" onclick="previewPageModal(${idx})">
                 <img id="page_img_${idx}" src="${url}" class="max-h-full max-w-full object-contain transition-transform duration-300" style="transform: rotate(${pageRotationAngles[idx]}deg)">
                 <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button type="button" onclick="event.stopPropagation(); previewPageModal(${idx})" class="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur" title="Zoom Preview">
@@ -479,11 +479,11 @@ function renderThumbnails() {
             </div>
 
             <div class="flex items-center justify-between px-1">
-                <button type="button" onclick="movePageLeft(${idx})" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs font-bold text-white"'} title="Move Left">
+                <button type="button" onclick="movePageLeft(${idx})" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Left">
                     &larr; Left
                 </button>
-                <span class="text-[11px] font-bold text-brand-400">Page ${idx + 1}</span>
-                <button type="button" onclick="movePageRight(${idx})" ${idx === uploadedFiles.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs font-bold text-white"'} title="Move Right">
+                <span class="text-[11px] font-bold text-brand-500 dark:text-brand-400">Page ${idx + 1}</span>
+                <button type="button" onclick="movePageRight(${idx})" ${idx === uploadedFiles.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Right">
                     Right &rarr;
                 </button>
             </div>
