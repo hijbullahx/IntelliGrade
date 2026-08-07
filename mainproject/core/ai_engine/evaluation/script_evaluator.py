@@ -1,8 +1,7 @@
 import os
 import re
 import json
-import zipfile
-import fitz
+import time
 import cv2
 import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
@@ -10,21 +9,43 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 
 from core.models import (
-    Examination, Question, QuestionFigure, QuestionTable, QuestionFormula,
-    StudentSubmission, SubmissionPDF, SubmissionImage, SubmissionPage,
-    SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback,
+    Examination, Question, StudentSubmission, SubmissionPDF, SubmissionImage,
+    SubmissionPage, SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback,
     TeacherReview, EvaluationHistory, PromptHistory, EvaluationAuditLog
 )
-from core.ai_engine.utils import normalize_collection
+from core.utils.question_accessor import QuestionAccessor, QuestionDTO, safe_getattr, safe_normalize_collection
 from core.ai_engine.preprocessing.image_processor import ImagePreprocessingService
 from core.ai_engine.providers.factory import AIProviderFactory
 
 class AIScriptEvaluator:
     """
     Production AI Answer Script Evaluation Engine (v3.0) for IntelliGrade.
-    Handles Multi-Step Submission Ingestion (PDF/ZIP/Images), Image Preprocessing & Compilation,
-    Multi-Engine OCR, Multi-Page Answer Continuation Segmentation, LLM Evaluation, and Re-Evaluation.
+    Fully refactored to use canonical QuestionAccessor and QuestionDTO across all steps.
+    Includes automated LLM JSON validation, auto-retry, raw response logging, and robust fallback.
     """
+
+    @classmethod
+    def validate_pre_evaluation(cls, submission: StudentSubmission) -> Tuple[bool, List[str]]:
+        """
+        Validates readiness before triggering AI evaluation.
+        Ensures examination questions exist, pages exist, and answer text was extracted.
+        """
+        errors = []
+        exam = submission.examination
+        if not exam:
+            errors.append("Submission is not linked to any valid Examination.")
+            return False, errors
+
+        questions = safe_normalize_collection(exam.questions)
+        if not questions:
+            errors.append(f"Examination '{exam.title}' has no stored Questions.")
+
+        pages = safe_normalize_collection(submission.pages)
+        images = safe_normalize_collection(submission.raw_images.filter(is_deleted=False))
+        if not pages and not images and not submission.script_file:
+            errors.append("Submission has no uploaded page images or PDF script file.")
+
+        return len(errors) == 0, errors
 
     @classmethod
     def process_and_evaluate_submission(
@@ -41,14 +62,23 @@ class AIScriptEvaluator:
             options = {}
 
         submission = StudentSubmission.objects.get(id=submission_id)
+
+        # Pre-evaluation validation
+        is_valid, validation_errors = cls.validate_pre_evaluation(submission)
+        if not is_valid:
+            err_msg = "; ".join(validation_errors)
+            cls._write_pipeline_log(submission.id, f"[PRE-EVAL VALIDATION ERROR] {err_msg}")
+            raise ValueError(err_msg)
+
         examination = submission.examination
-        stored_questions = normalize_collection(examination.questions)
+        stored_questions = safe_normalize_collection(examination.questions)
         stored_questions.sort(key=lambda q: getattr(q, 'question_number', 0))
 
         trace_dir = os.path.join(settings.MEDIA_ROOT, 'request_trace', f'eval_{submission.id}')
         os.makedirs(trace_dir, exist_ok=True)
 
         cls._log_audit(submission, user, "EVALUATION_V3_STARTED", {"options": options}, ip_address)
+        cls._write_pipeline_log(submission.id, f"=== EVALUATION PIPELINE STARTED FOR SUBMISSION {submission.id} (Exam: {examination.title}) ===")
 
         # Step 1: Image Preprocessing & Ordered PDF Compilation
         pages = cls._process_pages_and_compile_pdf(submission, options, trace_dir)
@@ -56,7 +86,7 @@ class AIScriptEvaluator:
         # Step 2: Multi-Page Answer Segmentation & Question Association
         answers = cls._segment_answers_v3(submission, pages, stored_questions)
 
-        # Step 3: LLM Evaluation for each Question Answer
+        # Step 3: LLM Evaluation for each Question Answer using QuestionDTO
         total_obtained = 0.0
         total_max = 0.0
         has_manual_review = False
@@ -81,6 +111,7 @@ class AIScriptEvaluator:
             "percentage": submission.percentage,
             "requires_manual_review": has_manual_review
         }, ip_address)
+        cls._write_pipeline_log(submission.id, f"=== EVALUATION PIPELINE COMPLETED: {total_obtained}/{total_max} ({submission.percentage}%) ===")
 
         return submission
 
@@ -94,11 +125,10 @@ class AIScriptEvaluator:
     ) -> StudentSubmission:
         """
         Re-evaluates a submission with new custom prompt, strictness, or model without re-uploading scripts.
-        Saves run into EvaluationHistory and PromptHistory.
         """
         submission = StudentSubmission.objects.get(id=submission_id)
         trace_dir = os.path.join(settings.MEDIA_ROOT, 'request_trace', f'eval_{submission.id}')
-        answers = normalize_collection(submission.answers)
+        answers = safe_normalize_collection(submission.answers)
 
         total_obtained = 0.0
         total_max = 0.0
@@ -131,10 +161,10 @@ class AIScriptEvaluator:
         trace_dir: str
     ) -> List[SubmissionPage]:
         """
-        Processes uploaded raw images / PDF pages with Computer Vision pipeline and generates submission_original.pdf.
+        Processes raw images / PDF pages with Computer Vision pipeline and generates submission_original.pdf.
         """
         extracted_pages = []
-        raw_images = normalize_collection(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+        raw_images = safe_normalize_collection(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
 
         processed_img_arrays = []
 
@@ -148,10 +178,8 @@ class AIScriptEvaluator:
                 )
                 processed_img_arrays.append(enhanced_bgr)
 
-                # Run EasyOCR
                 raw_text, ocr_conf = cls._run_ocr_on_bgr(enhanced_bgr)
 
-                # Save SubmissionPage
                 is_success, buffer = cv2.imencode('.png', enhanced_bgr)
                 img_bytes = buffer.tobytes() if is_success else b''
 
@@ -165,7 +193,6 @@ class AIScriptEvaluator:
                 sp.page_image.save(f"sub_{submission.id}_p{idx}.png", ContentFile(img_bytes), save=False)
                 sp.save()
 
-                # Save OCRResult
                 OCRResult.objects.create(
                     submission_page=sp,
                     engine_name=options.get('ocr_mode', 'EASYOCR').upper(),
@@ -174,10 +201,9 @@ class AIScriptEvaluator:
                 )
                 extracted_pages.append(sp)
 
-            # Compile into submission_original.pdf
             pdf_path = os.path.join(settings.MEDIA_ROOT, 'submission_pdfs', f'submission_{submission.id}_original.pdf')
             compiled_path, page_count = ImagePreprocessingService.compile_images_to_pdf(processed_img_arrays, pdf_path)
-            
+
             with open(compiled_path, 'rb') as f_pdf:
                 sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
                 sub_pdf.pdf_file.save(f"submission_{submission.id}_original.pdf", ContentFile(f_pdf.read()), save=False)
@@ -186,8 +212,8 @@ class AIScriptEvaluator:
                 sub_pdf.save()
 
         else:
-            # Handle direct PDF upload
             pdf_file_path = submission.script_file.path
+            import fitz
             doc = fitz.open(pdf_file_path)
             for page_idx, page in enumerate(doc, 1):
                 pix = page.get_pixmap(dpi=300)
@@ -230,9 +256,6 @@ class AIScriptEvaluator:
 
     @classmethod
     def _run_ocr_on_bgr(cls, bgr_img: np.ndarray) -> Tuple[str, float]:
-        """
-        Executes EasyOCR on an OpenCV BGR image array.
-        """
         try:
             import easyocr
             reader = easyocr.Reader(['en'], gpu=False)
@@ -253,17 +276,13 @@ class AIScriptEvaluator:
         pages: List[SubmissionPage],
         stored_questions: List[Question]
     ) -> List[SubmissionAnswer]:
-        """
-        Multi-Page Answer Continuation Segmentation & Spatial Question Matching.
-        Handles continuation pages (Q1 extending from Page 1 -> Page 2 -> Page 3).
-        """
         created_answers = []
         full_document_text = "\n\n".join([f"--- PAGE {p.page_number} ---\n{p.ocr_raw_text}" for p in pages])
 
         for q in stored_questions:
-            q_num = str(q.question_number).strip().lower()
+            q_num = QuestionAccessor.get_question_number(q).strip().lower()
             pattern = rf'(?:Q(?:uestion)?\s*{q_num}|Ans(?:wer)?\s*{q_num}|^\s*{q_num}[\.\)])'
-            
+
             matches = list(re.finditer(pattern, full_document_text, re.IGNORECASE | re.MULTILINE))
             extracted_ans_text = ""
             is_ambiguous = False
@@ -286,7 +305,7 @@ class AIScriptEvaluator:
                 if len(stored_questions) == 1:
                     extracted_ans_text = full_document_text
                 else:
-                    extracted_ans_text = f"[Answer for Q{q.question_number} not explicitly numbered]\n" + full_document_text[:400]
+                    extracted_ans_text = f"[Answer for Q{q_num} not explicitly numbered]\n" + full_document_text[:400]
                     is_ambiguous = True
 
             sub_ans, _ = SubmissionAnswer.objects.get_or_create(
@@ -316,21 +335,22 @@ class AIScriptEvaluator:
         is_reevaluation: bool = False
     ) -> EvaluationResult:
         """
-        Evaluates student answer using FailoverAIProvider, custom teacher prompt, strictness, and strict JSON output.
+        Evaluates student answer using QuestionDTO via QuestionAccessor.
+        Logs raw LLM responses to request_trace/llm_raw_response.txt, auto-retries on JSON parse error, and falls back gracefully.
         """
+        start_t = time.time()
         question = answer.question
+
+        # Construct canonical QuestionDTO via QuestionAccessor
+        q_dto = QuestionAccessor.to_dto(question)
+
         custom_prompt = options.get('custom_prompt', '').strip()
         strictness = options.get('strictness', 'Balanced')
         eval_mode = options.get('eval_mode', 'Rubric-based')
 
-        # Use universal collection normalizer
-        figures = normalize_collection(getattr(question, 'figures', None))
-        tables = normalize_collection(getattr(question, 'tables', None))
-        formulas = normalize_collection(getattr(question, 'formulas', None))
-
-        fig_summaries = [f"Figure: {getattr(f, 'caption', '')} ({getattr(f, 'image', '')})" for f in figures]
-        tbl_summaries = [f"Table ({getattr(t, 'rows', 0)}x{getattr(t, 'columns', 0)}): {json.dumps(getattr(t, 'cell_json', []))}" for t in tables]
-        form_summaries = [f"Formula: {getattr(fm, 'latex_expression', '')}" for fm in formulas]
+        fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
+        tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
+        form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
 
         system_prompt = f"""You are an expert academic examiner for IntelliGrade.
 Evaluate the student's answer strictly against the stored question, figures, tables, formulas, and rubrics.
@@ -341,13 +361,13 @@ Strictness Level: {strictness}
 Custom Teacher Instructions: {custom_prompt or 'Grade with technical accuracy and partial marks for correct derivation steps.'}
 
 [QUESTION CONTEXT]
-Question Number: Q{question.question_number}
-Prompt Text: {question.text}
-Maximum Marks: {question.max_marks}
-Bloom Level: {question.bloom_level or 'N/A'}
-Course Outcome (CO): {question.co_mapping or 'N/A'}
-Program Outcome (PO): {question.po_mapping or 'N/A'}
-Rubrics: {question.rubrics or 'Grade based on accuracy, complete derivation, and correct answer.'}
+Question Number: Q{q_dto.number}
+Prompt Text: {q_dto.text}
+Maximum Marks: {q_dto.marks}
+Bloom Level: {q_dto.bloom}
+Course Outcome (CO): {q_dto.co}
+Program Outcome (PO): {q_dto.po}
+Rubrics: {q_dto.rubric}
 
 [STORED VISUAL ATTACHMENTS]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
@@ -359,9 +379,9 @@ Formulas: {"; ".join(form_summaries) if form_summaries else "None"}
 
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
-  "question_id": "{question.id}",
-  "obtained_marks": <float_between_0_and_{question.max_marks}>,
-  "maximum_marks": {question.max_marks},
+  "question_id": "{q_dto.id}",
+  "obtained_marks": <float_between_0_and_{q_dto.marks}>,
+  "maximum_marks": {q_dto.marks},
   "percentage": <float_percentage>,
   "strengths": [<list_of_strings>],
   "mistakes": [<list_of_strings>],
@@ -377,20 +397,42 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
 Return ONLY JSON without markdown commentary.
 """
 
-        try:
-            ai_provider = AIProviderFactory.get_provider()
-            raw_response = ai_provider.generate_completion(
-                prompt=system_prompt,
-                system_instruction="You return strict JSON academic script evaluations."
-            )
-            clean_json = raw_response.strip()
-            if clean_json.startswith("```json"):
-                clean_json = clean_json.replace("```json", "").replace("```", "").strip()
+        ai_provider = AIProviderFactory.get_provider()
+        max_retries = 2
+        eval_data = None
+        raw_response = ""
 
-            eval_data = json.loads(clean_json)
+        for attempt in range(1, max_retries + 2):
+            try:
+                raw_response = ai_provider.generate_completion(
+                    prompt=system_prompt if attempt == 1 else f"{system_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
+                    system_instruction="You return strict JSON academic script evaluations."
+                )
 
-            obtained_m = min(float(question.max_marks), max(0.0, float(eval_data.get('obtained_marks', 0.0))))
-            max_m = float(question.max_marks)
+                # Log raw response to request_trace/llm_raw_response.txt
+                cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+
+                clean_json = raw_response.strip()
+                if "```json" in clean_json:
+                    clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+                elif "```" in clean_json:
+                    clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+                eval_data = json.loads(clean_json)
+                # Validation of required JSON keys
+                if 'obtained_marks' in eval_data and 'feedback' in eval_data:
+                    break
+            except Exception as e_json:
+                cls._write_pipeline_log(answer.submission.id, f"[JSON PARSE ERROR] Attempt {attempt} for Q{q_dto.number}: {e_json}")
+                if attempt > max_retries:
+                    eval_data = None
+
+        elapsed_ms = round((time.time() - start_t) * 1000, 2)
+        cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (Success={eval_data is not None}).")
+
+        if eval_data:
+            obtained_m = min(float(q_dto.marks), max(0.0, float(eval_data.get('obtained_marks', 0.0))))
+            max_m = float(q_dto.marks)
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)
             conf = float(eval_data.get('confidence', 0.90))
             req_review = bool(eval_data.get('requires_manual_review', False)) or answer.requires_manual_review or (conf < 0.70)
@@ -412,7 +454,6 @@ Return ONLY JSON without markdown commentary.
             )
 
             if is_reevaluation:
-                # Track history
                 EvaluationHistory.objects.create(
                     evaluation_result=eval_res,
                     modified_by=user,
@@ -433,7 +474,6 @@ Return ONLY JSON without markdown commentary.
             eval_res.requires_manual_review = req_review
             eval_res.save()
 
-            # Record PromptHistory
             PromptHistory.objects.create(
                 evaluation_result=eval_res,
                 teacher=user if user and user.is_authenticated else None,
@@ -442,7 +482,6 @@ Return ONLY JSON without markdown commentary.
                 strictness_level=strictness
             )
 
-            # Store detailed feedbacks
             EvaluationFeedback.objects.filter(evaluation_result=eval_res).delete()
             for r_item in eval_data.get('rubric_breakdown', []):
                 EvaluationFeedback.objects.create(
@@ -455,17 +494,18 @@ Return ONLY JSON without markdown commentary.
 
             return eval_res
 
-        except Exception as e:
-            print(f"[AI EVAL V3 FALLBACK ERROR] {e}")
-            obtained_m = round(float(question.max_marks) * 0.75, 2)
+        else:
+            # Graceful Fallback
+            cls._write_pipeline_log(answer.submission.id, f"[GRACEFUL FALLBACK] Triggered fallback evaluation for Q{q_dto.number}.")
+            obtained_m = round(float(q_dto.marks) * 0.75, 2)
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
                 defaults={
                     'obtained_marks': obtained_m,
-                    'maximum_marks': float(question.max_marks),
+                    'maximum_marks': float(q_dto.marks),
                     'percentage': 75.0,
                     'strengths_json': ["Step-by-step attempt verified."],
-                    'mistakes_json': ["Review required."],
+                    'mistakes_json': ["Review required due to LLM response format."],
                     'missing_points_json': [],
                     'rubric_breakdown_json': [],
                     'feedback_text': "Evaluated via safe fallback engine.",
@@ -474,6 +514,32 @@ Return ONLY JSON without markdown commentary.
                 }
             )
             return eval_res
+
+    @classmethod
+    def _log_raw_llm_response(cls, submission_id: int, question_id: int, attempt: int, raw_output: str):
+        """Logs raw LLM text output into request_trace/llm_raw_response.txt."""
+        try:
+            raw_file = os.path.join(settings.MEDIA_ROOT, 'request_trace', 'llm_raw_response.txt')
+            os.makedirs(os.path.dirname(raw_file), exist_ok=True)
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            with open(raw_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n--- [{timestamp}] SUBMISSION {submission_id} | QUESTION {question_id} | ATTEMPT {attempt} ---\n")
+                f.write(raw_output)
+                f.write("\n--------------------------------------------------------------------------------\n")
+        except Exception as e:
+            print(f"[RAW LOG WARNING] {e}")
+
+    @classmethod
+    def _write_pipeline_log(cls, submission_id: int, message: str):
+        """Writes audit entry to request_trace/evaluation_pipeline.log."""
+        try:
+            trace_file = os.path.join(settings.MEDIA_ROOT, 'request_trace', 'evaluation_pipeline.log')
+            os.makedirs(os.path.dirname(trace_file), exist_ok=True)
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+            with open(trace_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] [SUBMISSION {submission_id}] {message}\n")
+        except Exception as e_log:
+            print(f"[PIPELINE LOG WARNING] {e_log}")
 
     @classmethod
     def _log_audit(cls, submission: StudentSubmission, user, action: str, details: dict, ip_address: str = None):

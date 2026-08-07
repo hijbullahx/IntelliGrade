@@ -1,4 +1,6 @@
 import os
+import io
+import time
 import json
 import hashlib
 from django.core.files.base import ContentFile
@@ -10,6 +12,7 @@ from .models import (
     College, School, Department, Course, Examination, AnswerScript,
     AnswerSegment, Evaluation, Profile, Question, Rubric
 )
+from core.utils.question_accessor import QuestionAccessor, QuestionDTO
 
 def landing_page(request):
     """Renders the main landing page for the IntelliGrade SaaS platform."""
@@ -2421,10 +2424,21 @@ def evaluation_workspace(request, submission_id):
     exam = submission.examination
     answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
 
+    normalized_answers = []
+    for ans in answers:
+        q_dto = QuestionAccessor.to_dto(ans.question)
+        normalized_answers.append({
+            'answer': ans,
+            'q': q_dto.to_dict(),
+            'question_dto': q_dto,
+            'evaluation_result': getattr(ans, 'evaluation_result', None)
+        })
+
     return render(request, 'core/evaluation_workspace.html', {
         'submission': submission,
         'exam': exam,
-        'answers': answers
+        'answers': answers,
+        'normalized_answers': normalized_answers
     })
 
 
@@ -2570,39 +2584,66 @@ def evaluation_wizard(request, exam_id):
 def api_upload_raw_images(request, exam_id):
     """Ingests raw student script page images for Submission Builder."""
     if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
     exam = get_object_or_404(Examination, id=exam_id)
 
     if request.method == 'POST':
         student_name = request.POST.get('student_name', 'Student').strip()
         roll_no = request.POST.get('roll_no', '').strip()
-        image_files = request.FILES.getlist('images')
+        existing_sub_id = request.POST.get('submission_id')
+
+        image_files = request.FILES.getlist('images') or request.FILES.getlist('images[]')
+
+        # Trace Logging
+        trace_file = os.path.join(settings.MEDIA_ROOT, 'request_trace', 'evaluation_trace.log')
+        os.makedirs(os.path.dirname(trace_file), exist_ok=True)
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
 
         if not image_files:
-            return JsonResponse({'success': False, 'error': 'No image files provided.'}, status=400)
+            err_msg = "No valid image files received in request payload."
+            with open(trace_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{timestamp}] [UPLOAD HTTP 400] Exam ID {exam.id}: {err_msg}\n")
+            return JsonResponse({'success': False, 'error': err_msg}, status=400)
 
-        sub = StudentSubmission.objects.create(
-            examination=exam,
-            student_name=student_name,
-            student_roll_no=roll_no
-        )
+        # Reuse existing submission if passed
+        if existing_sub_id:
+            try:
+                sub = StudentSubmission.objects.get(id=existing_sub_id, examination=exam)
+                sub.student_name = student_name
+                sub.student_roll_no = roll_no
+                sub.save()
+                # Clear old raw images if re-uploading
+                sub.raw_images.all().delete()
+            except StudentSubmission.DoesNotExist:
+                sub = StudentSubmission.objects.create(examination=exam, student_name=student_name, student_roll_no=roll_no)
+        else:
+            sub = StudentSubmission.objects.create(
+                examination=exam,
+                student_name=student_name,
+                student_roll_no=roll_no
+            )
 
+        file_logs = []
         for seq, img_file in enumerate(image_files, 1):
             SubmissionImage.objects.create(
                 submission=sub,
                 original_file=img_file,
                 sequence_order=seq
             )
+            file_logs.append(f"{img_file.name} ({img_file.size} bytes)")
+
+        with open(trace_file, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] [UPLOAD SUCCESS] Submission {sub.id} (Exam {exam.id}) created/updated with {len(image_files)} pages: {', '.join(file_logs)}\n")
 
         return JsonResponse({
             'success': True,
             'submission_id': sub.id,
             'image_count': len(image_files),
-            'message': 'Raw page images uploaded successfully.'
+            'message': f'Successfully uploaded {len(image_files)} page images.'
         })
 
-    return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
+    return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
 def api_get_submission_images(request, submission_id):
@@ -2630,11 +2671,36 @@ def api_get_submission_images(request, submission_id):
 def api_delete_all_submission_images(request, submission_id):
     """Deletes all raw page images for a submission."""
     if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
     submission.raw_images.all().delete()
     return JsonResponse({'success': True, 'message': 'All page images removed.'})
+
+
+def api_reorder_submission_pages(request, submission_id):
+    """Updates sequence order and rotation angles for existing raw submission pages."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    if request.method == 'POST':
+        try:
+            body_data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        except Exception:
+            body_data = request.POST.dict()
+
+        page_orders = body_data.get('page_orders', [])
+        for order_info in page_orders:
+            img_id = order_info.get('id')
+            seq = order_info.get('sequence_order')
+            rot = order_info.get('rotation_angle', 0)
+            if img_id:
+                SubmissionImage.objects.filter(id=img_id, submission=submission).update(sequence_order=seq, rotation_angle=rot)
+
+        return JsonResponse({'success': True, 'message': 'Page order updated.'})
+
+    return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
 def api_create_submission_pdf(request, submission_id):

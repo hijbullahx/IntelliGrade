@@ -133,7 +133,7 @@
                     <button type="button" onclick="compileAndPreviewPdf()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
                         <i data-lucide="eye" class="w-4 h-4"></i> Preview PDF Script
                     </button>
-                    <button type="button" onclick="goToStep(3)" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
+                    <button type="button" onclick="handleStep2Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
                         Next: Preprocessing & Options &rarr;
                     </button>
                 </div>
@@ -325,19 +325,44 @@ async function handleStep1Next() {
     }
 }
 
+async function handleStep2Next() {
+    if(!uploadedFiles || uploadedFiles.length === 0) {
+        alert("Please select or photograph answer page files first.");
+        return;
+    }
+    await syncUpdatedPagesToServer();
+    goToStep(3);
+}
+
+let isUploading = false;
+
 async function uploadRawImages() {
+    if(isUploading) return;
     if(!uploadedFiles || uploadedFiles.length === 0) {
         return alert("Please select photo files first.");
     }
+
+    const newFilesOnly = uploadedFiles.filter(f => f instanceof File || f instanceof Blob);
+    if(newFilesOnly.length === 0 && currentSubmissionId) {
+        renderThumbnails();
+        goToStep(2);
+        return;
+    }
+
+    isUploading = true;
+    const btn = document.getElementById('uploadSelectedBtn');
+    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+
     const statusDiv = document.getElementById('uploadStatusText');
     statusDiv.classList.remove('hidden');
     statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
-    statusDiv.innerText = `Uploading ${uploadedFiles.length} page images...`;
+    statusDiv.innerText = `Uploading ${newFilesOnly.length} page image(s)...`;
 
     const formData = new FormData();
     formData.append('student_name', document.getElementById('studentName').value);
     formData.append('roll_no', document.getElementById('studentRoll').value);
-    uploadedFiles.forEach(f => formData.append('images', f));
+    if(currentSubmissionId) formData.append('submission_id', currentSubmissionId);
+    newFilesOnly.forEach(f => formData.append('images', f));
 
     try {
         const resp = await fetch("{% url 'api_upload_raw_images' exam.id %}", {
@@ -360,6 +385,9 @@ async function uploadRawImages() {
     } catch(err) {
         statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
         statusDiv.innerText = "Upload Exception: " + err.message;
+    } finally {
+        isUploading = false;
+        if(btn) { btn.disabled = false; btn.innerText = 'Upload Selected Photos Now'; }
     }
 }
 
@@ -588,24 +616,24 @@ function closePagePreviewModal() {
 }
 
 async function syncUpdatedPagesToServer() {
-    if(!uploadedFiles || uploadedFiles.length === 0) return;
-    const formData = new FormData();
-    formData.append('student_name', document.getElementById('studentName').value);
-    formData.append('roll_no', document.getElementById('studentRoll').value);
-    uploadedFiles.forEach(f => formData.append('images', f));
+    if(!currentSubmissionId || !uploadedFiles || uploadedFiles.length === 0) return;
 
-    try {
-        const resp = await fetch("{% url 'api_upload_raw_images' exam.id %}", {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-        });
-        const data = await resp.json();
-        if(data.success) {
-            currentSubmissionId = data.submission_id;
+    const pageOrders = uploadedFiles.map((img, idx) => ({
+        id: img.id || null,
+        sequence_order: idx + 1,
+        rotation_angle: pageRotationAngles[idx] || 0
+    })).filter(item => item.id !== null);
+
+    if(pageOrders.length > 0) {
+        try {
+            await fetch(`/api/submission/${currentSubmissionId}/reorder-pages/`, {
+                method: 'POST',
+                body: JSON.stringify({ page_orders: pageOrders }),
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+        } catch(err) {
+            console.warn("[PAGE REORDER WARNING]", err);
         }
-    } catch(err) {
-        console.warn("[PAGE SYNC WARNING]", err);
     }
 }
 

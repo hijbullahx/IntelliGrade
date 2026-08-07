@@ -64,6 +64,7 @@ urlpatterns = [
     path('api/exam/<int:exam_id>/upload-raw-images/', views.api_upload_raw_images, name='api_upload_raw_images'),
     path('api/submission/<int:submission_id>/images/', views.api_get_submission_images, name='api_get_submission_images'),
     path('api/submission/<int:submission_id>/delete-all-images/', views.api_delete_all_submission_images, name='api_delete_all_submission_images'),
+    path('api/submission/<int:submission_id>/reorder-pages/', views.api_reorder_submission_pages, name='api_reorder_submission_pages'),
     path('api/submission/<int:submission_id>/create-pdf/', views.api_create_submission_pdf, name='api_create_submission_pdf'),
     path('api/submission/<int:submission_id>/run-evaluation-v3/', views.api_run_evaluation_v3, name='api_run_evaluation_v3'),
     path('api/submission/<int:submission_id>/reevaluate-v3/', views.api_reevaluate_v3, name='api_reevaluate_v3'),
