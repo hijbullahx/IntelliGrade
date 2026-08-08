@@ -206,3 +206,47 @@ class WorkingCopyManager:
         print(f"==================================================\n")
 
         return preview_pdf_path
+
+    @classmethod
+    def cleanup_temporary_files(cls, submission_id: int):
+        """
+        Automatically removes unneeded temporary upload files (in submission_temp/)
+        and obsolete working image versions for a submission after evaluation.
+        """
+        try:
+            cls.ensure_directories()
+            submission = StudentSubmission.objects.filter(id=submission_id).first()
+            if not submission:
+                return
+
+            # 1. Clean up submission_temp directory for this submission
+            if os.path.exists(cls.TEMP_DIR):
+                for fname in os.listdir(cls.TEMP_DIR):
+                    if f"sub_{submission_id}_" in fname or f"submission_{submission_id}_" in fname:
+                        fpath = os.path.join(cls.TEMP_DIR, fname)
+                        if os.path.isfile(fpath):
+                            try:
+                                os.remove(fpath)
+                            except Exception:
+                                pass
+
+            # 2. Clean up obsolete image versions in submission_working (keep latest active version per page)
+            active_paths = set(
+                SubmissionPage.objects.filter(submission=submission)
+                .exclude(working_image_path='')
+                .values_list('working_image_path', flat=True)
+            )
+
+            if os.path.exists(cls.WORKING_DIR):
+                for fname in os.listdir(cls.WORKING_DIR):
+                    if fname.startswith(f"sub_{submission_id}_p"):
+                        fpath = os.path.join(cls.WORKING_DIR, fname)
+                        if fpath not in active_paths and os.path.isfile(fpath):
+                            try:
+                                os.remove(fpath)
+                            except Exception:
+                                pass
+
+            print(f"[CLEANUP SUCCESS] Temporary & obsolete files cleaned up for Submission #{submission_id}.")
+        except Exception as e:
+            print(f"[CLEANUP WARNING] Failed cleaning temporary files for Submission #{submission_id}: {e}")
