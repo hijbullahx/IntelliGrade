@@ -1,0 +1,1054 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluation Wizard (v3.0) - {{ exam.title }} | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6 px-4 py-6">
+
+    <!-- Header Navigation -->
+    <div class="flex items-center justify-between glass-card p-6 rounded-2xl">
+        <div>
+            <div class="flex items-center gap-2 text-xs theme-text-muted">
+                <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="font-bold text-brand-500 hover:underline">&larr; Evaluation Hub</a>
+                <span>/</span>
+                <span>{{ exam.course.code }}</span>
+            </div>
+            <h1 class="text-2xl font-black theme-text-primary mt-1">AI Answer Script Evaluation Wizard (v3.0)</h1>
+            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ exam.questions.count }}</strong></p>
+        </div>
+        <div class="px-3.5 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-4 h-4"></i> Production Engine v3.0
+        </div>
+    </div>
+
+    <!-- Wizard Multi-Step Container -->
+    <div class="glass-card p-8 rounded-2xl space-y-8 shadow-2xl">
+
+        <!-- Wizard Progress Bar Header -->
+        <div class="grid grid-cols-3 gap-4 border-b border-slate-200 dark:border-slate-800 pb-6 text-center text-xs font-bold">
+            <div id="stepHeader1" class="text-brand-500 flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs">1</span>
+                <span>Submission Type & Files</span>
+            </div>
+            <div id="stepHeader2" class="theme-text-muted flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs">2</span>
+                <span>Submission Builder & PDF</span>
+            </div>
+            <div id="stepHeader3" class="theme-text-muted flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs">3</span>
+                <span>Preprocessing & AI Options</span>
+            </div>
+        </div>
+
+        <!-- STEP 1: Submission Type Selection & File Upload -->
+        <div id="step1Content" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Student Name</label>
+                    <input type="text" id="studentName" value="John Doe" placeholder="e.g. Student Name" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
+                    <input type="text" id="studentRoll" value="CSE-2026-001" placeholder="e.g. Roll Number" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-2">Select Upload Mode</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <label class="p-4 rounded-xl border-2 border-brand-500 bg-brand-500/5 cursor-pointer space-y-1 block">
+                        <input type="radio" name="uploadType" value="images" checked onchange="toggleUploadMode()" class="mr-2">
+                        <span class="font-bold text-xs theme-text-primary">Multiple Page Images</span>
+                        <p class="text-[11px] theme-text-muted">Drag & drop pages, mobile camera photos, or JPEG/PNG gallery files.</p>
+                    </label>
+                    <label class="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 cursor-pointer space-y-1 block">
+                        <input type="radio" name="uploadType" value="pdf" onchange="toggleUploadMode()" class="mr-2">
+                        <span class="font-bold text-xs theme-text-primary">Single PDF Document</span>
+                        <p class="text-[11px] theme-text-muted">Upload a pre-scanned student answer script PDF.</p>
+                    </label>
+                    <label class="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 cursor-pointer space-y-1 block">
+                        <input type="radio" name="uploadType" value="zip" onchange="toggleUploadMode()" class="mr-2">
+                        <span class="font-bold text-xs theme-text-primary">ZIP Archive (Batch)</span>
+                        <p class="text-[11px] theme-text-muted">Batch upload multiple student scripts inside one ZIP.</p>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Upload Dropzone -->
+            <div id="imageDropzone" class="border-2 border-dashed border-brand-500/40 hover:border-brand-500 rounded-2xl p-8 text-center bg-brand-500/5 transition-all">
+                <i data-lucide="camera" class="w-10 h-10 text-brand-500 mx-auto mb-2"></i>
+                <h4 class="font-extrabold text-sm theme-text-primary">Upload or Photograph Student Answer Pages</h4>
+                <p class="text-xs theme-text-muted mt-1">Select multiple images, drag and drop files, or use your mobile device camera directly.</p>
+                <input type="file" id="imageInput" multiple accept="image/*" capture="environment" class="hidden" onchange="handleImageSelection(this)">
+                <div class="flex items-center justify-center gap-3 mt-4">
+                    <button type="button" onclick="document.getElementById('imageInput').click()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                        <i data-lucide="upload" class="w-4 h-4"></i> Browse Files / Camera
+                    </button>
+                    <button type="button" id="uploadSelectedBtn" onclick="uploadRawImages()" class="hidden px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                        <i data-lucide="cloud-upload" class="w-4 h-4"></i> Upload Selected Photos Now
+                    </button>
+                </div>
+            </div>
+
+            <div id="pdfDropzone" class="hidden border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center bg-slate-100/60 dark:bg-slate-900/50">
+                <i data-lucide="file-text" class="w-10 h-10 text-slate-400 mx-auto mb-2"></i>
+                <h4 class="font-extrabold text-sm theme-text-primary">Upload Answer Script PDF</h4>
+                <input type="file" id="pdfInput" accept=".pdf,.zip" class="hidden" onchange="handlePdfSelection(this)">
+                <button type="button" onclick="document.getElementById('pdfInput').click()" class="mt-4 px-5 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 theme-text-primary font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="file" class="w-4 h-4"></i> Select PDF File
+                </button>
+            </div>
+
+            <div id="uploadStatusText" class="hidden text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center"></div>
+
+            <div class="flex justify-end pt-4">
+                <button type="button" onclick="handleStep1Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    Next: Submission Builder &rarr;
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2: Submission Builder & Page Management -->
+        <div id="step2Content" class="hidden space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-brand-500"></i> Submission Page Builder (Reorder, Rotate, Preview)
+                </h3>
+                <div class="flex items-center gap-3">
+                    <span id="pageCounter" class="text-xs font-bold text-brand-500">0 Pages Uploaded</span>
+                    <button type="button" onclick="removeAllPages()" class="px-3 py-1 bg-rose-600/20 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove All Pages
+                    </button>
+                </div>
+            </div>
+
+            <!-- Page Grid Thumbnails -->
+            <div id="thumbnailContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[50vh] overflow-y-auto p-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40">
+                <div class="col-span-full text-center py-12 theme-text-muted text-xs font-medium">No page images uploaded yet in Step 1.</div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(1)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Files</button>
+                <div class="flex items-center gap-3">
+                    <button type="button" onclick="compileAndPreviewPdf()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
+                        <i data-lucide="eye" class="w-4 h-4"></i> Preview PDF Script
+                    </button>
+                    <button type="button" onclick="handleStep2Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
+                        Next: Preprocessing & Options &rarr;
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Computer Vision Preprocessing & Custom Prompt Options -->
+        <div id="step3Content" class="hidden space-y-6">
+            <h3 class="font-extrabold text-sm theme-text-primary border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-emerald-500"></i> Image Preprocessing & Evaluation Configuration
+            </h3>
+
+            <!-- Color Filtering (Teacher Pen Mark Removal) -->
+            <div class="space-y-2">
+                <label class="block text-xs font-bold theme-text-muted">Ignore / Remove Teacher Ink Color</label>
+                <div class="flex flex-wrap gap-4 text-xs font-bold">
+                    <label class="flex items-center gap-1.5"><input type="radio" name="inkColor" value="None" checked> None (Keep all ink)</label>
+                    <label class="flex items-center gap-1.5 text-rose-500"><input type="radio" name="inkColor" value="Red"> Red Pen</label>
+                    <label class="flex items-center gap-1.5 text-blue-500"><input type="radio" name="inkColor" value="Blue"> Blue Pen</label>
+                    <label class="flex items-center gap-1.5 text-emerald-500"><input type="radio" name="inkColor" value="Green"> Green Pen</label>
+                </div>
+            </div>
+
+            <!-- Computer Vision Enhancements -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-medium theme-text-secondary pt-2">
+                <label class="flex items-center gap-2"><input type="checkbox" id="optDeskew" checked> Auto Deskew (Tilt Correction)</label>
+                <label class="flex items-center gap-2"><input type="checkbox" id="optShadow" checked> Shadow Removal</label>
+                <label class="flex items-center gap-2"><input type="checkbox" id="optWhitening" checked> Background Whitening</label>
+                <label class="flex items-center gap-2"><input type="checkbox" id="optContrast" checked> Contrast Enhancement (CLAHE)</label>
+            </div>
+
+            <!-- OCR & Evaluation Strictness -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">OCR Mode</label>
+                    <select id="optOcrMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Balanced" selected>Balanced (EasyOCR + PyMuPDF)</option>
+                        <option value="High Accuracy">High Accuracy (Multi-Engine Ensemble)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">LLM Strictness Level</label>
+                    <select id="optStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Lenient">Lenient (Give partial marks freely)</option>
+                        <option value="Balanced" selected>Balanced (Standard University Grading)</option>
+                        <option value="Strict">Strict (Exact technical accuracy)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
+                    <select id="optEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Rubric-based" selected>Rubric-based Evaluation</option>
+                        <option value="Concept-based">Concept & Derivation Based</option>
+                        <option value="Keyword-based">Keyword Matching Based</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Custom Multiline Prompt Textbox -->
+            <div class="pt-2">
+                <label class="block text-xs font-bold theme-text-muted mb-1">Custom Teacher Prompt / Instructions (Optional)</label>
+                <textarea id="customPrompt" rows="3" placeholder="e.g. Ignore minor spelling mistakes. Award method marks if formula derivation steps are correct." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(2)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Builder</button>
+                <button type="button" onclick="analyzeQuestionMapping()" class="px-8 py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                    Next: Question Mapping Analysis &rarr;
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2.5: Interactive Question Mapping Review & Confirmation -->
+        <div id="stepMappingContent" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-brand-500"></i> Step 2.5: Question Mapping Review & Teacher Confirmation
+                </h3>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="viewFullAnswerScriptModal()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 shrink-0">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> View Full Answer Script
+                    </button>
+                    <span id="mappingStatusBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-brand-500/10 text-brand-500">Analyzing Script...</span>
+                </div>
+            </div>
+
+            <!-- Preview Validation Breakdown Card -->
+            <div id="previewValidationCard" class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 font-mono space-y-2 hidden shadow-inner">
+                <div class="font-extrabold text-emerald-400 border-b border-slate-800 pb-1 flex items-center justify-between">
+                    <span>--- PREVIEW VALIDATION BREAKDOWN ---</span>
+                    <span id="pvReadyBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-sans text-[10px] font-bold border border-emerald-500/20">Ready for Evaluation</span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 pt-1">
+                    <div><span class="text-slate-400">Pages:</span> <span id="pvPagesCount" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">Orientation:</span> <span id="pvOrientation" class="font-bold text-emerald-400">OK</span></div>
+                    <div><span class="text-slate-400">Blank Pages:</span> <span id="pvBlankPages" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">Duplicates:</span> <span id="pvDuplicates" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">OCR Conf:</span> <span id="pvOcrConf" class="font-bold text-emerald-400">0%</span></div>
+                </div>
+            </div>
+
+            <!-- Warning Alerts Container -->
+            <div id="mappingAlertsContainer" class="space-y-2 hidden"></div>
+
+            <!-- Mapping Table -->
+            <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-2">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-200 dark:border-slate-800 theme-text-muted font-bold">
+                            <th class="p-3">Question</th>
+                            <th class="p-3">Question Prompt / Statement</th>
+                            <th class="p-3">Detected Header / Method</th>
+                            <th class="p-3">Mapped Script Pages</th>
+                            <th class="p-3 text-center">Confidence</th>
+                            <th class="p-3 text-right">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody">
+                        <tr>
+                            <td colspan="6" class="p-8 text-center theme-text-muted font-medium">Click "Next: Question Mapping Analysis" to analyze student answer script headers.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(3)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Options</button>
+                <div class="flex items-center gap-3">
+                    <button type="button" onclick="viewFullAnswerScriptModal()" class="px-5 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> View Full Answer Script
+                    </button>
+                    <button type="button" id="confirmMappingBtn" onclick="confirmQuestionMappingAndStart()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Live Evaluation Terminal Progress Modal -->
+<div id="evalProgressModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-2xl w-full p-6 rounded-2xl shadow-2xl border border-brand-500/30 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="terminal" class="w-5 h-5 text-brand-500"></i> AI Answer Script Evaluation Progress
+            </h3>
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-mono text-emerald-400 font-bold" id="evalTimer">0.0s</span>
+                <button type="button" onclick="closeEvalProgressModal()" class="text-slate-400 hover:text-white font-extrabold text-xl px-2 py-0.5 rounded-lg hover:bg-slate-800 transition-colors" title="Close Popup">&times;</button>
+            </div>
+        </div>
+
+        <div class="space-y-1">
+            <div class="flex justify-between text-xs font-bold theme-text-muted mb-1">
+                <span id="evalStatusText">Initializing pipeline...</span>
+                <span id="evalProgressPct">0%</span>
+            </div>
+            <div class="w-full h-3 rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                <div id="evalProgressBar" class="h-full bg-emerald-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="evalTerminalLog" class="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-emerald-400 h-48 overflow-y-auto space-y-1">
+            <div>[PIPELINE STARTED] AI Script Evaluator v3.0 Initialized.</div>
+        </div>
+
+        <div class="flex justify-end border-t border-slate-800 pt-3 hidden" id="evalModalCloseRow">
+            <button type="button" onclick="closeEvalProgressModal()" class="px-5 py-2 bg-slate-800 hover:bg-rose-900/50 hover:text-rose-300 text-white font-bold text-xs rounded-xl shadow transition-all border border-slate-700">
+                Close / Dismiss
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Full-Page Zoom & Inspection Overlay -->
+<div id="pagePreviewModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col hidden">
+    <!-- Header Controls Toolbar -->
+    <div class="flex items-center justify-between px-6 py-4 bg-slate-900/90 border-b border-slate-800 shadow-xl">
+        <div class="flex items-center gap-3">
+            <span id="previewPageBadge" class="px-3 py-1 bg-brand-500/20 text-brand-400 border border-brand-500/30 rounded-full font-bold text-xs">Page 1 of 5</span>
+            <span id="previewPageFileName" class="text-xs font-mono theme-text-muted hidden md:inline">filename.png</span>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="button" onclick="modalRotatePage()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i> Rotate 90°
+            </button>
+            <button type="button" onclick="modalDeletePage()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Delete Page
+            </button>
+            <div class="h-6 w-px bg-slate-800 mx-1"></div>
+            <button type="button" onclick="modalNavPage(-1)" id="prevPageBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl">
+                &larr; Prev
+            </button>
+            <button type="button" onclick="modalNavPage(1)" id="nextPageBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl">
+                Next &rarr;
+            </button>
+            <button type="button" onclick="closePagePreviewModal()" class="ml-4 px-3.5 py-2 bg-slate-800 hover:bg-rose-900/50 hover:text-rose-400 text-slate-300 font-extrabold text-sm rounded-xl">
+                &times; Close
+            </button>
+        </div>
+    </div>
+
+    <!-- Image Display Viewport -->
+    <div class="flex-1 overflow-auto p-8 flex items-center justify-center bg-slate-950">
+        <img id="previewModalImg" class="max-h-[85vh] max-w-full object-contain rounded-xl shadow-2xl transition-transform duration-300">
+    </div>
+</div>
+
+<script>
+let currentSubmissionId = null;
+let uploadedFiles = [];
+
+function toggleUploadMode() {
+    const val = document.querySelector('input[name="uploadType"]:checked').value;
+    if(val === 'images') {
+        document.getElementById('imageDropzone').classList.remove('hidden');
+        document.getElementById('pdfDropzone').classList.add('hidden');
+    } else {
+        document.getElementById('imageDropzone').classList.add('hidden');
+        document.getElementById('pdfDropzone').classList.remove('hidden');
+    }
+}
+
+function handleImageSelection(input) {
+    if(input.files.length > 0) {
+        uploadedFiles = Array.from(input.files);
+        const statusDiv = document.getElementById('uploadStatusText');
+        statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+        statusDiv.innerText = `Selected ${uploadedFiles.length} photo file(s). Uploading to Submission Builder...`;
+        statusDiv.classList.remove('hidden');
+        document.getElementById('uploadSelectedBtn').classList.remove('hidden');
+        uploadRawImages();
+    }
+}
+
+function handlePdfSelection(input) {
+    if(input.files.length > 0) {
+        uploadSinglePdf(input.files[0]);
+    }
+}
+
+async function handleStep1Next() {
+    const val = document.querySelector('input[name="uploadType"]:checked').value;
+    if(val === 'images') {
+        if(!currentSubmissionId && uploadedFiles.length > 0) {
+            await uploadRawImages();
+        } else if(!currentSubmissionId) {
+            alert("Please select or photograph answer page files first.");
+            return;
+        }
+        goToStep(2);
+    } else {
+        const pdfInput = document.getElementById('pdfInput');
+        if(!currentSubmissionId && pdfInput.files.length > 0) {
+            await uploadSinglePdf(pdfInput.files[0]);
+        } else if(!currentSubmissionId) {
+            alert("Please select a PDF file first.");
+            return;
+        }
+        goToStep(3);
+    }
+}
+
+async function handleStep2Next() {
+    if(!uploadedFiles || uploadedFiles.length === 0) {
+        alert("Please select or photograph answer page files first.");
+        return;
+    }
+    await syncUpdatedPagesToServer();
+    goToStep(3);
+}
+
+let isUploading = false;
+
+async function uploadRawImages() {
+    if(isUploading) return;
+    if(!uploadedFiles || uploadedFiles.length === 0) {
+        return alert("Please select photo files first.");
+    }
+
+    const newFilesOnly = uploadedFiles.filter(f => f instanceof File || f instanceof Blob);
+    if(newFilesOnly.length === 0 && currentSubmissionId) {
+        renderThumbnails();
+        goToStep(2);
+        return;
+    }
+
+    isUploading = true;
+    const btn = document.getElementById('uploadSelectedBtn');
+    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+
+    const statusDiv = document.getElementById('uploadStatusText');
+    statusDiv.classList.remove('hidden');
+    statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+    statusDiv.innerText = `Uploading ${newFilesOnly.length} page image(s)...`;
+
+    const formData = new FormData();
+    formData.append('student_name', document.getElementById('studentName').value);
+    formData.append('roll_no', document.getElementById('studentRoll').value);
+    if(currentSubmissionId) formData.append('submission_id', currentSubmissionId);
+    newFilesOnly.forEach(f => formData.append('images', f));
+
+    try {
+        const resp = await fetch("{% url 'api_upload_raw_images' exam.id %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            currentSubmissionId = data.submission_id;
+            sessionStorage.setItem('ig_sub_id_{{ exam.id }}', data.submission_id);
+            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
+            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count} page images to Submission Builder!`;
+            renderThumbnails();
+            goToStep(2);
+        } else {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+            statusDiv.innerText = "Upload Error: " + data.error;
+        }
+    } catch(err) {
+        statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+        statusDiv.innerText = "Upload Exception: " + err.message;
+    } finally {
+        isUploading = false;
+        if(btn) { btn.disabled = false; btn.innerText = 'Upload Selected Photos Now'; }
+    }
+}
+
+async function uploadSinglePdf(file) {
+    const formData = new FormData();
+    formData.append('student_name', document.getElementById('studentName').value);
+    formData.append('roll_no', document.getElementById('studentRoll').value);
+    formData.append('script_file', file);
+
+    const resp = await fetch("{% url 'upload_student_submission' exam.id %}", {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    });
+    const data = await resp.json();
+    if(data.success) {
+        currentSubmissionId = data.submission_id;
+        goToStep(3);
+    } else {
+        alert("PDF Upload Error: " + data.error);
+    }
+}
+
+let pageRotationAngles = [];
+
+function getImageUrl(item) {
+    if(!item) return '';
+    if(item instanceof File || item instanceof Blob) {
+        return URL.createObjectURL(item);
+    }
+    if(typeof item === 'string') return item;
+    if(item.url) return item.url;
+    return '';
+}
+
+function getImageName(item, idx) {
+    if(!item) return `Page ${idx + 1}`;
+    if(item.name) return item.name;
+    if(item.file_name) return item.file_name;
+    return `Page ${idx + 1}`;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const savedSubId = sessionStorage.getItem('ig_sub_id_{{ exam.id }}');
+    if(savedSubId) {
+        try {
+            const resp = await fetch(`/api/submission/${savedSubId}/images/`);
+            const data = await resp.json();
+            if(data.success && data.images && data.images.length > 0) {
+                currentSubmissionId = parseInt(savedSubId);
+                uploadedFiles = data.images;
+                pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
+                if(data.student_name) document.getElementById('studentName').value = data.student_name;
+                if(data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
+                renderThumbnails();
+                goToStep(2);
+            }
+        } catch(e) {
+            console.warn("Failed restoring submission images:", e);
+        }
+    }
+});
+
+async function removeAllPages() {
+    if(!confirm("Are you sure you want to remove ALL uploaded page images?")) return;
+    if(currentSubmissionId) {
+        try {
+            await fetch(`/api/submission/${currentSubmissionId}/delete-all-images/`);
+        } catch(e) {
+            console.warn("Error deleting backend images:", e);
+        }
+    }
+    sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
+    uploadedFiles = [];
+    pageRotationAngles = [];
+    currentSubmissionId = null;
+    const statusDiv = document.getElementById('uploadStatusText');
+    if(statusDiv) statusDiv.classList.add('hidden');
+    const uploadBtn = document.getElementById('uploadSelectedBtn');
+    if(uploadBtn) uploadBtn.classList.add('hidden');
+    renderThumbnails();
+    goToStep(1);
+}
+
+function renderThumbnails() {
+    const container = document.getElementById('thumbnailContainer');
+    container.innerHTML = '';
+    document.getElementById('pageCounter').innerText = `${uploadedFiles.length} Pages Uploaded`;
+
+    if(pageRotationAngles.length !== uploadedFiles.length) {
+        pageRotationAngles = new Array(uploadedFiles.length).fill(0);
+    }
+
+    if(uploadedFiles.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 theme-text-muted text-xs font-medium">No page images uploaded yet in Step 1.</div>`;
+        return;
+    }
+
+    uploadedFiles.forEach((file, idx) => {
+        const url = getImageUrl(file);
+        const card = document.createElement('div');
+        card.className = "border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900/90 space-y-2 text-center relative group shadow-lg";
+        card.innerHTML = `
+            <div class="relative overflow-hidden rounded-lg bg-slate-100 dark:bg-black/40 h-36 flex items-center justify-center cursor-pointer" onclick="previewPageModal(${idx})">
+                <img id="page_img_${idx}" src="${url}" class="max-h-full max-w-full object-contain transition-transform duration-300" style="transform: rotate(${pageRotationAngles[idx]}deg)">
+                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button type="button" onclick="event.stopPropagation(); previewPageModal(${idx})" class="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur" title="Zoom Preview">
+                        <i data-lucide="zoom-in" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" onclick="event.stopPropagation(); rotatePage(${idx})" class="p-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg backdrop-blur" title="Rotate 90°">
+                        <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" onclick="event.stopPropagation(); deletePage(${idx})" class="p-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg backdrop-blur" title="Delete Page">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between px-1">
+                <button type="button" onclick="movePageLeft(${idx})" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Left">
+                    &larr; Left
+                </button>
+                <span class="text-[11px] font-bold text-brand-500 dark:text-brand-400">Page ${idx + 1}</span>
+                <button type="button" onclick="movePageRight(${idx})" ${idx === uploadedFiles.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Right">
+                    Right &rarr;
+                </button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    if(window.lucide) lucide.createIcons();
+}
+
+function movePageLeft(idx) {
+    if(idx <= 0) return;
+    const tempF = uploadedFiles[idx];
+    uploadedFiles[idx] = uploadedFiles[idx - 1];
+    uploadedFiles[idx - 1] = tempF;
+
+    const tempR = pageRotationAngles[idx];
+    pageRotationAngles[idx] = pageRotationAngles[idx - 1];
+    pageRotationAngles[idx - 1] = tempR;
+
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function movePageRight(idx) {
+    if(idx >= uploadedFiles.length - 1) return;
+    const tempF = uploadedFiles[idx];
+    uploadedFiles[idx] = uploadedFiles[idx + 1];
+    uploadedFiles[idx + 1] = tempF;
+
+    const tempR = pageRotationAngles[idx];
+    pageRotationAngles[idx] = pageRotationAngles[idx + 1];
+    pageRotationAngles[idx + 1] = tempR;
+
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function rotatePage(idx) {
+    pageRotationAngles[idx] = (pageRotationAngles[idx] + 90) % 360;
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function deletePage(idx) {
+    if(!confirm(`Delete Page ${idx + 1}?`)) return;
+    uploadedFiles.splice(idx, 1);
+    pageRotationAngles.splice(idx, 1);
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+let currentPreviewIndex = 0;
+
+function previewPageModal(idx) {
+    if(idx < 0 || idx >= uploadedFiles.length) return;
+    currentPreviewIndex = idx;
+    const file = uploadedFiles[idx];
+    if(!file) return;
+
+    const modal = document.getElementById('pagePreviewModal');
+    const modalImg = document.getElementById('previewModalImg');
+
+    document.getElementById('previewPageBadge').innerText = `Page ${idx + 1} of ${uploadedFiles.length}`;
+    document.getElementById('previewPageFileName').innerText = getImageName(file, idx);
+
+    modalImg.src = getImageUrl(file);
+    modalImg.style.transform = `rotate(${pageRotationAngles[idx] || 0}deg)`;
+
+    document.getElementById('prevPageBtn').disabled = (idx === 0);
+    document.getElementById('nextPageBtn').disabled = (idx === uploadedFiles.length - 1);
+
+    modal.classList.remove('hidden');
+    if(window.lucide) lucide.createIcons();
+}
+
+function modalRotatePage() {
+    rotatePage(currentPreviewIndex);
+    previewPageModal(currentPreviewIndex);
+}
+
+function modalDeletePage() {
+    const idx = currentPreviewIndex;
+    deletePage(idx);
+    if(uploadedFiles.length === 0) {
+        closePagePreviewModal();
+    } else {
+        const nextIdx = Math.min(idx, uploadedFiles.length - 1);
+        previewPageModal(nextIdx);
+    }
+}
+
+function modalNavPage(delta) {
+    const target = currentPreviewIndex + delta;
+    if(target >= 0 && target < uploadedFiles.length) {
+        previewPageModal(target);
+    }
+}
+
+function closePagePreviewModal() {
+    document.getElementById('pagePreviewModal').classList.add('hidden');
+}
+
+async function syncUpdatedPagesToServer() {
+    if(!currentSubmissionId || !uploadedFiles || uploadedFiles.length === 0) return;
+
+    const pageOrders = uploadedFiles.map((img, idx) => ({
+        id: img.id || null,
+        sequence_order: idx + 1,
+        rotation_angle: pageRotationAngles[idx] || 0
+    })).filter(item => item.id !== null);
+
+    if(pageOrders.length > 0) {
+        try {
+            await fetch(`/api/submission/${currentSubmissionId}/reorder-pages/`, {
+                method: 'POST',
+                body: JSON.stringify({ page_orders: pageOrders }),
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+        } catch(err) {
+            console.warn("[PAGE REORDER WARNING]", err);
+        }
+    }
+}
+
+async function compileAndPreviewPdf() {
+    if(!currentSubmissionId) return alert("Please upload images first.");
+    await syncUpdatedPagesToServer();
+    const resp = await fetch(`/api/submission/${currentSubmissionId}/create-pdf/`);
+    const data = await resp.json();
+    if(data.success) {
+        window.open(data.pdf_url, '_blank');
+    } else {
+        alert("PDF Preview Error: " + data.error);
+    }
+}
+
+let currentMappingData = [];
+
+function goToStep(stepNum) {
+    document.getElementById('step1Content').classList.add('hidden');
+    document.getElementById('step2Content').classList.add('hidden');
+    document.getElementById('step3Content').classList.add('hidden');
+    const mStep = document.getElementById('stepMappingContent');
+    if(mStep) mStep.classList.add('hidden');
+
+    if(stepNum === 'Mapping' || stepNum === '2.5') {
+        document.getElementById('stepMappingContent').classList.remove('hidden');
+    } else {
+        document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
+    }
+}
+
+function closeEvalProgressModal() {
+    document.getElementById('evalProgressModal').classList.add('hidden');
+}
+
+async function analyzeQuestionMapping() {
+    if(!currentSubmissionId) return alert("Submission ID not found.");
+    await syncUpdatedPagesToServer();
+
+    const statusBadge = document.getElementById('mappingStatusBadge');
+    const totalPages = (uploadedFiles && uploadedFiles.length > 0) ? uploadedFiles.length : 1;
+    
+    statusBadge.innerText = `Scanning Page 1 of ${totalPages}... (OCR & Header Detection)`;
+    statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 animate-pulse border border-amber-500/30";
+
+    const confirmBtn = document.getElementById('confirmMappingBtn');
+    if(confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.className = "px-8 py-3 bg-slate-400 dark:bg-slate-800 text-slate-200 dark:text-slate-400 font-extrabold text-xs rounded-xl shadow cursor-not-allowed inline-flex items-center gap-2";
+        confirmBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Processing OCR & Page Scanning...`;
+        if(window.lucide) lucide.createIcons();
+    }
+
+    const pvCard = document.getElementById('previewValidationCard');
+    const pvReady = document.getElementById('pvReadyBadge');
+    if(pvCard) pvCard.classList.remove('hidden');
+    if(pvReady) {
+        pvReady.className = "px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-sans text-[10px] font-bold border border-amber-500/20 animate-pulse";
+        pvReady.innerText = `Scanning Page 1 of ${totalPages}...`;
+    }
+
+    let scanPage = 1;
+    const scanTicker = setInterval(() => {
+        if(scanPage <= totalPages) {
+            statusBadge.innerText = `Scanning Page ${scanPage} of ${totalPages}... (OCR & Header Detection)`;
+            if(pvReady) pvReady.innerText = `Scanning Page ${scanPage} of ${totalPages}...`;
+            scanPage++;
+        } else {
+            statusBadge.innerText = `Analyzing Question Mappings across ${totalPages} page(s)...`;
+            if(pvReady) pvReady.innerText = `Analyzing Page Mappings...`;
+        }
+    }, 450);
+
+    goToStep('Mapping');
+
+    try {
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/analyze-mapping/`);
+        const data = await resp.json();
+        clearInterval(scanTicker);
+        if(data.success) {
+            currentMappingData = data.mappings;
+            renderMappingTable(data);
+
+            if(data.validation) {
+                document.getElementById('pvPagesCount').innerText = data.validation.page_count;
+                document.getElementById('pvOrientation').innerText = data.validation.orientation;
+                document.getElementById('pvBlankPages').innerText = data.validation.blank_pages;
+                document.getElementById('pvDuplicates').innerText = data.validation.duplicates;
+                document.getElementById('pvOcrConf').innerText = `${data.validation.ocr_confidence}%`;
+            }
+
+            if(pvReady) {
+                pvReady.className = "px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-sans text-[10px] font-bold border border-emerald-500/20";
+                pvReady.innerText = "Ready for Evaluation";
+            }
+
+            if(confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+                confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+                if(window.lucide) lucide.createIcons();
+            }
+        } else {
+            alert("Mapping Analysis Error: " + data.error);
+            if(confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+                confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+                if(window.lucide) lucide.createIcons();
+            }
+        }
+    } catch(err) {
+        clearInterval(scanTicker);
+        alert("Mapping Exception: " + err.message);
+        if(confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+            confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+            if(window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function renderMappingTable(data) {
+    const tbody = document.getElementById('mappingTableBody');
+    const alertsDiv = document.getElementById('mappingAlertsContainer');
+    const statusBadge = document.getElementById('mappingStatusBadge');
+
+    tbody.innerHTML = '';
+    alertsDiv.innerHTML = '';
+    alertsDiv.classList.add('hidden');
+
+    let alertHtml = '';
+    if(data.duplicates && data.duplicates.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Duplicate Question Headers Detected: Q${data.duplicates.join(', Q')}. Please review mapped pages.
+        </div>`;
+    }
+    if(data.missing_questions && data.missing_questions.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i> Missing / Unanswered Questions: Q${data.missing_questions.join(', Q')}. Confirm if skipped by student.
+        </div>`;
+    }
+    if(data.unassigned_pages && data.unassigned_pages.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="help-circle" class="w-4 h-4"></i> Unassigned Answer Pages: Page ${data.unassigned_pages.join(', Page ')}. Reassign below if needed.
+        </div>`;
+    }
+
+    if(alertHtml) {
+        alertsDiv.innerHTML = alertHtml;
+        alertsDiv.classList.remove('hidden');
+    }
+
+    if(data.requires_teacher_confirmation) {
+        statusBadge.innerText = "⚠ Action Required: Review & Confirm Mapping";
+        statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/30";
+    } else {
+        statusBadge.innerText = "✓ High Confidence Match";
+        statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/30";
+    }
+
+    const totalPageCount = uploadedFiles.length || 1;
+
+    // === ONE SINGLE CONSOLIDATED ROW FOR THE STUDENT (ALL IN ONE) ===
+    const row = document.createElement('tr');
+    row.className = "border-b border-slate-200 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/60 transition-colors";
+
+    let allQsHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-1">';
+    
+    data.mappings.forEach((m, idx) => {
+        let pageCheckboxes = '';
+        for(let p = 1; p <= totalPageCount; p++) {
+            const isChecked = m.page_numbers.includes(p) ? 'checked' : '';
+            pageCheckboxes += `<label class="inline-flex items-center gap-1 mr-1.5 cursor-pointer text-[11px] font-bold"><input type="checkbox" onchange="updateMappingPage(${idx}, ${p}, this.checked)" ${isChecked} class="rounded text-brand-600"> Pg ${p}</label>`;
+        }
+
+        const pagesText = m.page_numbers.length > 0 
+            ? (m.page_numbers.length === 1 ? `Pg ${m.page_numbers[0]}` : `Pg ${Math.min(...m.page_numbers)}–${Math.max(...m.page_numbers)}`) 
+            : 'Skipped';
+
+        let statusColor = 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+        let statusIcon = '✓';
+        if(!m.page_numbers || m.page_numbers.length === 0) {
+            statusColor = 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+            statusIcon = '—';
+        } else if(m.mapping_status === 'AMBIGUOUS' || m.confidence < 0.75) {
+            statusColor = 'text-amber-500 bg-amber-500/10 border-amber-500/20';
+            statusIcon = '⚠';
+        }
+
+        allQsHtml += `
+            <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-2 hover:border-brand-500/50 transition-colors">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="font-black text-xs text-brand-500">Q${m.question_number}</span>
+                        <span class="text-[10px] theme-text-muted">(${m.max_marks}m)</span>
+                        <span class="font-extrabold text-[11px] px-2.5 py-0.5 rounded-full border ${statusColor}">${statusIcon} ${pagesText} (${Math.round(m.confidence * 100)}%)</span>
+                    </div>
+                    ${m.page_numbers.length > 0 ? `<button type="button" onclick="jumpToMappedPage([${m.page_numbers.join(',')}])" class="px-2 py-0.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-[10px] rounded transition-colors inline-flex items-center gap-1 shadow-sm"><i data-lucide="eye" class="w-3 h-3"></i> View</button>` : ''}
+                </div>
+                <div class="text-[11px] theme-text-muted truncate" title="${m.prompt_text}">${m.prompt_text}</div>
+                <div class="pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-1">
+                    <span class="text-[10px] font-bold theme-text-muted mr-1">Pages:</span>
+                    ${pageCheckboxes}
+                </div>
+            </div>
+        `;
+    });
+
+    allQsHtml += '</div>';
+
+    const avgConf = data.mappings.length > 0 
+        ? Math.round((data.mappings.reduce((sum, m) => sum + m.confidence, 0) / data.mappings.length) * 100)
+        : 0;
+
+    row.innerHTML = `
+        <td class="p-4 align-top font-bold text-xs theme-text-primary border-r border-slate-200 dark:border-slate-800 w-44">
+            <div class="space-y-1.5">
+                <div class="text-xs font-extrabold text-brand-500">Student Answer Script</div>
+                <div class="text-[11px] theme-text-secondary font-medium">${data.mappings.length} Questions Mapped</div>
+                <div class="pt-1">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Overall: ${avgConf}% Conf</span>
+                </div>
+            </div>
+        </td>
+        <td class="p-2 align-top" colspan="5">${allQsHtml}</td>
+    `;
+
+    tbody.appendChild(row);
+
+    if(window.lucide) lucide.createIcons();
+}
+
+function viewFullAnswerScriptModal(startPage = 1) {
+    if(uploadedFiles && uploadedFiles.length > 0) {
+        const targetIdx = Math.max(0, Math.min(startPage - 1, uploadedFiles.length - 1));
+        previewPageModal(targetIdx);
+    } else if(currentSubmissionId) {
+        compileAndPreviewPdf();
+    } else {
+        alert("No answer script pages uploaded to view.");
+    }
+}
+
+function jumpToMappedPage(pageNumbers) {
+    if(!pageNumbers || pageNumbers.length === 0) return alert("No mapped pages for this question.");
+    const firstPageNum = pageNumbers[0];
+    const targetIdx = firstPageNum - 1;
+    if(targetIdx >= 0 && targetIdx < uploadedFiles.length) {
+        previewPageModal(targetIdx);
+    } else {
+        alert(`Page ${firstPageNum} preview not loaded.`);
+    }
+}
+
+function updateMappingPage(mappingIndex, pageNum, isChecked) {
+    if(!currentMappingData[mappingIndex]) return;
+    let pgList = currentMappingData[mappingIndex].page_numbers;
+    if(isChecked) {
+        if(!pgList.includes(pageNum)) pgList.push(pageNum);
+    } else {
+        currentMappingData[mappingIndex].page_numbers = pgList.filter(p => p !== pageNum);
+    }
+}
+
+async function confirmQuestionMappingAndStart() {
+    if(!currentSubmissionId) return alert("Submission ID not found.");
+
+    const confirmedMappings = currentMappingData.map(m => ({
+        question_id: m.question_id,
+        page_numbers: m.page_numbers
+    }));
+
+    const options = {
+        ink_color: document.querySelector('input[name="inkColor"]:checked').value,
+        deskew: document.getElementById('optDeskew').checked,
+        shadow_removal: document.getElementById('optShadow').checked,
+        background_whitening: document.getElementById('optWhitening').checked,
+        contrast_enhancement: document.getElementById('optContrast').checked,
+        ocr_mode: document.getElementById('optOcrMode').value,
+        strictness: document.getElementById('optStrictness').value,
+        eval_mode: document.getElementById('optEvalMode').value,
+        custom_prompt: document.getElementById('customPrompt').value
+    };
+
+    const modal = document.getElementById('evalProgressModal');
+    modal.classList.remove('hidden');
+
+    const term = document.getElementById('evalTerminalLog');
+    const pBar = document.getElementById('evalProgressBar');
+
+    function log(msg, pct) {
+        term.innerHTML += `<div>${msg}</div>`;
+        term.scrollTop = term.scrollHeight;
+        if(pct) {
+            pBar.style.width = `${pct}%`;
+            document.getElementById('evalProgressPct').innerText = `${pct}%`;
+        }
+    }
+
+    log("==================================================", 10);
+    log("UPLOAD COMPLETE", 15);
+    log("==================================================", 20);
+    log("PREVIEW GENERATED", 30);
+    log("==================================================", 40);
+    log("WORKING PDF GENERATED", 50);
+    log("==================================================", 60);
+    log("OCR COMPLETE", 70);
+    log("==================================================", 75);
+    log("QUESTION MAPPING COMPLETE", 80);
+
+    try {
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/confirm-mapping/`, {
+            method: 'POST',
+            body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options }),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            log("==================================================", 85);
+            log("AI EVALUATION COMPLETE", 90);
+            log("==================================================", 95);
+            log("OPENING REVIEW WORKSPACE", 98);
+            log("==================================================", 100);
+            setTimeout(() => {
+                window.location.href = data.workspace_url || `/teacher/submission/${currentSubmissionId}/workspace/`;
+            }, 600);
+        } else {
+            log("[ERROR] Evaluation failed: " + data.error, 100);
+            pBar.className = "h-full bg-rose-500 rounded-full transition-all duration-300";
+            const closeRow = document.getElementById('evalModalCloseRow');
+            if(closeRow) closeRow.classList.remove('hidden');
+        }
+    } catch(err) {
+        log("[FATAL ERROR] " + err.message, 100);
+        pBar.className = "h-full bg-rose-500 rounded-full transition-all duration-300";
+        const closeRow = document.getElementById('evalModalCloseRow');
+        if(closeRow) closeRow.classList.remove('hidden');
+    }
+}
+</script>
+{% endblock %}

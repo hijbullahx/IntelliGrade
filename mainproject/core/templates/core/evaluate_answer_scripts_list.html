@@ -17,8 +17,11 @@
             <p class="text-xs theme-text-muted mt-1">Examination: <strong>{{ exam.title }}</strong> | Total Questions: <strong>{{ exam.questions.count }}</strong></p>
         </div>
         <div class="flex items-center gap-3">
+            <a href="{% url 'evaluation_wizard' exam.id %}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard (v3.0)
+            </a>
             <button onclick="document.getElementById('uploadModal').classList.remove('hidden')" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
-                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload Answer Script (PDF / ZIP / Image)
+                <i data-lucide="upload-cloud" class="w-4 h-4"></i> Quick Upload
             </button>
             <a href="{% url 'export_evaluation_report' exam.id %}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary font-bold rounded-xl transition-all flex items-center gap-2 text-xs">
                 <i data-lucide="download" class="w-4 h-4"></i> Download Report (CSV)
@@ -49,15 +52,26 @@
                 </thead>
                 <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
                     {% for sub in submissions %}
-                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
-                        <td class="px-5 py-4 font-bold theme-text-primary">{{ sub.student_name }}</td>
+                    <tr id="sub-row-{{ sub.id }}" class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 theme-text-primary">
+                            <div class="font-extrabold text-sm">{{ sub.student_name }}</div>
+                            <div class="flex flex-wrap gap-1.5 pt-1">
+                                {% for q_map in sub.question_mappings.all %}
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold border {% if q_map.page_numbers_json %}bg-brand-500/10 text-brand-500 border-brand-500/20{% else %}bg-slate-500/10 text-slate-400 border-slate-500/20{% endif %}">
+                                    Q{{ q_map.question.question_number }}: {% if q_map.page_numbers_json %}Pg {{ q_map.page_numbers_json|join:", " }}{% else %}Skipped{% endif %}
+                                </span>
+                                {% empty %}
+                                <span class="text-[10px] theme-text-muted italic">All-in-One Answer Script</span>
+                                {% endfor %}
+                            </div>
+                        </td>
                         <td class="px-5 py-4 font-mono text-[11px]">{{ sub.student_roll_no|default:"N/A" }}</td>
                         <td class="px-5 py-4 font-extrabold text-emerald-600 dark:text-emerald-400">{{ sub.total_obtained_marks }} / {{ sub.total_max_marks }}</td>
                         <td class="px-5 py-4 font-bold">{{ sub.percentage }}%</td>
                         <td class="px-5 py-4">
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border 
-                                {% if sub.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
-                                {% elif sub.status == 'EVALUATED' %}bg-blue-500/10 text-blue-600 border-blue-500/20
+                                {% if sub.status == 'FINALIZED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
+                                {% elif sub.status == 'UNDER_REVIEW' or sub.status == 'AI_EVALUATED' %}bg-blue-500/10 text-blue-600 border-blue-500/20
                                 {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
                                 {{ sub.get_status_display }}
                             </span>
@@ -71,10 +85,22 @@
                             <span class="text-xs theme-text-muted flex items-center gap-1"><i data-lucide="check" class="w-3 h-3 text-emerald-500"></i> Clear</span>
                             {% endif %}
                         </td>
-                        <td class="px-5 py-4 text-right">
+                        <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
+                            {% if sub.is_finalized or sub.status == 'FINALIZED' %}
+                            <a href="{% url 'api_download_evaluated_pdf' sub.id %}" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]" title="Download Evaluated Script PDF">
+                                <i data-lucide="file-down" class="w-3.5 h-3.5"></i> Download PDF
+                            </a>
+                            {% else %}
+                            <button type="button" disabled class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 font-bold rounded-lg cursor-not-allowed inline-flex items-center gap-1 text-[11px]" title="PDF Download unlocks after teacher finalizes evaluation in Workspace.">
+                                <i data-lucide="lock" class="w-3 h-3"></i> Download PDF
+                            </button>
+                            {% endif %}
                             <a href="{% url 'evaluation_workspace' sub.id %}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]">
                                 <i data-lucide="layout" class="w-3.5 h-3.5"></i> Open Workspace
                             </a>
+                            <button type="button" onclick="deleteSubmission({{ sub.id }}, '{{ sub.student_name|escapejs }}')" class="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-500/20 font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]" title="Remove Student Submission">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove
+                            </button>
                         </td>
                     </tr>
                     {% empty %}
@@ -166,5 +192,25 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         statusDiv.innerText = "Submission failed: " + err.message;
     }
 });
+
+async function deleteSubmission(subId, studentName) {
+    if(!confirm(`Are you sure you want to remove the submission for "${studentName}"? This action cannot be undone.`)) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            const row = document.getElementById(`sub-row-${subId}`);
+            if(row) row.remove();
+        } else {
+            alert("Error removing submission: " + data.error);
+        }
+    } catch(err) {
+        alert("Exception removing submission: " + err.message);
+    }
+}
 </script>
 {% endblock %}

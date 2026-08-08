@@ -2,7 +2,7 @@ import re
 import json
 from typing import Dict, Any, List
 from core.ai_engine.providers.factory import AIProviderFactory
-from core.ai_engine.parser.academic_parser import AcademicDocumentParser
+from core.ai_engine.parser.academic_parser import AcademicParserService
 from core.models import Examination, Question, Rubric
 
 class QuestionPaperParser:

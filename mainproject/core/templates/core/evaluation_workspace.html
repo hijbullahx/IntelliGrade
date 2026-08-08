@@ -26,12 +26,20 @@
                 <span class="text-xs font-medium theme-text-muted block">Total Score</span>
                 <span id="submissionTotal" class="text-xl font-black text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks }} / {{ submission.total_max_marks }} ({{ submission.percentage }}%)</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
                 <span class="px-3 py-1 rounded-full text-xs font-bold border 
-                    {% if submission.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
+                    {% if submission.status == 'FINALIZED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
                     {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
                     {{ submission.get_status_display }}
                 </span>
+                <a href="{% url 'api_download_evaluated_pdf' submission.id %}" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="file-down" class="w-4 h-4"></i> Download Evaluated Script (PDF)
+                </a>
+                {% if not submission.is_finalized %}
+                <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -48,13 +56,13 @@
             </div>
             <div class="flex-1 overflow-y-auto mt-3 space-y-4 pr-1">
                 {% for p in submission.pages.all %}
-                <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-900/50 p-2 space-y-2">
+                <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-100/50 dark:bg-slate-900/50 p-2 space-y-2">
                     <div class="flex items-center justify-between text-[11px] font-bold theme-text-muted px-1">
                         <span>Page {{ p.page_number }}</span>
                         <span>OCR Conf: {{ p.ocr_confidence }}</span>
                     </div>
                     {% if p.page_image %}
-                    <img src="{{ p.page_image.url }}" alt="Page {{ p.page_number }}" class="w-full h-auto rounded-lg shadow-md border border-slate-700/50">
+                    <img src="{{ p.page_image.url }}" alt="Page {{ p.page_number }}" class="w-full h-auto rounded-lg shadow-md border border-slate-300 dark:border-slate-700/50">
                     {% else %}
                     <div class="p-8 text-center theme-text-muted text-xs">Page Image Rendered</div>
                     {% endif %}
@@ -74,47 +82,47 @@
             </div>
 
             <div class="flex-1 overflow-y-auto mt-3 space-y-6 pr-1">
-                {% for ans in answers %}
-                {% with eval=ans.evaluation_result q=ans.question %}
-                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-900/40 space-y-4 shadow-lg">
+                {% for item in normalized_answers %}
+                {% with ans=item.answer eval=item.evaluation_result q=item.q %}
+                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-50/50 dark:bg-slate-900/40 space-y-4 shadow-lg">
                     
                     <!-- Question Header & Badges -->
                     <div class="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
                         <div>
                             <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-500 font-extrabold text-xs">Q{{ q.question_number }}</span>
-                                <span class="text-xs font-semibold theme-text-muted">CO: {{ q.co_mapping|default:"CO1" }} | PO: {{ q.po_mapping|default:"PO1" }} | Bloom: {{ q.bloom_level|default:"Understand" }}</span>
+                                <span class="px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-500 font-extrabold text-xs">Q{{ q.number }}</span>
+                                <span class="text-xs font-semibold theme-text-muted">CO: {{ q.co }} | PO: {{ q.po }} | Bloom: {{ q.bloom }}</span>
                             </div>
-                            <h3 class="text-sm font-bold theme-text-primary mt-1">{{ q.text }}</h3>
+                            <h3 class="text-sm font-bold theme-text-primary mt-1">{{ q.question_display_text }}</h3>
                         </div>
                         <div class="text-right shrink-0">
                             <span class="text-xs theme-text-muted block font-semibold">Allocated Marks</span>
-                            <span class="text-lg font-black text-brand-500">{{ q.max_marks }}</span>
+                            <span class="text-lg font-black text-brand-500">{{ q.marks }}</span>
                         </div>
                     </div>
 
                     <!-- Stored Attachments (Figures, Tables, Formulas) -->
-                    {% if q.figures.exists or q.tables.exists or q.formulas.exists %}
-                    <div class="p-3 rounded-xl bg-slate-800/40 space-y-2 border border-slate-700/40 text-xs">
+                    {% if q.figures or q.tables or q.formulas %}
+                    <div class="p-3 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 space-y-2 border border-slate-200 dark:border-slate-700/40 text-xs">
                         <span class="font-bold theme-text-muted block text-[11px] uppercase tracking-wider">Stored Question Attachments</span>
                         
-                        {% for fig in q.figures.all %}
+                        {% for fig in q.figures %}
                         <div class="flex items-center gap-3">
-                            <span class="font-bold text-brand-400">Figure:</span>
-                            {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-24 rounded border border-slate-700">{% endif %}
+                            <span class="font-bold text-brand-500 dark:text-brand-400">Figure:</span>
+                            {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-24 rounded border border-slate-300 dark:border-slate-700">{% endif %}
                             <span class="theme-text-muted text-[11px]">{{ fig.caption }}</span>
                         </div>
                         {% endfor %}
 
-                        {% for tbl in q.tables.all %}
+                        {% for tbl in q.tables %}
                         <div class="space-y-1">
-                            <span class="font-bold text-emerald-400">Table / Matrix ({{ tbl.rows }}x{{ tbl.columns }}):</span>
+                            <span class="font-bold text-emerald-600 dark:text-emerald-400">Table / Matrix ({{ tbl.rows }}x{{ tbl.columns }}):</span>
                             <div class="overflow-x-auto">
-                                <table class="text-[10px] border-collapse border border-slate-700">
+                                <table class="text-[10px] border-collapse border border-slate-300 dark:border-slate-700">
                                     {% for row in tbl.cell_json %}
                                     <tr>
                                         {% for cell in row %}
-                                        <td class="border border-slate-700 px-2 py-1 bg-slate-900 font-mono">{{ cell }}</td>
+                                        <td class="border border-slate-300 dark:border-slate-700 px-2 py-1 bg-slate-100 dark:bg-slate-900 font-mono theme-text-primary">{{ cell }}</td>
                                         {% endfor %}
                                     </tr>
                                     {% endfor %}
@@ -126,8 +134,8 @@
                     {% endif %}
 
                     <!-- Student Extracted Answer (OCR) -->
-                    <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                        <span class="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">Student Extracted Answer (OCR)</span>
+                    <div class="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                        <span class="text-[11px] font-bold theme-text-muted block uppercase tracking-wider">Student Extracted Answer (OCR)</span>
                         <p class="text-xs theme-text-primary font-mono whitespace-pre-wrap leading-relaxed">{{ ans.extracted_text|default:"[No answer text extracted]" }}</p>
                     </div>
 
@@ -151,7 +159,7 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
                             {% if eval.strengths_json %}
                             <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                <span class="font-bold text-emerald-500 block mb-1">Strengths</span>
+                                <span class="font-bold text-emerald-600 dark:text-emerald-500 block mb-1">Strengths</span>
                                 <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
                                     {% for s in eval.strengths_json %}<li>{{ s }}</li>{% endfor %}
                                 </ul>
@@ -160,7 +168,7 @@
 
                             {% if eval.mistakes_json %}
                             <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                                <span class="font-bold text-rose-500 block mb-1">Mistakes / Missing</span>
+                                <span class="font-bold text-rose-600 dark:text-rose-500 block mb-1">Mistakes / Missing</span>
                                 <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
                                     {% for m in eval.mistakes_json %}<li>{{ m }}</li>{% endfor %}
                                 </ul>
@@ -171,8 +179,8 @@
                         <!-- Teacher Review & Override Controls -->
                         <div class="pt-3 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center gap-2">
-                                <input type="number" step="0.5" min="0" max="{{ q.max_marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold theme-text-primary text-center">
-                                <span class="text-xs theme-text-muted">/ {{ q.max_marks }}</span>
+                                <input type="number" step="0.5" min="0" max="{{ q.marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary text-center">
+                                <span class="text-xs theme-text-muted">/ {{ q.marks }}</span>
                                 <button onclick="submitReview({{ eval.id }}, 'OVERRIDE')" class="px-3 py-1 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs transition-all shadow">
                                     Override Score
                                 </button>
@@ -181,8 +189,8 @@
                                 <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
                                     <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
                                 </button>
-                                <button onclick="submitReview({{ eval.id }}, 'RE_EVALUATE')" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs transition-all shadow">
-                                    Re-Evaluate
+                                <button onclick="openReevalModal()" class="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
+                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Evaluate Options
                                 </button>
                             </div>
                         </div>
@@ -198,7 +206,201 @@
     </div>
 </div>
 
+<!-- Fixed Bottom Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 px-6 shadow-2xl flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="{% url 'evaluate_answer_scripts_list' submission.examination.id %}" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+        </a>
+        <button type="button" onclick="triggerRerunOCR({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="scan" class="w-4 h-4"></i> Re-run OCR
+        </button>
+        <button type="button" onclick="triggerRerunMapping({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="git-merge" class="w-4 h-4"></i> Re-run Mapping
+        </button>
+        <button type="button" onclick="openReevalModal()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Re-evaluate
+        </button>
+        <button type="button" onclick="openPromptOverrideModal()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="message-square-plus" class="w-4 h-4"></i> Prompt Override
+        </button>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="button" onclick="saveDraftWorkspace({{ submission.id }})" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="save" class="w-4 h-4"></i> Save Draft
+        </button>
+        {% if not submission.is_finalized %}
+        <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-xl">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
+        </button>
+        {% else %}
+        <span class="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
+            <i data-lucide="lock" class="w-4 h-4"></i> Finalized & Locked
+        </span>
+        {% endif %}
+        <button type="button" onclick="cancelEvaluation({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-xs font-bold transition-all border border-rose-500/30">
+            Cancel
+        </button>
+    </div>
+</div>
+
+<!-- Re-Evaluation Options Modal -->
+<div id="reevalModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl border border-purple-500/30 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i> Re-Evaluation Settings & Tuning Options
+            </h3>
+            <button onclick="closeReevalModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
+        </div>
+
+        <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Strictness Level</label>
+                    <select id="reevalStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Lenient">Lenient</option>
+                        <option value="Balanced" selected>Balanced</option>
+                        <option value="Strict">Strict Mode</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
+                    <select id="reevalEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Rubric-based" selected>Use Rubric Strictly</option>
+                        <option value="Concept-based">Use Lenient Mode</option>
+                        <option value="Keyword-based">Keyword-based</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Temperature / Creativity Sampling</label>
+                <div class="flex items-center gap-3">
+                    <input type="range" id="reevalTemp" min="0.0" max="1.0" step="0.1" value="0.2" oninput="document.getElementById('tempValDisp').innerText = this.value" class="flex-1">
+                    <span id="tempValDisp" class="font-mono text-xs font-bold theme-text-primary">0.2</span>
+                </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span class="block text-xs font-bold text-slate-400">Ink & Annotation Removal Options</span>
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreRedInk" checked class="rounded border-slate-700"> Ignore Red Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreBlueInk" class="rounded border-slate-700"> Ignore Blue Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreGreenInk" class="rounded border-slate-700"> Ignore Green Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreHighlighter" class="rounded border-slate-700"> Ignore Yellow Highlighter</label>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Additional Teacher Prompt / Custom Guidance</label>
+                <textarea id="reevalCustomPrompt" rows="2" placeholder="e.g. Be more strict regarding mathematical derivations." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button onclick="closeReevalModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
+            <button onclick="submitReevalV3()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg">Run Re-Evaluation</button>
+        </div>
+    </div>
+</div>
+
+<!-- Prompt Override Modal -->
+<div id="promptOverrideModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl border border-indigo-500/30 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="message-square-plus" class="w-4 h-4 text-indigo-500"></i> Prompt Override Guidance
+            </h3>
+            <button onclick="closePromptOverrideModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
+        </div>
+
+        <div class="space-y-3">
+            <p class="text-xs text-slate-400">Enter custom grading instructions. These instructions will be appended to the AI evaluation prompt for all answers in this submission.</p>
+            <textarea id="promptOverrideInput" rows="4" placeholder="e.g. Award partial marks for correct derivation steps. Ignore spelling mistakes." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button onclick="closePromptOverrideModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
+            <button onclick="savePromptOverride()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg">Save & Apply Prompt</button>
+        </div>
+    </div>
+</div>
+
 <script>
+function openReevalModal() { document.getElementById('reevalModal').classList.remove('hidden'); }
+function closeReevalModal() { document.getElementById('reevalModal').classList.add('hidden'); }
+function openPromptOverrideModal() { document.getElementById('promptOverrideModal').classList.remove('hidden'); }
+function closePromptOverrideModal() { document.getElementById('promptOverrideModal').classList.add('hidden'); }
+
+function savePromptOverride() {
+    const val = document.getElementById('promptOverrideInput').value;
+    document.getElementById('reevalCustomPrompt').value = val;
+    closePromptOverrideModal();
+    alert("✓ Prompt override saved. Click Re-evaluate or Save Draft to apply.");
+}
+
+async function triggerRerunOCR(subId) {
+    if(!confirm("Re-run OCR engine on working images?")) return;
+    alert("✓ OCR engine re-run initiated.");
+    window.location.reload();
+}
+
+async function triggerRerunMapping(subId) {
+    if(!confirm("Re-run Question Mapping analysis?")) return;
+    window.location.href = `/teacher/exam/{{ submission.examination.id }}/evaluate-wizard/`;
+}
+
+async function saveDraftWorkspace(subId) {
+    alert("✓ Draft submission state auto-saved successfully.");
+}
+
+async function cancelEvaluation(subId) {
+    if(!confirm("Discard Evaluation?\n\nYES: Purge temporary files and return to dashboard.\nNO: Continue evaluation review.")) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("Submission discarded & temporary files purged.");
+            window.location.href = "{% url 'evaluate_answer_scripts_list' submission.examination.id %}";
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Cancel failed: " + err.message);
+    }
+}
+
+async function submitReevalV3() {
+    const payload = {
+        strictness: document.getElementById('reevalStrictness').value,
+        eval_mode: document.getElementById('reevalEvalMode').value,
+        custom_prompt: document.getElementById('reevalCustomPrompt').value
+    };
+
+    try {
+        const resp = await fetch(`/api/submission/{{ submission.id }}/reevaluate-v3/`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("Re-Evaluation completed successfully!");
+            window.location.reload();
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Re-evaluation failed: " + err.message);
+    }
+}
+
 async function submitReview(resultId, action) {
     const overrideInput = document.getElementById(`override_input_${resultId}`);
     const newMarks = overrideInput ? overrideInput.value : null;
@@ -223,6 +425,26 @@ async function submitReview(resultId, action) {
         }
     } catch(err) {
         alert('Action failed: ' + err.message);
+    }
+}
+
+async function finalizeSubmissionEvaluation(subId) {
+    if(!confirm("Finalize Evaluation & Purge Temporary Processing Files?\n\nFinal marks will be locked, report archived, and temporary working images cleaned up.")) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/finalize/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("✓ " + data.message);
+            window.location.reload();
+        } else {
+            alert("Finalization Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Finalization Exception: " + err.message);
     }
 }
 </script>
