@@ -2948,6 +2948,12 @@ def api_confirm_question_mapping(request, submission_id):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
 
+            try:
+                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+                WorkingCopyManager.cleanup_temporary_files(submission.id)
+            except Exception:
+                pass
+
             return JsonResponse({
                 'success': True,
                 'submission_id': evaluated_sub.id,
