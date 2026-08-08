@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 from core.ai_engine.providers.factory import AIProviderFactory
 from core.ai_engine.ocr.engine import OCREngineManager
 from core.ai_engine.layout.academic_layout import AcademicLayoutAnalyzer
-from core.ai_engine.parser.academic_parser import AcademicDocumentParser
+from core.ai_engine.parser.academic_parser import AcademicParserService
 from core.ai_engine.routine_parser.routine_parser import RoutineParser
 from core.ai_engine.question_parser.question_paper_parser import QuestionPaperParser
 from core.ai_engine.course_outline_parser.outline_parser import CourseOutlineParser

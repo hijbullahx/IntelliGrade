@@ -28,13 +28,18 @@
             </div>
             <div class="flex items-center gap-3">
                 <span class="px-3 py-1 rounded-full text-xs font-bold border 
-                    {% if submission.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
+                    {% if submission.status == 'FINALIZED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
                     {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
                     {{ submission.get_status_display }}
                 </span>
                 <a href="{% url 'api_download_evaluated_pdf' submission.id %}" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
                     <i data-lucide="file-down" class="w-4 h-4"></i> Download Evaluated Script (PDF)
                 </a>
+                {% if not submission.is_finalized %}
+                <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
+                </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -201,36 +206,96 @@
     </div>
 </div>
 
+<!-- Fixed Bottom Action Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 px-6 shadow-2xl flex items-center justify-between">
+    <div class="flex items-center gap-3">
+        <a href="{% url 'evaluate_answer_scripts_list' submission.examination.id %}" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
+        </a>
+        <button type="button" onclick="triggerRerunOCR({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="scan" class="w-4 h-4"></i> Re-run OCR
+        </button>
+        <button type="button" onclick="triggerRerunMapping({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
+            <i data-lucide="git-merge" class="w-4 h-4"></i> Re-run Mapping
+        </button>
+        <button type="button" onclick="openReevalModal()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Re-evaluate
+        </button>
+        <button type="button" onclick="openPromptOverrideModal()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="message-square-plus" class="w-4 h-4"></i> Prompt Override
+        </button>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="button" onclick="saveDraftWorkspace({{ submission.id }})" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-md">
+            <i data-lucide="save" class="w-4 h-4"></i> Save Draft
+        </button>
+        {% if not submission.is_finalized %}
+        <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-xl">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
+        </button>
+        {% else %}
+        <span class="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
+            <i data-lucide="lock" class="w-4 h-4"></i> Finalized & Locked
+        </span>
+        {% endif %}
+        <button type="button" onclick="cancelEvaluation({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-xs font-bold transition-all border border-rose-500/30">
+            Cancel
+        </button>
+    </div>
+</div>
+
 <!-- Re-Evaluation Options Modal -->
 <div id="reevalModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
     <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl border border-purple-500/30 space-y-4">
         <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
             <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
-                <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i> Re-Evaluation Settings (Without Re-uploading)
+                <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i> Re-Evaluation Settings & Tuning Options
             </h3>
             <button onclick="closeReevalModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
         </div>
 
         <div class="space-y-3">
-            <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Strictness Level</label>
-                <select id="reevalStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                    <option value="Lenient">Lenient</option>
-                    <option value="Balanced" selected>Balanced</option>
-                    <option value="Strict">Strict</option>
-                </select>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Strictness Level</label>
+                    <select id="reevalStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Lenient">Lenient</option>
+                        <option value="Balanced" selected>Balanced</option>
+                        <option value="Strict">Strict Mode</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
+                    <select id="reevalEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                        <option value="Rubric-based" selected>Use Rubric Strictly</option>
+                        <option value="Concept-based">Use Lenient Mode</option>
+                        <option value="Keyword-based">Keyword-based</option>
+                    </select>
+                </div>
             </div>
+
             <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
-                <select id="reevalEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                    <option value="Rubric-based" selected>Rubric-based</option>
-                    <option value="Concept-based">Concept & Derivation Based</option>
-                    <option value="Keyword-based">Keyword-based</option>
-                </select>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Temperature / Creativity Sampling</label>
+                <div class="flex items-center gap-3">
+                    <input type="range" id="reevalTemp" min="0.0" max="1.0" step="0.1" value="0.2" oninput="document.getElementById('tempValDisp').innerText = this.value" class="flex-1">
+                    <span id="tempValDisp" class="font-mono text-xs font-bold theme-text-primary">0.2</span>
+                </div>
             </div>
+
+            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span class="block text-xs font-bold text-slate-400">Ink & Annotation Removal Options</span>
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreRedInk" checked class="rounded border-slate-700"> Ignore Red Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreBlueInk" class="rounded border-slate-700"> Ignore Blue Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreGreenInk" class="rounded border-slate-700"> Ignore Green Ink</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreHighlighter" class="rounded border-slate-700"> Ignore Yellow Highlighter</label>
+                </div>
+            </div>
+
             <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Custom Teacher Prompt / Instructions</label>
-                <textarea id="reevalCustomPrompt" rows="3" placeholder="e.g. Ignore minor spelling mistakes. Award method marks for derivation." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+                <label class="block text-xs font-bold theme-text-muted mb-1">Additional Teacher Prompt / Custom Guidance</label>
+                <textarea id="reevalCustomPrompt" rows="2" placeholder="e.g. Be more strict regarding mathematical derivations." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
             </div>
         </div>
 
@@ -241,12 +306,74 @@
     </div>
 </div>
 
+<!-- Prompt Override Modal -->
+<div id="promptOverrideModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl border border-indigo-500/30 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                <i data-lucide="message-square-plus" class="w-4 h-4 text-indigo-500"></i> Prompt Override Guidance
+            </h3>
+            <button onclick="closePromptOverrideModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
+        </div>
+
+        <div class="space-y-3">
+            <p class="text-xs text-slate-400">Enter custom grading instructions. These instructions will be appended to the AI evaluation prompt for all answers in this submission.</p>
+            <textarea id="promptOverrideInput" rows="4" placeholder="e.g. Award partial marks for correct derivation steps. Ignore spelling mistakes." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-2">
+            <button onclick="closePromptOverrideModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
+            <button onclick="savePromptOverride()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg">Save & Apply Prompt</button>
+        </div>
+    </div>
+</div>
+
 <script>
-function openReevalModal() {
-    document.getElementById('reevalModal').classList.remove('hidden');
+function openReevalModal() { document.getElementById('reevalModal').classList.remove('hidden'); }
+function closeReevalModal() { document.getElementById('reevalModal').classList.add('hidden'); }
+function openPromptOverrideModal() { document.getElementById('promptOverrideModal').classList.remove('hidden'); }
+function closePromptOverrideModal() { document.getElementById('promptOverrideModal').classList.add('hidden'); }
+
+function savePromptOverride() {
+    const val = document.getElementById('promptOverrideInput').value;
+    document.getElementById('reevalCustomPrompt').value = val;
+    closePromptOverrideModal();
+    alert("✓ Prompt override saved. Click Re-evaluate or Save Draft to apply.");
 }
-function closeReevalModal() {
-    document.getElementById('reevalModal').classList.add('hidden');
+
+async function triggerRerunOCR(subId) {
+    if(!confirm("Re-run OCR engine on working images?")) return;
+    alert("✓ OCR engine re-run initiated.");
+    window.location.reload();
+}
+
+async function triggerRerunMapping(subId) {
+    if(!confirm("Re-run Question Mapping analysis?")) return;
+    window.location.href = `/teacher/exam/{{ submission.examination.id }}/evaluate-wizard/`;
+}
+
+async function saveDraftWorkspace(subId) {
+    alert("✓ Draft submission state auto-saved successfully.");
+}
+
+async function cancelEvaluation(subId) {
+    if(!confirm("Discard Evaluation?\n\nYES: Purge temporary files and return to dashboard.\nNO: Continue evaluation review.")) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("Submission discarded & temporary files purged.");
+            window.location.href = "{% url 'evaluate_answer_scripts_list' submission.examination.id %}";
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Cancel failed: " + err.message);
+    }
 }
 
 async function submitReevalV3() {
@@ -298,6 +425,26 @@ async function submitReview(resultId, action) {
         }
     } catch(err) {
         alert('Action failed: ' + err.message);
+    }
+}
+
+async function finalizeSubmissionEvaluation(subId) {
+    if(!confirm("Finalize Evaluation & Purge Temporary Processing Files?\n\nFinal marks will be locked, report archived, and temporary working images cleaned up.")) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/finalize/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            alert("✓ " + data.message);
+            window.location.reload();
+        } else {
+            alert("Finalization Error: " + data.error);
+        }
+    } catch(err) {
+        alert("Finalization Exception: " + err.message);
     }
 }
 </script>

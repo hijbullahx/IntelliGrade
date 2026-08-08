@@ -7,6 +7,7 @@ import numpy as np
 from typing import List, Dict, Any, Tuple, Optional
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db import transaction, close_old_connections, IntegrityError, DatabaseError, OperationalError
 
 from core.models import (
     Examination, Question, StudentSubmission, SubmissionPDF, SubmissionImage,
@@ -48,45 +49,83 @@ class AIScriptEvaluator:
         return len(errors) == 0, errors
 
     @classmethod
-    def process_and_evaluate_submission(
+    def prepare_and_ocr_submission(
         cls,
         submission_id: int,
         options: Optional[Dict[str, Any]] = None,
         user=None,
         ip_address: str = None
-    ) -> StudentSubmission:
+    ) -> List[SubmissionPage]:
         """
-        Runs complete end-to-end evaluation pipeline for a StudentSubmission instance.
+        Phase 1: Image Preprocessing, Working Copy Creation, Preview PDF Generation, and OCR.
+        Executed ONCE per submission. If status >= SEGMENTED, reuses cached pages and OCR.
         """
         if options is None:
             options = {}
 
         submission = StudentSubmission.objects.get(id=submission_id)
+        cached_pages = list(submission.pages.all().order_by('page_number'))
 
-        # Pre-evaluation validation
-        is_valid, validation_errors = cls.validate_pre_evaluation(submission)
-        if not is_valid:
-            err_msg = "; ".join(validation_errors)
-            cls._write_pipeline_log(submission.id, f"[PRE-EVAL VALIDATION ERROR] {err_msg}")
-            raise ValueError(err_msg)
+        # Workflow Guard: If already prepared & segmented, reuse cached OCR artifacts
+        if cached_pages and submission.status in [
+            StudentSubmission.Status.PDF_GENERATED,
+            StudentSubmission.Status.OCR_COMPLETE,
+            StudentSubmission.Status.SEGMENTED,
+            StudentSubmission.Status.MAPPING_COMPLETE,
+            StudentSubmission.Status.WAITING_TEACHER_CONFIRMATION,
+            StudentSubmission.Status.AI_EVALUATED,
+            StudentSubmission.Status.UNDER_REVIEW,
+            StudentSubmission.Status.FINALIZED,
+            StudentSubmission.Status.ARCHIVED
+        ]:
+            print(f"\n==================================================")
+            print(f"[CACHE REUSE] Submission #{submission.id} already prepared (Status: {submission.status}).")
+            print(f"Reusing {len(cached_pages)} cached SubmissionPage(s) with OCR results.")
+            print(f"==================================================\n")
+            return cached_pages
 
-        examination = submission.examination
-        stored_questions = safe_normalize_collection(examination.questions)
-        stored_questions.sort(key=lambda q: getattr(q, 'question_number', 0))
+        trace_dir = os.path.join(settings.MEDIA_ROOT, 'request_trace', f'eval_{submission.id}')
+        os.makedirs(trace_dir, exist_ok=True)
+        return cls._process_pages_and_compile_pdf(submission, options, trace_dir)
+
+    @classmethod
+    def evaluate_mapped_answers(
+        cls,
+        submission_id: int,
+        confirmed_mappings: Optional[List[Dict[str, Any]]] = None,
+        options: Optional[Dict[str, Any]] = None,
+        user=None,
+        ip_address: str = None
+    ) -> StudentSubmission:
+        """
+        Phase 3: Evaluates mapped answers using LLM.
+        Consumes ONLY mapped answers, question DTOs, cached OCR text, and rubric specifications.
+        Does NOT re-run image preprocessing, working copy creation, preview PDF generation, or OCR.
+        """
+        if options is None:
+            options = {}
+
+        submission = StudentSubmission.objects.get(id=submission_id)
+        
+        # Ensure submission pages & OCR are prepared if called directly
+        if submission.pages.count() == 0 or submission.status in [
+            StudentSubmission.Status.UPLOADED,
+            StudentSubmission.Status.PREVIEW_READY,
+            StudentSubmission.Status.WORKING_COPY_CREATED,
+            StudentSubmission.Status.PDF_GENERATED
+        ]:
+            cls.prepare_and_ocr_submission(submission_id, options, user, ip_address)
+            submission.refresh_from_db()
 
         trace_dir = os.path.join(settings.MEDIA_ROOT, 'request_trace', f'eval_{submission.id}')
         os.makedirs(trace_dir, exist_ok=True)
 
-        cls._log_audit(submission, user, "EVALUATION_V3_STARTED", {"options": options}, ip_address)
-        cls._write_pipeline_log(submission.id, f"=== EVALUATION PIPELINE STARTED FOR SUBMISSION {submission.id} (Exam: {examination.title}) ===")
+        if confirmed_mappings:
+            from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
+            QuestionMappingOrchestrator.confirm_mapping_and_evaluate(submission.id, confirmed_mappings, user=user, ip_address=ip_address)
 
-        # Step 1: Image Preprocessing & Ordered PDF Compilation
-        pages = cls._process_pages_and_compile_pdf(submission, options, trace_dir)
+        answers = list(submission.answers.all().order_by('question__question_number'))
 
-        # Step 2: Multi-Page Answer Segmentation & Question Association
-        answers = cls._segment_answers_v3(submission, pages, stored_questions)
-
-        # Step 3: LLM Evaluation for each Question Answer using QuestionDTO
         total_obtained = 0.0
         total_max = 0.0
         has_manual_review = False
@@ -101,9 +140,12 @@ class AIScriptEvaluator:
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
         submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
-        submission.status = StudentSubmission.Status.EVALUATED
         submission.requires_manual_review = has_manual_review
         submission.save()
+
+        from core.ai_engine.services.workflow import SubmissionWorkflow
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.AI_EVALUATED, force=True)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.UNDER_REVIEW, force=True)
 
         cls._log_audit(submission, user, "EVALUATION_V3_COMPLETED", {
             "obtained_marks": total_obtained,
@@ -111,9 +153,25 @@ class AIScriptEvaluator:
             "percentage": submission.percentage,
             "requires_manual_review": has_manual_review
         }, ip_address)
-        cls._write_pipeline_log(submission.id, f"=== EVALUATION PIPELINE COMPLETED: {total_obtained}/{total_max} ({submission.percentage}%) ===")
+        cls._write_pipeline_log(submission.id, f"=== EVALUATION COMPLETED: {total_obtained}/{total_max} ({submission.percentage}%) ===")
 
         return submission
+
+    @classmethod
+    def process_and_evaluate_submission(
+        cls,
+        submission_id: int,
+        options: Optional[Dict[str, Any]] = None,
+        user=None,
+        ip_address: str = None
+    ) -> StudentSubmission:
+        """
+        Runs end-to-end evaluation pipeline using decoupled phases.
+        """
+        pages = cls.prepare_and_ocr_submission(submission_id, options, user, ip_address)
+        from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
+        QuestionMappingOrchestrator.analyze_and_build_mapping(submission_id, user, ip_address)
+        return cls.evaluate_mapped_answers(submission_id, None, options, user, ip_address)
 
     @classmethod
     def reevaluate_submission(
@@ -161,36 +219,46 @@ class AIScriptEvaluator:
         trace_dir: str
     ) -> List[SubmissionPage]:
         """
-        Processes raw images / PDF pages with Computer Vision pipeline and generates submission_original.pdf.
+        Processes working copy images from media/submission_working/ (single source of truth).
+        No long-running database transaction is kept open during OCR or image preprocessing.
         """
+        from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+        from django.db import close_old_connections
+
+        # Ensure working image copies are initialized
+        working_paths = WorkingCopyManager.create_initial_working_copies(submission.id)
         extracted_pages = []
-        raw_images = safe_normalize_collection(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
 
-        processed_img_arrays = []
+        pages = list(submission.pages.all().order_by('page_number'))
 
-        if raw_images:
-            for idx, raw_img in enumerate(raw_images, 1):
-                page_trace = os.path.join(trace_dir, f'page_{idx}')
+        for sp in pages:
+            working_path = sp.working_image_path if (sp.working_image_path and os.path.exists(sp.working_image_path)) else WorkingCopyManager.get_latest_working_image_path(submission.id, sp.page_number)
+
+            print("----------------------------------------")
+            print("OCR USING")
+            print(f"submission_working/ (Page {sp.page_number} v{sp.version})")
+            print("No DB transaction open during OCR compute")
+            print("----------------------------------------")
+
+            close_old_connections()
+
+            bgr = cv2.imread(working_path) if (working_path and os.path.exists(working_path)) else None
+            if bgr is not None:
                 enhanced_bgr, meta = ImagePreprocessingService.process_image(
-                    raw_img.original_file.path,
+                    bgr,
                     options=options,
-                    trace_dir=page_trace
+                    trace_dir=os.path.join(trace_dir, f'page_{sp.page_number}')
                 )
-                processed_img_arrays.append(enhanced_bgr)
-
                 raw_text, ocr_conf = cls._run_ocr_on_bgr(enhanced_bgr)
+            else:
+                raw_text, ocr_conf = "", 0.0
 
-                is_success, buffer = cv2.imencode('.png', enhanced_bgr)
-                img_bytes = buffer.tobytes() if is_success else b''
+            close_old_connections()
 
-                sp, _ = SubmissionPage.objects.get_or_create(
-                    submission=submission,
-                    page_number=idx,
-                    defaults={'ocr_raw_text': raw_text, 'ocr_confidence': ocr_conf}
-                )
+            # Save OCR result inside fast transaction
+            with transaction.atomic():
                 sp.ocr_raw_text = raw_text
                 sp.ocr_confidence = ocr_conf
-                sp.page_image.save(f"sub_{submission.id}_p{idx}.png", ContentFile(img_bytes), save=False)
                 sp.save()
 
                 OCRResult.objects.create(
@@ -201,57 +269,9 @@ class AIScriptEvaluator:
                 )
                 extracted_pages.append(sp)
 
-            pdf_path = os.path.join(settings.MEDIA_ROOT, 'submission_pdfs', f'submission_{submission.id}_original.pdf')
-            compiled_path, page_count = ImagePreprocessingService.compile_images_to_pdf(processed_img_arrays, pdf_path)
-
-            with open(compiled_path, 'rb') as f_pdf:
-                sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
-                sub_pdf.pdf_file.save(f"submission_{submission.id}_original.pdf", ContentFile(f_pdf.read()), save=False)
-                sub_pdf.page_count = page_count
-                sub_pdf.file_size_bytes = os.path.getsize(compiled_path)
-                sub_pdf.save()
-
-        else:
-            pdf_file_path = submission.script_file.path
-            import fitz
-            doc = fitz.open(pdf_file_path)
-            for page_idx, page in enumerate(doc, 1):
-                pix = page.get_pixmap(dpi=300)
-                img_bytes = pix.tobytes("png")
-                nparr = np.frombuffer(img_bytes, np.uint8)
-                bgr_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-                enhanced_bgr, _ = ImagePreprocessingService.process_image(
-                    bgr_img,
-                    options=options,
-                    trace_dir=os.path.join(trace_dir, f'page_{page_idx}')
-                )
-                raw_text, ocr_conf = cls._run_ocr_on_bgr(enhanced_bgr)
-
-                is_success, buffer = cv2.imencode('.png', enhanced_bgr)
-                png_bytes = buffer.tobytes() if is_success else img_bytes
-
-                sp, _ = SubmissionPage.objects.get_or_create(
-                    submission=submission,
-                    page_number=page_idx,
-                    defaults={'ocr_raw_text': raw_text, 'ocr_confidence': ocr_conf}
-                )
-                sp.ocr_raw_text = raw_text
-                sp.ocr_confidence = ocr_conf
-                sp.page_image.save(f"sub_{submission.id}_p{page_idx}.png", ContentFile(png_bytes), save=False)
-                sp.save()
-
-                OCRResult.objects.create(
-                    submission_page=sp,
-                    engine_name='PYMUPDF_EASYOCR',
-                    page_confidence=ocr_conf,
-                    raw_text=raw_text
-                )
-                extracted_pages.append(sp)
-            doc.close()
-
-        submission.status = StudentSubmission.Status.SEGMENTED
-        submission.save()
+        from core.ai_engine.services.workflow import SubmissionWorkflow
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED)
         return extracted_pages
 
     @classmethod
@@ -276,44 +296,44 @@ class AIScriptEvaluator:
         pages: List[SubmissionPage],
         stored_questions: List[Question]
     ) -> List[SubmissionAnswer]:
+        from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
+        from core.models import QuestionMapping
+
         created_answers = []
-        full_document_text = "\n\n".join([f"--- PAGE {p.page_number} ---\n{p.ocr_raw_text}" for p in pages])
+        existing_mappings = safe_normalize_collection(submission.question_mappings.all())
+
+        if not existing_mappings:
+            cls._write_pipeline_log(submission.id, "[MAPPING] Running order-independent question mapping analysis...")
+            QuestionMappingOrchestrator.analyze_and_build_mapping(submission.id)
+            existing_mappings = safe_normalize_collection(submission.question_mappings.all())
+
+        pages_by_num = {p.page_number: p for p in pages}
 
         for q in stored_questions:
-            q_num = QuestionAccessor.get_question_number(q).strip().lower()
-            pattern = rf'(?:Q(?:uestion)?\s*{q_num}|Ans(?:wer)?\s*{q_num}|^\s*{q_num}[\.\)])'
+            q_id = getattr(q, 'id', 0)
+            q_num = QuestionAccessor.get_question_number(q)
+            q_map = next((m for m in existing_mappings if getattr(m.question, 'id', None) == q_id), None)
 
-            matches = list(re.finditer(pattern, full_document_text, re.IGNORECASE | re.MULTILINE))
-            extracted_ans_text = ""
-            is_ambiguous = False
-            matched_page = pages[0] if pages else None
+            if q_map and q_map.page_numbers_json:
+                page_texts = []
+                for p_num in q_map.page_numbers_json:
+                    if p_num in pages_by_num and pages_by_num[p_num].ocr_raw_text:
+                        page_texts.append(f"--- PAGE {p_num} ---\n" + pages_by_num[p_num].ocr_raw_text)
 
-            if matches:
-                start_pos = matches[0].start()
-                next_q_pattern = r'(?:Q(?:uestion)?\s*\d+|Ans(?:wer)?\s*\d+|^\s*\d+[\.\)])'
-                next_matches = list(re.finditer(next_q_pattern, full_document_text[start_pos+1:], re.IGNORECASE | re.MULTILINE))
-                if next_matches:
-                    end_pos = start_pos + 1 + next_matches[0].start()
-                    extracted_ans_text = full_document_text[start_pos:end_pos].strip()
-                else:
-                    extracted_ans_text = full_document_text[start_pos:].strip()
-
-                if len(matches) > 1:
-                    is_ambiguous = True
-
+                extracted_ans_text = "\n\n".join(page_texts).strip() if page_texts else f"[Answer for Q{q_num} unmapped / skipped by student]"
+                is_ambiguous = (q_map.mapping_status == QuestionMapping.Status.AMBIGUOUS) and not q_map.is_confirmed
+                matched_page = pages_by_num.get(q_map.page_numbers_json[0]) if q_map.page_numbers_json else (pages[0] if pages else None)
             else:
-                if len(stored_questions) == 1:
-                    extracted_ans_text = full_document_text
-                else:
-                    extracted_ans_text = f"[Answer for Q{q_num} not explicitly numbered]\n" + full_document_text[:400]
-                    is_ambiguous = True
+                extracted_ans_text = f"[Question Q{q_num} unmapped / skipped by student]"
+                is_ambiguous = True
+                matched_page = pages[0] if pages else None
 
             sub_ans, _ = SubmissionAnswer.objects.get_or_create(
                 submission=submission,
                 question=q,
                 defaults={
                     'extracted_text': extracted_ans_text,
-                    'ocr_confidence': 0.85 if not is_ambiguous else 0.50,
+                    'ocr_confidence': getattr(q_map, 'confidence', 0.85),
                     'page': matched_page,
                     'requires_manual_review': is_ambiguous
                 }
@@ -402,12 +422,21 @@ Return ONLY JSON without markdown commentary.
         eval_data = None
         raw_response = ""
 
+        from django.db import close_old_connections
+
+        print("----------------------------------------")
+        print("LLM")
+        print(f"No DB transaction open during LLM API call for Q{q_dto.number}")
+        print("----------------------------------------")
+
         for attempt in range(1, max_retries + 2):
             try:
+                close_old_connections()
                 raw_response = ai_provider.generate_completion(
                     prompt=system_prompt if attempt == 1 else f"{system_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
                     system_instruction="You return strict JSON academic script evaluations."
                 )
+                close_old_connections()
 
                 # Log raw response to request_trace/llm_raw_response.txt
                 cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)

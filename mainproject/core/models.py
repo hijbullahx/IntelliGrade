@@ -355,9 +355,18 @@ class AIMemoryLog(models.Model):
 class StudentSubmission(models.Model):
     class Status(models.TextChoices):
         UPLOADED = 'UPLOADED', 'Uploaded'
+        PREVIEW_READY = 'PREVIEW_READY', 'Preview Ready'
+        WORKING_COPY_CREATED = 'WORKING_COPY_CREATED', 'Working Copy Created'
+        PDF_GENERATED = 'PDF_GENERATED', 'PDF Generated'
+        OCR_COMPLETE = 'OCR_COMPLETE', 'OCR Complete'
         SEGMENTED = 'SEGMENTED', 'Answer Segmented'
-        EVALUATED = 'EVALUATED', 'AI Evaluated'
-        REVIEWED = 'REVIEWED', 'Teacher Reviewed & Finalized'
+        MAPPING_COMPLETE = 'MAPPING_COMPLETE', 'Question Mapping Complete'
+        WAITING_TEACHER_CONFIRMATION = 'WAITING_TEACHER_CONFIRMATION', 'Waiting for Teacher Confirmation'
+        AI_EVALUATED = 'AI_EVALUATED', 'AI Evaluated'
+        UNDER_REVIEW = 'UNDER_REVIEW', 'Under Teacher Review'
+        FINALIZED = 'FINALIZED', 'Finalized & Locked'
+        ARCHIVED = 'ARCHIVED', 'Archived'
+        FAILED = 'FAILED', 'Evaluation Failed'
 
     examination = models.ForeignKey(Examination, on_delete=models.CASCADE, related_name='student_submissions')
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='student_submissions', null=True, blank=True)
@@ -369,6 +378,7 @@ class StudentSubmission(models.Model):
     percentage = models.FloatField(default=0.0)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.UPLOADED)
     requires_manual_review = models.BooleanField(default=False)
+    is_finalized = models.BooleanField(default=False, help_text="Set to True after teacher clicks Finalize Evaluation. Triggers temp file cleanup.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -380,12 +390,14 @@ class SubmissionPage(models.Model):
     submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='pages')
     page_number = models.IntegerField(default=1)
     page_image = models.ImageField(upload_to='submission_pages/%Y/%m/')
+    working_image_path = models.CharField(max_length=500, blank=True, help_text="Path to active working copy in submission_working/")
+    version = models.IntegerField(default=1, help_text="Version incremented on each image edit (rotation, crop, contrast)")
     ocr_raw_text = models.TextField(blank=True)
     ocr_confidence = models.FloatField(default=0.0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Page {self.page_number} for {self.submission.student_name}"
+        return f"Page {self.page_number} (v{self.version}) for {self.submission.student_name}"
 
 
 class SubmissionAnswer(models.Model):
@@ -508,13 +520,15 @@ class SubmissionImage(models.Model):
     submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='raw_images')
     original_file = models.ImageField(upload_to='submission_raw_images/%Y/%m/')
     processed_file = models.ImageField(upload_to='submission_processed_images/%Y/%m/', null=True, blank=True)
+    working_image_path = models.CharField(max_length=500, blank=True, help_text="Path to active working copy in submission_working/")
+    version = models.IntegerField(default=1, help_text="Version incremented on each image edit (rotation, crop, contrast)")
     sequence_order = models.IntegerField(default=1)
     rotation_angle = models.IntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"SubmissionImage #{self.sequence_order} for {self.submission.student_name}"
+        return f"SubmissionImage #{self.sequence_order} (v{self.version}) for {self.submission.student_name}"
 
 
 class OCRResult(models.Model):
@@ -543,6 +557,61 @@ class PromptHistory(models.Model):
 
     def __str__(self):
         return f"PromptHistory for Result #{self.evaluation_result.id} at {self.created_at}"
+
+
+class QuestionDetection(models.Model):
+    class DetectionMethod(models.TextChoices):
+        OCR_PATTERN = 'OCR_PATTERN', 'OCR Pattern Matching'
+        LAYOUT_POSITION = 'LAYOUT_POSITION', 'Layout & Position Analysis'
+        LLM_SEMANTIC = 'LLM_SEMANTIC', 'LLM Semantic Classification'
+        MANUAL_TEACHER = 'MANUAL_TEACHER', 'Manual Teacher Entry'
+
+    submission_page = models.ForeignKey(SubmissionPage, on_delete=models.CASCADE, related_name='question_detections')
+    question_number_raw = models.CharField(max_length=50, help_text="Exact string detected, e.g. Q.1, (1), ১")
+    question_number_normalized = models.CharField(max_length=20, help_text="Normalized number string, e.g. 1, 2, 3")
+    bbox_json = models.JSONField(default=dict, blank=True, help_text="Bounding box coordinates [ymin, xmin, ymax, xmax]")
+    confidence = models.FloatField(default=0.0)
+    detection_method = models.CharField(max_length=30, choices=DetectionMethod.choices, default=DetectionMethod.OCR_PATTERN)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Detection '{self.question_number_raw}' on Page {self.submission_page.page_number} (Conf: {self.confidence})"
+
+
+class QuestionMapping(models.Model):
+    class Status(models.TextChoices):
+        AUTO_HIGH = 'AUTO_HIGH', 'High Confidence Auto Match'
+        AMBIGUOUS = 'AMBIGUOUS', 'Ambiguous / Requires Teacher Review'
+        MANUAL_OVERRIDE = 'MANUAL_OVERRIDE', 'Teacher Override Confirmed'
+
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='question_mappings')
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='script_mappings')
+    page_numbers_json = models.JSONField(default=list, help_text="Array of page numbers attached to this question answer")
+    confidence = models.FloatField(default=0.0)
+    mapping_status = models.CharField(max_length=30, choices=Status.choices, default=Status.AUTO_HIGH)
+    is_confirmed = models.BooleanField(default=False)
+    review_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('submission', 'question')
+
+    def __str__(self):
+        return f"Mapping Submission #{self.submission.id} Q{self.question.question_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
+
+
+class MappingHistory(models.Model):
+    submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='mapping_history')
+    teacher = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    action_type = models.CharField(max_length=50, help_text="e.g. AUTO_DETECTED, SEMANTIC_FALLBACK, TEACHER_OVERRIDE, CONFIRMED")
+    details_json = models.JSONField(default=dict)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"MappingHistory #{self.id} for Submission {self.submission.id} - {self.action_type}"
+
 
 
 

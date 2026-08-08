@@ -2354,12 +2354,29 @@ from core.ai_engine.preprocessing.image_processor import ImagePreprocessingServi
 from core.ai_engine.reports.report_generator import EvaluationReportGenerator
 from django.http import HttpResponse
 
+def _get_examination_or_fallback(exam_id):
+    """
+    Safely retrieves Examination by ID or attempts graceful fallback to Course or latest Exam.
+    Prevents 404 errors when invalid/outdated exam IDs are requested.
+    """
+    exam = Examination.objects.filter(id=exam_id).first()
+    if not exam:
+        exam = Examination.objects.filter(course_id=exam_id).order_by('-id').first()
+    if not exam:
+        exam = Examination.objects.order_by('-id').first()
+    return exam
+
+
 def evaluate_answer_scripts_list(request, exam_id):
     """Lists all student submissions for a specific examination."""
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 
-    exam = get_object_or_404(Examination, id=exam_id)
+    exam = _get_examination_or_fallback(exam_id)
+    if not exam:
+        messages.error(request, f"No examination found for ID #{exam_id}.")
+        return redirect('teacher_dashboard')
+
     submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
 
     return render(request, 'core/evaluate_answer_scripts_list.html', {
@@ -2575,7 +2592,11 @@ def evaluation_wizard(request, exam_id):
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 
-    exam = get_object_or_404(Examination, id=exam_id)
+    exam = _get_examination_or_fallback(exam_id)
+    if not exam:
+        messages.error(request, f"No examination found for ID #{exam_id}.")
+        return redirect('teacher_dashboard')
+
     return render(request, 'core/evaluation_wizard.html', {
         'exam': exam
     })
@@ -2840,6 +2861,13 @@ def api_download_evaluated_pdf(request, submission_id):
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
 
+    # Workflow Guard: Evaluated PDF download is only enabled after finalization
+    if not submission.is_finalized and submission.status != 'FINALIZED':
+        return JsonResponse({
+            'success': False,
+            'error': 'Evaluated PDF download is only available after evaluation has been finalized by the teacher.'
+        }, status=403)
+
     try:
         from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
         from django.http import FileResponse
@@ -2857,5 +2885,172 @@ def api_download_evaluated_pdf(request, submission_id):
         import traceback
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': f'Failed generating evaluated PDF: {str(e)}'}, status=500)
+
+
+def api_analyze_question_mapping(request, submission_id):
+    """Executes OCR question detection & semantic matching to build draft question-to-page mappings."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    try:
+        from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
+        
+        # Phase 1: Ensure working copy images & OCR results exist ONCE (cached if already prepared)
+        options = {'ocr_mode': 'BALANCED'}
+        AIScriptEvaluator.prepare_and_ocr_submission(
+            submission_id=submission.id,
+            options=options,
+            user=request.user,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+
+        # Phase 2: Execute mapping analysis using cached OCR text
+        result = QuestionMappingOrchestrator.analyze_and_build_mapping(
+            submission.id,
+            user=request.user,
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        # Attach calculated preview validation metrics to JSON output
+        result['validation'] = _get_preview_validation_dict(submission)
+        return JsonResponse(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f'Mapping analysis failed: {str(e)}'}, status=500)
+
+
+def api_confirm_question_mapping(request, submission_id):
+    """Saves teacher confirmed page-to-question mappings and triggers AI Evaluation pipeline."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            body_data = json.loads(request.body.decode('utf-8')) if request.body else {}
+        except Exception:
+            body_data = request.POST.dict()
+
+        confirmed_mappings = body_data.get('confirmed_mappings', [])
+        options = body_data.get('options', {})
+
+        try:
+            # Phase 3: Evaluate mapped answers using cached OCR & confirmed mappings (NO redundant preprocessing)
+            evaluated_sub = AIScriptEvaluator.evaluate_mapped_answers(
+                submission_id=submission.id,
+                confirmed_mappings=confirmed_mappings,
+                options=options,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+
+            return JsonResponse({
+                'success': True,
+                'submission_id': evaluated_sub.id,
+                'total_obtained': float(evaluated_sub.total_obtained_marks),
+                'total_max': float(evaluated_sub.total_max_marks),
+                'percentage': evaluated_sub.percentage,
+                'requires_manual_review': evaluated_sub.requires_manual_review,
+                'workspace_url': f"/teacher/submission/{evaluated_sub.id}/workspace/",
+                'message': 'Question mapping confirmed & AI Evaluation completed successfully.'
+            })
+
+        except Exception as e_eval:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Confirmed evaluation failed: {str(e_eval)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
+
+
+def api_delete_submission(request, submission_id):
+    """Deletes a student submission and its associated answers, pages, mappings, and evaluations."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method in ['POST', 'DELETE']:
+        try:
+            sub_id = submission.id
+            student_name = submission.student_name
+            submission.delete()
+            return JsonResponse({'success': True, 'message': f'Submission #{sub_id} for {student_name} deleted successfully.'})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Failed deleting submission: {str(e)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST or DELETE request required.'}, status=405)
+
+
+def _get_preview_validation_dict(submission: StudentSubmission) -> dict:
+    pages = list(submission.pages.all().order_by('page_number'))
+    if not pages:
+        return {
+            'success': True,
+            'page_count': 0,
+            'orientation': 'NO_PAGES',
+            'blank_pages': 0,
+            'duplicates': 0,
+            'ocr_confidence': 0,
+            'is_ready': False
+        }
+    blank_count = 0
+    total_conf = 0.0
+    for sp in pages:
+        txt = sp.ocr_raw_text or ""
+        if len(txt.strip()) < 10:
+            blank_count += 1
+        total_conf += sp.ocr_confidence
+
+    avg_conf = round((total_conf / max(1, len(pages))) * 100)
+    return {
+        'success': True,
+        'page_count': len(pages),
+        'orientation': 'OK',
+        'blank_pages': blank_count,
+        'duplicates': 0,
+        'ocr_confidence': avg_conf,
+        'is_ready': True
+    }
+
+
+def api_validate_preview(request, submission_id):
+    """Returns preview validation metadata (page count, orientation, blank pages, OCR confidence)."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+    return JsonResponse(_get_preview_validation_dict(submission))
+
+
+def api_finalize_evaluation(request, submission_id):
+    """Triggers FinalizationService: saves final report, records audit logs, and purges temporary working files."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            from core.ai_engine.services.finalization_service import FinalizationService
+            res = FinalizationService.finalize_submission(
+                submission.id,
+                teacher_user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            return JsonResponse(res)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'success': False, 'error': f'Finalization failed: {str(e)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
+
 
 

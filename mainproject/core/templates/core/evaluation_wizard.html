@@ -200,9 +200,75 @@
 
             <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
                 <button type="button" onclick="goToStep(2)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Builder</button>
-                <button type="button" onclick="startAiEvaluationV3()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
-                    <i data-lucide="play" class="w-4 h-4"></i> Start AI Evaluation Pipeline
+                <button type="button" onclick="analyzeQuestionMapping()" class="px-8 py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                    Next: Question Mapping Analysis &rarr;
                 </button>
+            </div>
+        </div>
+
+        <!-- STEP 2.5: Interactive Question Mapping Review & Confirmation -->
+        <div id="stepMappingContent" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-brand-500"></i> Step 2.5: Question Mapping Review & Teacher Confirmation
+                </h3>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="viewFullAnswerScriptModal()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 shrink-0">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> View Full Answer Script
+                    </button>
+                    <span id="mappingStatusBadge" class="text-xs font-bold px-3 py-1 rounded-full bg-brand-500/10 text-brand-500">Analyzing Script...</span>
+                </div>
+            </div>
+
+            <!-- Preview Validation Breakdown Card -->
+            <div id="previewValidationCard" class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 font-mono space-y-2 hidden shadow-inner">
+                <div class="font-extrabold text-emerald-400 border-b border-slate-800 pb-1 flex items-center justify-between">
+                    <span>--- PREVIEW VALIDATION BREAKDOWN ---</span>
+                    <span id="pvReadyBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-sans text-[10px] font-bold border border-emerald-500/20">Ready for Evaluation</span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 pt-1">
+                    <div><span class="text-slate-400">Pages:</span> <span id="pvPagesCount" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">Orientation:</span> <span id="pvOrientation" class="font-bold text-emerald-400">OK</span></div>
+                    <div><span class="text-slate-400">Blank Pages:</span> <span id="pvBlankPages" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">Duplicates:</span> <span id="pvDuplicates" class="font-bold text-white">0</span></div>
+                    <div><span class="text-slate-400">OCR Conf:</span> <span id="pvOcrConf" class="font-bold text-emerald-400">0%</span></div>
+                </div>
+            </div>
+
+            <!-- Warning Alerts Container -->
+            <div id="mappingAlertsContainer" class="space-y-2 hidden"></div>
+
+            <!-- Mapping Table -->
+            <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-2">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-200 dark:border-slate-800 theme-text-muted font-bold">
+                            <th class="p-3">Question</th>
+                            <th class="p-3">Question Prompt / Statement</th>
+                            <th class="p-3">Detected Header / Method</th>
+                            <th class="p-3">Mapped Script Pages</th>
+                            <th class="p-3 text-center">Confidence</th>
+                            <th class="p-3 text-right">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody">
+                        <tr>
+                            <td colspan="6" class="p-8 text-center theme-text-muted font-medium">Click "Next: Question Mapping Analysis" to analyze student answer script headers.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(3)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Options</button>
+                <div class="flex items-center gap-3">
+                    <button type="button" onclick="viewFullAnswerScriptModal()" class="px-5 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> View Full Answer Script
+                    </button>
+                    <button type="button" id="confirmMappingBtn" onclick="confirmQuestionMappingAndStart()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                        <i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -216,7 +282,10 @@
             <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
                 <i data-lucide="terminal" class="w-5 h-5 text-brand-500"></i> AI Answer Script Evaluation Progress
             </h3>
-            <span class="text-xs font-mono text-emerald-400 font-bold" id="evalTimer">0.0s</span>
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-mono text-emerald-400 font-bold" id="evalTimer">0.0s</span>
+                <button type="button" onclick="closeEvalProgressModal()" class="text-slate-400 hover:text-white font-extrabold text-xl px-2 py-0.5 rounded-lg hover:bg-slate-800 transition-colors" title="Close Popup">&times;</button>
+            </div>
         </div>
 
         <div class="space-y-1">
@@ -231,6 +300,12 @@
 
         <div id="evalTerminalLog" class="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-emerald-400 h-48 overflow-y-auto space-y-1">
             <div>[PIPELINE STARTED] AI Script Evaluator v3.0 Initialized.</div>
+        </div>
+
+        <div class="flex justify-end border-t border-slate-800 pt-3 hidden" id="evalModalCloseRow">
+            <button type="button" onclick="closeEvalProgressModal()" class="px-5 py-2 bg-slate-800 hover:bg-rose-900/50 hover:text-rose-300 text-white font-bold text-xs rounded-xl shadow transition-all border border-slate-700">
+                Close / Dismiss
+            </button>
         </div>
     </div>
 </div>
@@ -649,37 +724,266 @@ async function compileAndPreviewPdf() {
     }
 }
 
+let currentMappingData = [];
+
 function goToStep(stepNum) {
     document.getElementById('step1Content').classList.add('hidden');
     document.getElementById('step2Content').classList.add('hidden');
     document.getElementById('step3Content').classList.add('hidden');
-    document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
+    const mStep = document.getElementById('stepMappingContent');
+    if(mStep) mStep.classList.add('hidden');
+
+    if(stepNum === 'Mapping' || stepNum === '2.5') {
+        document.getElementById('stepMappingContent').classList.remove('hidden');
+    } else {
+        document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
+    }
 }
 
-async function startAiEvaluationV3() {
+function closeEvalProgressModal() {
+    document.getElementById('evalProgressModal').classList.add('hidden');
+}
+
+async function analyzeQuestionMapping() {
     if(!currentSubmissionId) return alert("Submission ID not found.");
+    await syncUpdatedPagesToServer();
 
-    const modal = document.getElementById('evalProgressModal');
-    modal.classList.remove('hidden');
+    const statusBadge = document.getElementById('mappingStatusBadge');
+    const totalPages = (uploadedFiles && uploadedFiles.length > 0) ? uploadedFiles.length : 1;
+    
+    statusBadge.innerText = `Scanning Page 1 of ${totalPages}... (OCR & Header Detection)`;
+    statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 animate-pulse border border-amber-500/30";
 
-    const term = document.getElementById('evalTerminalLog');
-    const pBar = document.getElementById('evalProgressBar');
-    const pText = document.getElementById('evalStatusText');
-
-    function log(msg, pct) {
-        term.innerHTML += `<div>${msg}</div>`;
-        term.scrollTop = term.scrollHeight;
-        if(pct) {
-            pBar.style.width = `${pct}%`;
-            document.getElementById('evalProgressPct').innerText = `${pct}%`;
-        }
+    const confirmBtn = document.getElementById('confirmMappingBtn');
+    if(confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.className = "px-8 py-3 bg-slate-400 dark:bg-slate-800 text-slate-200 dark:text-slate-400 font-extrabold text-xs rounded-xl shadow cursor-not-allowed inline-flex items-center gap-2";
+        confirmBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Processing OCR & Page Scanning...`;
+        if(window.lucide) lucide.createIcons();
     }
 
-    log("[CV PIPELINE] Running ink color filter & deskewing...", 25);
-    log("[OCR ENSEMBLE] Extracting multi-page handwriting & text lines...", 50);
-    log("[LLM EVALUATION] Calling Failover AI Provider with JSON schema...", 75);
+    const pvCard = document.getElementById('previewValidationCard');
+    const pvReady = document.getElementById('pvReadyBadge');
+    if(pvCard) pvCard.classList.remove('hidden');
+    if(pvReady) {
+        pvReady.className = "px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-sans text-[10px] font-bold border border-amber-500/20 animate-pulse";
+        pvReady.innerText = `Scanning Page 1 of ${totalPages}...`;
+    }
 
-    const payload = {
+    let scanPage = 1;
+    const scanTicker = setInterval(() => {
+        if(scanPage <= totalPages) {
+            statusBadge.innerText = `Scanning Page ${scanPage} of ${totalPages}... (OCR & Header Detection)`;
+            if(pvReady) pvReady.innerText = `Scanning Page ${scanPage} of ${totalPages}...`;
+            scanPage++;
+        } else {
+            statusBadge.innerText = `Analyzing Question Mappings across ${totalPages} page(s)...`;
+            if(pvReady) pvReady.innerText = `Analyzing Page Mappings...`;
+        }
+    }, 450);
+
+    goToStep('Mapping');
+
+    try {
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/analyze-mapping/`);
+        const data = await resp.json();
+        clearInterval(scanTicker);
+        if(data.success) {
+            currentMappingData = data.mappings;
+            renderMappingTable(data);
+
+            if(data.validation) {
+                document.getElementById('pvPagesCount').innerText = data.validation.page_count;
+                document.getElementById('pvOrientation').innerText = data.validation.orientation;
+                document.getElementById('pvBlankPages').innerText = data.validation.blank_pages;
+                document.getElementById('pvDuplicates').innerText = data.validation.duplicates;
+                document.getElementById('pvOcrConf').innerText = `${data.validation.ocr_confidence}%`;
+            }
+
+            if(pvReady) {
+                pvReady.className = "px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-sans text-[10px] font-bold border border-emerald-500/20";
+                pvReady.innerText = "Ready for Evaluation";
+            }
+
+            if(confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+                confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+                if(window.lucide) lucide.createIcons();
+            }
+        } else {
+            alert("Mapping Analysis Error: " + data.error);
+            if(confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+                confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+                if(window.lucide) lucide.createIcons();
+            }
+        }
+    } catch(err) {
+        clearInterval(scanTicker);
+        alert("Mapping Exception: " + err.message);
+        if(confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.className = "px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2";
+            confirmBtn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation`;
+            if(window.lucide) lucide.createIcons();
+        }
+    }
+}
+
+function renderMappingTable(data) {
+    const tbody = document.getElementById('mappingTableBody');
+    const alertsDiv = document.getElementById('mappingAlertsContainer');
+    const statusBadge = document.getElementById('mappingStatusBadge');
+
+    tbody.innerHTML = '';
+    alertsDiv.innerHTML = '';
+    alertsDiv.classList.add('hidden');
+
+    let alertHtml = '';
+    if(data.duplicates && data.duplicates.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Duplicate Question Headers Detected: Q${data.duplicates.join(', Q')}. Please review mapped pages.
+        </div>`;
+    }
+    if(data.missing_questions && data.missing_questions.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i> Missing / Unanswered Questions: Q${data.missing_questions.join(', Q')}. Confirm if skipped by student.
+        </div>`;
+    }
+    if(data.unassigned_pages && data.unassigned_pages.length > 0) {
+        alertHtml += `<div class="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold flex items-center gap-2">
+            <i data-lucide="help-circle" class="w-4 h-4"></i> Unassigned Answer Pages: Page ${data.unassigned_pages.join(', Page ')}. Reassign below if needed.
+        </div>`;
+    }
+
+    if(alertHtml) {
+        alertsDiv.innerHTML = alertHtml;
+        alertsDiv.classList.remove('hidden');
+    }
+
+    if(data.requires_teacher_confirmation) {
+        statusBadge.innerText = "⚠ Action Required: Review & Confirm Mapping";
+        statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/30";
+    } else {
+        statusBadge.innerText = "✓ High Confidence Match";
+        statusBadge.className = "text-xs font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/30";
+    }
+
+    const totalPageCount = uploadedFiles.length || 1;
+
+    // === ONE SINGLE CONSOLIDATED ROW FOR THE STUDENT (ALL IN ONE) ===
+    const row = document.createElement('tr');
+    row.className = "border-b border-slate-200 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/60 transition-colors";
+
+    let allQsHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-1">';
+    
+    data.mappings.forEach((m, idx) => {
+        let pageCheckboxes = '';
+        for(let p = 1; p <= totalPageCount; p++) {
+            const isChecked = m.page_numbers.includes(p) ? 'checked' : '';
+            pageCheckboxes += `<label class="inline-flex items-center gap-1 mr-1.5 cursor-pointer text-[11px] font-bold"><input type="checkbox" onchange="updateMappingPage(${idx}, ${p}, this.checked)" ${isChecked} class="rounded text-brand-600"> Pg ${p}</label>`;
+        }
+
+        const pagesText = m.page_numbers.length > 0 
+            ? (m.page_numbers.length === 1 ? `Pg ${m.page_numbers[0]}` : `Pg ${Math.min(...m.page_numbers)}–${Math.max(...m.page_numbers)}`) 
+            : 'Skipped';
+
+        let statusColor = 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+        let statusIcon = '✓';
+        if(!m.page_numbers || m.page_numbers.length === 0) {
+            statusColor = 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+            statusIcon = '—';
+        } else if(m.mapping_status === 'AMBIGUOUS' || m.confidence < 0.75) {
+            statusColor = 'text-amber-500 bg-amber-500/10 border-amber-500/20';
+            statusIcon = '⚠';
+        }
+
+        allQsHtml += `
+            <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-2 hover:border-brand-500/50 transition-colors">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="font-black text-xs text-brand-500">Q${m.question_number}</span>
+                        <span class="text-[10px] theme-text-muted">(${m.max_marks}m)</span>
+                        <span class="font-extrabold text-[11px] px-2.5 py-0.5 rounded-full border ${statusColor}">${statusIcon} ${pagesText} (${Math.round(m.confidence * 100)}%)</span>
+                    </div>
+                    ${m.page_numbers.length > 0 ? `<button type="button" onclick="jumpToMappedPage([${m.page_numbers.join(',')}])" class="px-2 py-0.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-[10px] rounded transition-colors inline-flex items-center gap-1 shadow-sm"><i data-lucide="eye" class="w-3 h-3"></i> View</button>` : ''}
+                </div>
+                <div class="text-[11px] theme-text-muted truncate" title="${m.prompt_text}">${m.prompt_text}</div>
+                <div class="pt-1.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-1">
+                    <span class="text-[10px] font-bold theme-text-muted mr-1">Pages:</span>
+                    ${pageCheckboxes}
+                </div>
+            </div>
+        `;
+    });
+
+    allQsHtml += '</div>';
+
+    const avgConf = data.mappings.length > 0 
+        ? Math.round((data.mappings.reduce((sum, m) => sum + m.confidence, 0) / data.mappings.length) * 100)
+        : 0;
+
+    row.innerHTML = `
+        <td class="p-4 align-top font-bold text-xs theme-text-primary border-r border-slate-200 dark:border-slate-800 w-44">
+            <div class="space-y-1.5">
+                <div class="text-xs font-extrabold text-brand-500">Student Answer Script</div>
+                <div class="text-[11px] theme-text-secondary font-medium">${data.mappings.length} Questions Mapped</div>
+                <div class="pt-1">
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Overall: ${avgConf}% Conf</span>
+                </div>
+            </div>
+        </td>
+        <td class="p-2 align-top" colspan="5">${allQsHtml}</td>
+    `;
+
+    tbody.appendChild(row);
+
+    if(window.lucide) lucide.createIcons();
+}
+
+function viewFullAnswerScriptModal(startPage = 1) {
+    if(uploadedFiles && uploadedFiles.length > 0) {
+        const targetIdx = Math.max(0, Math.min(startPage - 1, uploadedFiles.length - 1));
+        previewPageModal(targetIdx);
+    } else if(currentSubmissionId) {
+        compileAndPreviewPdf();
+    } else {
+        alert("No answer script pages uploaded to view.");
+    }
+}
+
+function jumpToMappedPage(pageNumbers) {
+    if(!pageNumbers || pageNumbers.length === 0) return alert("No mapped pages for this question.");
+    const firstPageNum = pageNumbers[0];
+    const targetIdx = firstPageNum - 1;
+    if(targetIdx >= 0 && targetIdx < uploadedFiles.length) {
+        previewPageModal(targetIdx);
+    } else {
+        alert(`Page ${firstPageNum} preview not loaded.`);
+    }
+}
+
+function updateMappingPage(mappingIndex, pageNum, isChecked) {
+    if(!currentMappingData[mappingIndex]) return;
+    let pgList = currentMappingData[mappingIndex].page_numbers;
+    if(isChecked) {
+        if(!pgList.includes(pageNum)) pgList.push(pageNum);
+    } else {
+        currentMappingData[mappingIndex].page_numbers = pgList.filter(p => p !== pageNum);
+    }
+}
+
+async function confirmQuestionMappingAndStart() {
+    if(!currentSubmissionId) return alert("Submission ID not found.");
+
+    const confirmedMappings = currentMappingData.map(m => ({
+        question_id: m.question_id,
+        page_numbers: m.page_numbers
+    }));
+
+    const options = {
         ink_color: document.querySelector('input[name="inkColor"]:checked').value,
         deskew: document.getElementById('optDeskew').checked,
         shadow_removal: document.getElementById('optShadow').checked,
@@ -691,24 +995,59 @@ async function startAiEvaluationV3() {
         custom_prompt: document.getElementById('customPrompt').value
     };
 
+    const modal = document.getElementById('evalProgressModal');
+    modal.classList.remove('hidden');
+
+    const term = document.getElementById('evalTerminalLog');
+    const pBar = document.getElementById('evalProgressBar');
+
+    function log(msg, pct) {
+        term.innerHTML += `<div>${msg}</div>`;
+        term.scrollTop = term.scrollHeight;
+        if(pct) {
+            pBar.style.width = `${pct}%`;
+            document.getElementById('evalProgressPct').innerText = `${pct}%`;
+        }
+    }
+
+    log("==================================================", 10);
+    log("UPLOAD COMPLETE", 15);
+    log("==================================================", 20);
+    log("PREVIEW GENERATED", 30);
+    log("==================================================", 40);
+    log("WORKING PDF GENERATED", 50);
+    log("==================================================", 60);
+    log("OCR COMPLETE", 70);
+    log("==================================================", 75);
+    log("QUESTION MAPPING COMPLETE", 80);
+
     try {
-        const resp = await fetch(`/api/submission/${currentSubmissionId}/run-evaluation-v3/`, {
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/confirm-mapping/`, {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options }),
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
         });
         const data = await resp.json();
         if(data.success) {
-            log("[SUCCESS] AI Script Evaluation completed!", 100);
+            log("==================================================", 85);
+            log("AI EVALUATION COMPLETE", 90);
+            log("==================================================", 95);
+            log("OPENING REVIEW WORKSPACE", 98);
+            log("==================================================", 100);
             setTimeout(() => {
-                window.location.href = data.workspace_url;
-            }, 1000);
+                window.location.href = data.workspace_url || `/teacher/submission/${currentSubmissionId}/workspace/`;
+            }, 600);
         } else {
             log("[ERROR] Evaluation failed: " + data.error, 100);
-            alert("Error: " + data.error);
+            pBar.className = "h-full bg-rose-500 rounded-full transition-all duration-300";
+            const closeRow = document.getElementById('evalModalCloseRow');
+            if(closeRow) closeRow.classList.remove('hidden');
         }
     } catch(err) {
         log("[FATAL ERROR] " + err.message, 100);
+        pBar.className = "h-full bg-rose-500 rounded-full transition-all duration-300";
+        const closeRow = document.getElementById('evalModalCloseRow');
+        if(closeRow) closeRow.classList.remove('hidden');
     }
 }
 </script>

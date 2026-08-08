@@ -63,6 +63,17 @@ class QuestionDTO:
     tables: List[Any] = field(default_factory=list)
     formulas: List[Any] = field(default_factory=list)
 
+    @property
+    def prompt_text(self) -> str:
+        return self.text
+
+    @classmethod
+    def from_model(cls, q: Any) -> 'QuestionDTO':
+        """Converts a Django Question model instance, dict, or DTO into a QuestionDTO."""
+        if isinstance(q, QuestionDTO):
+            return q
+        return QuestionAccessor.to_dto(q)
+
     def to_dict(self) -> Dict[str, Any]:
         """Converts DTO to dictionary for JSON serialization or template context."""
         return {

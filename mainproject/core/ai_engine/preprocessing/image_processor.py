@@ -84,19 +84,56 @@ class ImagePreprocessingService:
         return img, metadata
 
     @classmethod
+    def stamp_page_header(cls, img_bgr: np.ndarray, page_num: int, total_pages: int) -> np.ndarray:
+        """
+        Stamps a high-visibility, crisp top banner on the page image indicating 'PAGE X OF Y'.
+        Ensures teachers can immediately identify page numbers when viewing PDF in another tab.
+        """
+        if img_bgr is None:
+            return img_bgr
+
+        img = img_bgr.copy()
+        h, w = img.shape[:2]
+
+        banner_h = max(45, int(h * 0.035))
+        font_scale = max(0.7, (banner_h / 45.0) * 0.8)
+        thickness = max(2, int(font_scale * 2.2))
+
+        # Top banner background: Solid dark navy/slate (15, 23, 42)
+        cv2.rectangle(img, (0, 0), (w, banner_h), (42, 23, 15), -1)
+
+        # Bottom accent border: Vibrant cyan/teal (235, 175, 0)
+        cv2.rectangle(img, (0, banner_h - 3), (w, banner_h), (235, 175, 0), -1)
+
+        header_text = f"PAGE {page_num} OF {total_pages}   |   INTELLIGRADE STUDENT ANSWER SCRIPT"
+
+        (text_w, text_h), _ = cv2.getTextSize(header_text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)
+        text_x = max(15, (w - text_w) // 2)
+        text_y = (banner_h + text_h) // 2 - 2
+
+        cv2.putText(img, header_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+
+        return img
+
+    @classmethod
     def compile_images_to_pdf(
         cls,
         image_arrays_or_paths: List[Any],
-        output_pdf_path: str
+        output_pdf_path: str,
+        stamp_page_numbers: bool = True
     ) -> Tuple[str, int]:
         """
         Compiles a list of processed image arrays or paths into a single standardized PDF file.
+        Stamps a clear 'PAGE X OF Y' header on every page for clear tab previewing.
         Returns the output PDF file path and total page count.
         """
+        total_pages = len(image_arrays_or_paths)
         pil_images = []
-        for img_item in image_arrays_or_paths:
+        for idx, img_item in enumerate(image_arrays_or_paths, start=1):
             img_bgr = cls._load_image_array(img_item)
             if img_bgr is not None:
+                if stamp_page_numbers:
+                    img_bgr = cls.stamp_page_header(img_bgr, page_num=idx, total_pages=total_pages)
                 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                 pil_img = Image.fromarray(img_rgb)
                 if pil_img.mode != 'RGB':
