@@ -394,6 +394,7 @@ class SubmissionPage(models.Model):
     version = models.IntegerField(default=1, help_text="Version incremented on each image edit (rotation, crop, contrast)")
     ocr_raw_text = models.TextField(blank=True)
     ocr_confidence = models.FloatField(default=0.0)
+    answer_regions_json = models.JSONField(default=list, blank=True, help_text="Detailed AnswerRegion objects for this page")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -587,6 +588,7 @@ class QuestionMapping(models.Model):
     submission = models.ForeignKey(StudentSubmission, on_delete=models.CASCADE, related_name='question_mappings')
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='script_mappings')
     page_numbers_json = models.JSONField(default=list, help_text="Array of page numbers attached to this question answer")
+    regions_json = models.JSONField(default=list, blank=True, help_text="Array of AnswerRegion bounding box dictionaries attached to this question")
     confidence = models.FloatField(default=0.0)
     mapping_status = models.CharField(max_length=30, choices=Status.choices, default=Status.AUTO_HIGH)
     is_confirmed = models.BooleanField(default=False)
