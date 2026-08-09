@@ -1,15 +1,11 @@
 """
-IntelliGrade Question Mapping Orchestrator v3.0.
-Primary Source of Truth: Student's Handwritten / Printed Answer Headings.
+IntelliGrade Region-Based Question Mapping & Answer Segmentation Engine v4.0.
 
-STRICT PIPELINE STAGES:
-1. OCR Page Line Extraction with Bounding Boxes
-2. Explicit Question Heading Detection (detect_explicit_question_heading)
-3. Subpoint & Enumeration Marker Rejection
-4. Multi-Heading Y-Coordinate Page Segmentation
-5. Context-Aware Continuation Detection
-6. Fallback Semantic Similarity Validation
-7. Confidence Scoring & Flagging for Teacher Review
+ARCHITECTURE:
+DOCUMENT -> PAGE -> ANSWER REGIONS -> QUESTION HEADING -> QUESTION OWNERSHIP -> CONTINUATION
+
+STATE MACHINE:
+NO_ACTIVE_QUESTION -> VALID_ANSWER_HEADING -> QUESTION_ACTIVE -> CONTINUATION -> NEW_ANSWER_HEADING / AMBIGUOUS_PAGE / TEACHER_REVIEW
 """
 
 import os
@@ -17,28 +13,89 @@ import re
 import json
 import cv2
 import numpy as np
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from django.conf import settings
 from django.db import transaction, close_old_connections, IntegrityError, DatabaseError, OperationalError
 
 from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, Question, QuestionDetection, QuestionMapping, MappingHistory
 from core.utils.question_accessor import QuestionAccessor, safe_normalize_collection
-from core.ai_engine.mapping.question_number_detector import StudentQuestionHeadingDetector
+from core.ai_engine.mapping.question_number_detector import StudentQuestionHeadingDetector, LineReconstructor
 from core.ai_engine.mapping.semantic_matcher import SemanticQuestionMatcher
 from core.ai_engine.mapping.continuation_detector import ContinuationDetector
 
 
+class AnswerRegion:
+    """
+    Represents an atomic answer region within a physical SubmissionPage.
+    A page can contain 1 or more AnswerRegions.
+    """
+
+    def __init__(
+        self,
+        page_number: int,
+        region_id: str,
+        bbox: Dict[str, float],
+        question_id: Optional[int],
+        question_number: str,
+        heading_text: str = "",
+        heading_bbox: Optional[Dict[str, float]] = None,
+        heading_confidence: float = 0.0,
+        semantic_confidence: float = 0.0,
+        mapping_method: str = "UNRESOLVED",
+        confidence_level: str = "UNKNOWN",
+        requires_review: bool = False,
+        conflict: bool = False,
+        possible_missed_heading: bool = False,
+        reason: str = ""
+    ):
+        self.page_number = page_number
+        self.region_id = region_id
+        self.bbox = bbox  # {'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}
+        self.question_id = question_id
+        self.question_number = question_number
+        self.heading_text = heading_text
+        self.heading_bbox = heading_bbox or {}
+        self.heading_confidence = heading_confidence
+        self.semantic_confidence = semantic_confidence
+        self.mapping_method = mapping_method
+        self.confidence_level = confidence_level  # HIGH, MEDIUM, LOW, UNKNOWN
+        self.requires_review = requires_review
+        self.conflict = conflict
+        self.possible_missed_heading = possible_missed_heading
+        self.reason = reason
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'page_number': self.page_number,
+            'region_id': self.region_id,
+            'bbox': self.bbox,
+            'question_id': self.question_id,
+            'question_number': self.question_number,
+            'heading_text': self.heading_text,
+            'heading_bbox': self.heading_bbox,
+            'heading_confidence': self.heading_confidence,
+            'semantic_confidence': self.semantic_confidence,
+            'mapping_method': self.mapping_method,
+            'confidence_level': self.confidence_level,
+            'requires_review': self.requires_review,
+            'conflict': self.conflict,
+            'possible_missed_heading': self.possible_missed_heading,
+            'reason': self.reason
+        }
+
+
 class QuestionMappingOrchestrator:
     """
-    Order-independent question mapping pipeline for student answer scripts.
-    Guarantees zero false Q1 mappings on unlabelled subpoint pages.
+    Region-Based Question Mapping & Answer Segmentation Pipeline for Student Answer Scripts.
+    Supports multiple answer regions per page, missed-heading detection, semantic transition detection,
+    and visual debug artifact generation.
     """
 
     @classmethod
     def analyze_and_build_mapping(cls, submission_id: int, user=None, ip_address: str = None) -> Dict[str, Any]:
         """
-        Executes Student Answer Heading Detection, Multi-Question Segmentation, Continuation Tracking,
-        Semantic Fallback, and Debug Artifact Generation.
+        Executes Region-Based Answer Segmentation, Line Reconstruction, Multi-Heading Scoring,
+        Continuation Analysis, Semantic Transition Detection, and Debug Image Generation.
         """
         submission = StudentSubmission.objects.get(id=submission_id)
         examination = submission.examination
@@ -53,24 +110,43 @@ class QuestionMappingOrchestrator:
         os.makedirs(trace_dir, exist_ok=True)
 
         stored_q_numbers = [QuestionAccessor.get_question_number(q) for q in stored_questions]
+        q_map_by_num = {QuestionAccessor.get_question_number(q).strip().lower(): q for q in stored_questions}
 
         # Clear old detections & unconfirmed mappings if re-analyzing
         QuestionDetection.objects.filter(submission_page__submission=submission).delete()
         QuestionMapping.objects.filter(submission=submission, is_confirmed=False).delete()
 
-        # Step 1: Detect Explicit Question Headings on Each Page
-        page_header_map = {}  # page_number -> list of detections
+        page_regions_map = {}  # page_number -> list of AnswerRegion objects
         all_detected_numbers = []
+        mapped_regions_by_q = {getattr(q, 'id', 0): {'q_obj': q, 'regions': []} for q in stored_questions}
+
+        active_q_obj = None
+        unassigned_page_numbers = []
+        page_mapping_records = []
+
+        print(f"\n==================================================")
+        print(f"INTELLIGRADE REGION-BASED QUESTION MAPPING PIPELINE v4.0")
+        print(f"Submission #{submission.id} ({len(pages)} pages)")
+        print(f"==================================================\n")
 
         for sp in pages:
+            p_num = sp.page_number
             ocr_text = sp.ocr_raw_text or ""
-            line_boxes = getattr(sp.ocr_results.first(), 'line_boxes_json', [])
+            ocr_res = sp.ocr_results.first()
+            word_boxes = getattr(ocr_res, 'word_boxes_json', []) if ocr_res else []
+            line_boxes = getattr(ocr_res, 'line_boxes_json', []) if ocr_res else []
+
+            # Step 1: Detect explicit question headings using reconstructed visual lines
             detections = StudentQuestionHeadingDetector.detect_questions_on_page(
-                ocr_text, line_boxes, stored_question_numbers=stored_q_numbers
+                ocr_raw_text=ocr_text,
+                word_boxes=word_boxes,
+                line_boxes=line_boxes,
+                page_height=1000,
+                stored_question_numbers=stored_q_numbers
             )
 
-            # Vision LLM fallback ONLY if top OCR header is empty and image exists
-            if not detections and sp.working_image_path and os.path.exists(sp.working_image_path):
+            # Vision LLM fallback ONLY if OCR text is completely empty and working image exists
+            if not detections and (not ocr_text or len(ocr_text.strip()) == 0) and sp.working_image_path and os.path.exists(sp.working_image_path):
                 try:
                     vis_det = StudentQuestionHeadingDetector.detect_top_region_vision(
                         image_input=sp.working_image_path,
@@ -79,10 +155,9 @@ class QuestionMappingOrchestrator:
                     if vis_det and vis_det.get('detected'):
                         detections.append(vis_det)
                 except Exception as e:
-                    print(f"[QUESTION HEADER VISION WARNING] Vision detector failed on page {sp.page_number}: {e}")
+                    print(f"[QUESTION HEADER VISION WARNING] Vision detector failed on page {p_num}: {e}")
 
-            page_header_map[sp.page_number] = detections
-
+            # Save QuestionDetection DB records
             valid_choices = [c[0] for c in QuestionDetection.DetectionMethod.choices]
             for d in detections:
                 try:
@@ -103,26 +178,14 @@ class QuestionMappingOrchestrator:
 
                 all_detected_numbers.append(d['normalized_number'])
 
-        # Step 2: Build Priority-based Question -> Page Association & Multi-Question Page Segmentation
-        q_map_by_num = {QuestionAccessor.get_question_number(q).strip().lower(): q for q in stored_questions}
-        mapped_pages_by_q = {getattr(q, 'id', 0): {'q_obj': q, 'pages': [], 'confidences': [], 'raw_headers': [], 'methods': []} for q in stored_questions}
+            # Step 2: Build AnswerRegion Objects for Page
+            page_regions = []
 
-        active_q_obj = None
-        unassigned_page_numbers = []
-        page_mapping_records = []
-        duplicate_nums = set([num for num in all_detected_numbers if all_detected_numbers.count(num) > 1])
+            if detections:
+                # Page contains 1 or more explicit answer headings! Sort by vertical ymin_pct position
+                detections.sort(key=lambda d: d.get('ymin_pct', 0.0))
 
-        for sp in pages:
-            p_num = sp.page_number
-            detections = page_header_map.get(p_num, [])
-
-            distinct_detected_nums = list(set([d['normalized_number'].strip().lower() for d in detections]))
-
-            if len(distinct_detected_nums) > 1:
-                # MULTI-QUESTION PAGE SEGMENTATION: Multiple explicit headers on same physical page!
-                # Split page into answer regions for each question
-                segment_texts = []
-                for det in detections:
+                for r_idx, det in enumerate(detections, 1):
                     norm_num = det['normalized_number'].strip().lower()
                     matched_q = q_map_by_num.get(norm_num)
                     if not matched_q:
@@ -131,172 +194,178 @@ class QuestionMappingOrchestrator:
                                 matched_q = q
                                 break
 
+                    y_start = det.get('ymin_pct', 0.0)
+                    y_end = detections[r_idx]['ymin_pct'] if r_idx < len(detections) else 1.0
+
+                    region_bbox = {'ymin': round(y_start, 3), 'xmin': 0.0, 'ymax': round(y_end, 3), 'xmax': 1.0}
+                    q_id = getattr(matched_q, 'id', None) if matched_q else None
+                    q_num_str = QuestionAccessor.get_question_number(matched_q) if matched_q else norm_num
+
+                    reg = AnswerRegion(
+                        page_number=p_num,
+                        region_id=f"p{p_num}_r{r_idx}",
+                        bbox=region_bbox,
+                        question_id=q_id,
+                        question_number=q_num_str,
+                        heading_text=det.get('heading_text', det['raw_text']),
+                        heading_bbox=det.get('bbox', {}),
+                        heading_confidence=det['confidence'],
+                        semantic_confidence=0.0,
+                        mapping_method=det.get('method', 'EXPLICIT_ANSWER_HEADING'),
+                        confidence_level='HIGH' if det['confidence'] >= 0.85 else 'MEDIUM',
+                        requires_review=(det['confidence'] < 0.85 or not matched_q),
+                        reason=f"Explicit Answer Heading: '{det.get('heading_text', det['raw_text'])}'"
+                    )
+                    page_regions.append(reg)
                     if matched_q:
-                        q_id = getattr(matched_q, 'id', 0)
-                        mapped_pages_by_q[q_id]['pages'].append(p_num)
-                        mapped_pages_by_q[q_id]['confidences'].append(det['confidence'])
-                        mapped_pages_by_q[q_id]['raw_headers'].append(det.get('heading_text', det['raw_text']))
-                        mapped_pages_by_q[q_id]['methods'].append('MULTI_HEADING_SEGMENT')
-                        segment_texts.append(f"Q{QuestionAccessor.get_question_number(matched_q)}")
+                        mapped_regions_by_q[q_id]['regions'].append(reg)
                         active_q_obj = matched_q
 
-                page_mapping_records.append({
-                    'page': p_num,
-                    'question_number': '/'.join(segment_texts) if segment_texts else 'MULTI_HEADING',
-                    'question_id': getattr(active_q_obj, 'id', None),
-                    'heading_text': f"Multi-heading page ({', '.join(segment_texts)})",
-                    'method': 'MULTI_HEADING_SEGMENT',
-                    'confidence': 0.95,
-                    'evidence': f"Split into regions for {', '.join(segment_texts)}",
-                    'status': 'CONFIDENT'
-                })
-
-            elif len(distinct_detected_nums) == 1:
-                # Priority 1: Single Explicit Student Answer Heading
-                top_det = detections[0]
-                norm_num = top_det['normalized_number'].strip().lower()
-
-                matched_q = q_map_by_num.get(norm_num)
-                if not matched_q:
-                    for q in stored_questions:
-                        if re.sub(r'\D', '', QuestionAccessor.get_question_number(q)) == re.sub(r'\D', '', norm_num):
-                            matched_q = q
-                            break
-
-                if matched_q:
-                    active_q_obj = matched_q
-                    q_id = getattr(matched_q, 'id', 0)
-                    mapped_pages_by_q[q_id]['pages'].append(p_num)
-                    mapped_pages_by_q[q_id]['confidences'].append(top_det['confidence'])
-                    mapped_pages_by_q[q_id]['raw_headers'].append(top_det.get('heading_text', top_det['raw_text']))
-                    mapped_pages_by_q[q_id]['methods'].append(top_det.get('method', 'EXPLICIT_ANSWER_HEADING'))
-
-                    page_mapping_records.append({
-                        'page': p_num,
-                        'question_number': QuestionAccessor.get_question_number(matched_q),
-                        'question_id': q_id,
-                        'heading_text': top_det.get('heading_text', top_det['raw_text']),
-                        'method': top_det.get('method', 'EXPLICIT_ANSWER_HEADING'),
-                        'confidence': top_det['confidence'],
-                        'evidence': top_det.get('heading_text', top_det['raw_text']),
-                        'status': 'CONFIDENT' if top_det['confidence'] >= 0.90 else 'AMBIGUOUS'
-                    })
-                else:
-                    unassigned_page_numbers.append(p_num)
-                    page_mapping_records.append({
-                        'page': p_num,
-                        'question_number': 'UNMAPPED',
-                        'question_id': None,
-                        'heading_text': top_det.get('heading_text', top_det['raw_text']),
-                        'method': 'UNRESOLVED',
-                        'confidence': 0.0,
-                        'evidence': top_det['raw_text'],
-                        'status': 'AMBIGUOUS'
-                    })
-
-            elif active_q_obj:
-                # Priority 2: Continuation of previous active question
-                prev_text = pages[p_num - 2].ocr_raw_text if p_num > 1 else ""
-                cont_eval = ContinuationDetector.evaluate_continuation(
-                    prev_page_text=prev_text,
-                    current_page_text=sp.ocr_raw_text or "",
-                    current_has_new_header=False
-                )
-
-                if cont_eval['is_continuation']:
-                    q_id = getattr(active_q_obj, 'id', 0)
-                    mapped_pages_by_q[q_id]['pages'].append(p_num)
-                    mapped_pages_by_q[q_id]['confidences'].append(cont_eval['confidence'])
-                    mapped_pages_by_q[q_id]['methods'].append('CONTINUATION')
-
-                    page_mapping_records.append({
-                        'page': p_num,
-                        'question_number': QuestionAccessor.get_question_number(active_q_obj),
-                        'question_id': q_id,
-                        'heading_text': f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)}",
-                        'method': 'CONTINUATION',
-                        'confidence': cont_eval['confidence'],
-                        'evidence': f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)} ({cont_eval['reason']})",
-                        'status': 'CONFIDENT' if cont_eval['confidence'] >= 0.75 else 'AMBIGUOUS'
-                    })
-                else:
-                    unassigned_page_numbers.append(p_num)
-                    page_mapping_records.append({
-                        'page': p_num,
-                        'question_number': 'UNMAPPED',
-                        'question_id': None,
-                        'heading_text': 'None',
-                        'method': 'UNRESOLVED',
-                        'confidence': 0.0,
-                        'evidence': 'No explicit heading or continuation detected',
-                        'status': 'AMBIGUOUS'
-                    })
             else:
-                # Unlabelled first page or unmapped page with no prior active question
-                unassigned_page_numbers.append(p_num)
-                page_mapping_records.append({
-                    'page': p_num,
-                    'question_number': 'UNMAPPED',
-                    'question_id': None,
-                    'heading_text': 'None',
-                    'method': 'UNRESOLVED',
-                    'confidence': 0.0,
-                    'evidence': 'No explicit question heading found',
-                    'status': 'AMBIGUOUS'
-                })
+                # 0 explicit headings detected on this page
+                # Evaluate Continuation vs Missed Heading Suspicion & Semantic Change
+                if active_q_obj:
+                    prev_text = pages[p_num - 2].ocr_raw_text if p_num > 1 else ""
+                    cont_eval = ContinuationDetector.evaluate_continuation(
+                        prev_page_text=prev_text,
+                        current_page_text=ocr_text,
+                        current_has_new_header=False
+                    )
 
-        # Priority 3: Semantic Fallback for Unmapped Pages (Secondary Fallback ONLY)
-        for rec in page_mapping_records:
-            if rec['method'] == 'UNRESOLVED' and rec['page'] in unassigned_page_numbers:
-                sp_un = next((p for p in pages if p.page_number == rec['page']), None)
-                if sp_un and sp_un.ocr_raw_text and len(sp_un.ocr_raw_text.strip()) > 15:
-                    sem_res = SemanticQuestionMatcher.match_unlabelled_answer(sp_un.ocr_raw_text, stored_questions)
-                    best_q = sem_res.get('best_question')
-                    sem_conf = float(sem_res.get('confidence', 0.0))
+                    # Run Semantic Change Detection across stored questions
+                    sem_change_detected = False
+                    sem_best_q = None
+                    sem_best_score = 0.0
+                    if ocr_text and len(ocr_text.strip()) > 30:
+                        sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
+                        sem_best_q = sem_match.get('best_question')
+                        sem_best_score = float(sem_match.get('confidence', 0.0))
 
-                    if best_q and sem_conf >= 0.50:
-                        q_id = getattr(best_q, 'id', 0)
-                        mapped_pages_by_q[q_id]['pages'].append(rec['page'])
-                        mapped_pages_by_q[q_id]['confidences'].append(sem_conf)
-                        mapped_pages_by_q[q_id]['raw_headers'].append(f"Semantic Match ({sem_conf*100:.0f}%)")
-                        mapped_pages_by_q[q_id]['methods'].append('SEMANTIC_FALLBACK')
+                        active_q_num = QuestionAccessor.get_question_number(active_q_obj)
+                        sem_best_num = QuestionAccessor.get_question_number(sem_best_q) if sem_best_q else None
 
-                        rec['question_number'] = QuestionAccessor.get_question_number(best_q)
-                        rec['question_id'] = q_id
-                        rec['method'] = 'SEMANTIC_FALLBACK'
-                        rec['confidence'] = sem_conf
-                        rec['evidence'] = f"Semantic topic similarity score: {sem_conf}"
-                        rec['status'] = 'CONFIDENT' if sem_conf >= 0.75 else 'AMBIGUOUS'
+                        if sem_best_q and sem_best_num != active_q_num and sem_best_score >= 0.70:
+                            sem_change_detected = True
 
-                        unassigned_page_numbers.remove(rec['page'])
+                    if sem_change_detected:
+                        # POSSIBLE MISSED HEADING / SEMANTIC TRANSITION!
+                        active_q_id = getattr(active_q_obj, 'id', None)
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=active_q_id,
+                            question_number=QuestionAccessor.get_question_number(active_q_obj),
+                            heading_text=f"Possible Transition to Q{QuestionAccessor.get_question_number(sem_best_q)}",
+                            heading_confidence=0.0,
+                            semantic_confidence=sem_best_score,
+                            mapping_method="POSSIBLE_MISSED_HEADING",
+                            confidence_level="LOW",
+                            requires_review=True,
+                            possible_missed_heading=True,
+                            reason=f"Semantic change detected: Content similarity to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%) is higher than active Q{QuestionAccessor.get_question_number(active_q_obj)}"
+                        )
+                        page_regions.append(reg)
+                        mapped_regions_by_q[active_q_id]['regions'].append(reg)
 
-                        try:
-                            QuestionDetection.objects.create(
-                                submission_page=sp_un,
-                                question_number_raw="Semantic Match Fallback",
-                                question_number_normalized=QuestionAccessor.get_question_number(best_q),
-                                confidence=sem_conf,
-                                detection_method=QuestionDetection.DetectionMethod.LLM_SEMANTIC
-                            )
-                        except Exception as ex:
-                            print(f"[SEMANTIC DETECTION SAVE WARNING] {ex}")
+                    elif cont_eval['is_continuation']:
+                        active_q_id = getattr(active_q_obj, 'id', None)
+                        conf_val = cont_eval['confidence']
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=active_q_id,
+                            question_number=QuestionAccessor.get_question_number(active_q_obj),
+                            heading_text=f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)}",
+                            heading_confidence=conf_val,
+                            semantic_confidence=0.0,
+                            mapping_method="CONTINUATION",
+                            confidence_level="HIGH" if conf_val >= 0.85 else "MEDIUM",
+                            requires_review=(conf_val < 0.75),
+                            reason=f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)} ({cont_eval['reason']})"
+                        )
+                        page_regions.append(reg)
+                        mapped_regions_by_q[active_q_id]['regions'].append(reg)
+                    else:
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=None,
+                            question_number="UNMAPPED",
+                            heading_text="None",
+                            heading_confidence=0.0,
+                            semantic_confidence=0.0,
+                            mapping_method="UNRESOLVED",
+                            confidence_level="UNKNOWN",
+                            requires_review=True,
+                            reason="No explicit heading or continuation detected"
+                        )
+                        page_regions.append(reg)
+                        unassigned_page_numbers.append(p_num)
+                else:
+                    reg = AnswerRegion(
+                        page_number=p_num,
+                        region_id=f"p{p_num}_r1",
+                        bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                        question_id=None,
+                        question_number="UNMAPPED",
+                        heading_text="None",
+                        heading_confidence=0.0,
+                        semantic_confidence=0.0,
+                        mapping_method="UNRESOLVED",
+                        confidence_level="UNKNOWN",
+                        requires_review=True,
+                        reason="No explicit question heading found on initial page"
+                    )
+                    page_regions.append(reg)
+                    unassigned_page_numbers.append(p_num)
 
-        # Step 3: Construct QuestionMapping DB Records & Output Payload
+            # Store answer_regions_json on SubmissionPage
+            sp.answer_regions_json = [r.to_dict() for r in page_regions]
+            sp.save()
+            page_regions_map[p_num] = page_regions
+
+            # Create summary mapping record for page
+            q_nums_on_page = [r.question_number for r in page_regions]
+            q_ids_on_page = [r.question_id for r in page_regions if r.question_id]
+            primary_reg = page_regions[0]
+
+            page_mapping_records.append({
+                'page': p_num,
+                'question_number': '/'.join(q_nums_on_page),
+                'question_id': q_ids_on_page[0] if q_ids_on_page else None,
+                'heading_text': primary_reg.heading_text,
+                'method': primary_reg.mapping_method,
+                'confidence': primary_reg.heading_confidence,
+                'confidence_level': primary_reg.confidence_level,
+                'requires_review': any(r.requires_review for r in page_regions),
+                'regions': [r.to_dict() for r in page_regions],
+                'evidence': primary_reg.reason,
+                'status': 'CONFIDENT' if not any(r.requires_review for r in page_regions) else 'AMBIGUOUS'
+            })
+
+        # Step 3: Construct QuestionMapping DB Records & Payload
         final_mapping_payload = []
         missing_q_nums = []
+        duplicate_nums = set([num for num in all_detected_numbers if all_detected_numbers.count(num) > 1])
         requires_review = False
 
         for q in stored_questions:
             q_id = getattr(q, 'id', 0)
-            data = mapped_pages_by_q[q_id]
-            pg_list = sorted(list(set(data['pages'])))
-            avg_conf = round(sum(data['confidences']) / max(1, len(data['confidences'])), 2) if data['confidences'] else 0.0
+            reg_list = mapped_regions_by_q[q_id]['regions']
+            pg_list = sorted(list(set([r.page_number for r in reg_list])))
+            reg_dicts = [r.to_dict() for r in reg_list]
+
+            confidences = [r.heading_confidence for r in reg_list if r.heading_confidence > 0]
+            avg_conf = round(sum(confidences) / max(1, len(confidences)), 2) if confidences else 0.0
 
             if not pg_list:
                 missing_q_nums.append(QuestionAccessor.get_question_number(q))
 
             status = QuestionMapping.Status.AUTO_HIGH
-            if avg_conf < 0.75 or not pg_list or QuestionAccessor.get_question_number(q) in duplicate_nums:
+            if avg_conf < 0.75 or not pg_list or any(r.requires_review for r in reg_list) or QuestionAccessor.get_question_number(q) in duplicate_nums:
                 status = QuestionMapping.Status.AMBIGUOUS
                 requires_review = True
 
@@ -305,12 +374,14 @@ class QuestionMappingOrchestrator:
                 question=q,
                 defaults={
                     'page_numbers_json': pg_list,
+                    'regions_json': reg_dicts,
                     'confidence': avg_conf,
                     'mapping_status': status,
                     'is_confirmed': False
                 }
             )
             q_map_obj.page_numbers_json = pg_list
+            q_map_obj.regions_json = reg_dicts
             q_map_obj.confidence = avg_conf
             q_map_obj.mapping_status = status
             q_map_obj.save()
@@ -322,10 +393,11 @@ class QuestionMappingOrchestrator:
                 'prompt_text': QuestionAccessor.get_text(q),
                 'max_marks': QuestionAccessor.get_marks(q),
                 'page_numbers': pg_list,
+                'regions': reg_dicts,
                 'confidence': avg_conf,
                 'mapping_status': status,
                 'is_confirmed': q_map_obj.is_confirmed,
-                'detected_headers': list(set(data['raw_headers']))
+                'detected_headers': list(set([r.heading_text for r in reg_list if r.heading_text]))
             })
 
         # Save JSON Debug Artifact: request_trace/eval_{submission.id}/question_heading_detection.json
@@ -340,7 +412,7 @@ class QuestionMappingOrchestrator:
                 'missing_questions': missing_q_nums
             }, f, indent=2)
 
-        # Save Image Debug Overlay Artifact: request_trace/eval_{submission.id}/question_heading_detection_debug.png
+        # Save Image Debug Overlay Artifact: request_trace/eval_{submission.id}/question_heading_detection_debug.png & layout_debug.png
         cls._render_mapping_debug_image(submission, pages, page_mapping_records, trace_dir)
 
         # Save Audit Record in MappingHistory
@@ -361,14 +433,14 @@ class QuestionMappingOrchestrator:
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.MAPPING_COMPLETE, force=True)
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.WAITING_TEACHER_CONFIRMATION, force=True)
 
-        has_unresolved_or_conflict = any(r['method'] in ['UNRESOLVED', 'CONFLICT'] for r in page_mapping_records)
+        has_unresolved_or_conflict = any(r.get('requires_review') for r in page_mapping_records)
 
         return {
             'success': True,
             'submission_id': submission.id,
             'mappings': final_mapping_payload,
             'page_records': page_mapping_records,
-            'page_header_map': page_header_map,
+            'page_regions_map': {p: [r.to_dict() for r in regs] for p, regs in page_regions_map.items()},
             'unassigned_pages': unassigned_page_numbers,
             'duplicates': list(duplicate_nums),
             'missing_questions': missing_q_nums,
@@ -384,10 +456,19 @@ class QuestionMappingOrchestrator:
         trace_dir: str
     ) -> str:
         """
-        Renders question_heading_detection_debug.png visual summary grid with bounding box overlays.
-        Color codes: Cyan=EXPLICIT_HEADER, Yellow=CONTINUATION, Purple=SEMANTIC_FALLBACK, Red=CONFLICT, Gray=UNRESOLVED.
+        Renders question_heading_detection_debug.png and layout_debug.png visual summary grid
+        with AnswerRegion bounding box overlays.
+        Color codes:
+        Blue (255, 140, 0) = Q1 regions
+        Green (0, 200, 0)  = Q2 regions
+        Orange (0, 140, 255) = Q3 regions
+        Purple (255, 0, 255) = Q4 regions
+        Red (0, 0, 255)     = Conflict / Ambiguous
+        Yellow (0, 255, 255) = Possible Missed Heading / Transition
         """
         out_path = os.path.join(trace_dir, 'question_heading_detection_debug.png')
+        layout_debug_path = os.path.join(trace_dir, 'layout_debug.png')
+
         try:
             thumbnails = []
             for rec in page_records:
@@ -401,31 +482,49 @@ class QuestionMappingOrchestrator:
                     bgr = np.full((400, 300, 3), 240, dtype=np.uint8)
 
                 h, w = bgr.shape[:2]
+                regions = rec.get('regions', [])
+
+                # Draw region bounding boxes on high-res image before thumbnail resize
+                for reg in regions:
+                    bbox = reg.get('bbox', {})
+                    ymin = int(bbox.get('ymin', 0.0) * h)
+                    ymax = int(bbox.get('ymax', 1.0) * h)
+                    xmin = int(bbox.get('xmin', 0.0) * w)
+                    xmax = int(bbox.get('xmax', 1.0) * w)
+
+                    q_num = reg.get('question_number', 'UNMAPPED')
+                    method = reg.get('mapping_method', 'UNRESOLVED')
+                    level = reg.get('confidence_level', 'UNKNOWN')
+
+                    if q_num == '1':
+                        color_bgr = (255, 140, 0)  # Blue
+                    elif q_num == '2':
+                        color_bgr = (0, 200, 0)    # Green
+                    elif q_num == '3':
+                        color_bgr = (0, 140, 255)  # Orange
+                    elif q_num == '4':
+                        color_bgr = (255, 0, 255)  # Purple
+                    elif method == 'POSSIBLE_MISSED_HEADING':
+                        color_bgr = (0, 255, 255)  # Yellow
+                    else:
+                        color_bgr = (0, 0, 255) if reg.get('requires_review') else (128, 128, 128)
+
+                    cv2.rectangle(bgr, (xmin, ymin), (xmax - 1, ymax - 1), color_bgr, 4)
+                    lbl = f"Q{q_num} [{method}] ({level})"
+                    cv2.putText(bgr, lbl, (xmin + 10, ymin + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color_bgr, 2)
+
                 thumb_w = 300
                 thumb = cv2.resize(bgr, (thumb_w, 400))
 
-                method = rec.get('method', 'UNRESOLVED')
-                if method in ['EXPLICIT_ANSWER_HEADING', 'DIRECT_QUESTION_HEADER', 'ABBREVIATED_ANSWER_HEADING', 'QUESTION_HEADING', 'ANSWER_TO_QUESTION', 'SOLUTION_HEADING', 'MULTI_HEADING_SEGMENT']:
-                    color_bgr = (255, 140, 0)   # Cyan / Blue
-                elif method == 'CONTINUATION':
-                    color_bgr = (0, 215, 255)   # Yellow
-                elif method == 'SEMANTIC_FALLBACK':
-                    color_bgr = (255, 0, 255)   # Purple
-                elif method == 'CONFLICT':
-                    color_bgr = (0, 0, 255)     # Red
-                else:
-                    color_bgr = (128, 128, 128) # Gray (UNRESOLVED)
-
-                cv2.rectangle(thumb, (0, 0), (thumb_w - 1, 399), color_bgr, 6)
-
+                primary_q = rec.get('question_number', 'UNMAPPED')
                 cv2.rectangle(thumb, (0, 0), (thumb_w, 45), (20, 20, 20), -1)
-                q_label = f"Pg {p_num} -> Q{rec['question_number']}" if rec['question_number'] not in ['UNMAPPED', 'CONFLICT'] else f"Pg {p_num} -> {rec['question_number']}"
+                q_label = f"Pg {p_num} -> Q{primary_q}"
                 cv2.putText(thumb, q_label, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
 
                 cv2.rectangle(thumb, (0, 360), (thumb_w, 400), (20, 20, 20), -1)
                 conf_pct = int(rec.get('confidence', 0.0) * 100)
-                sub_label = f"{method} ({conf_pct}%)"
-                cv2.putText(thumb, sub_label, (10, 388), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color_bgr, 1)
+                sub_label = f"{rec.get('method', 'UNRESOLVED')} ({conf_pct}%)"
+                cv2.putText(thumb, sub_label, (10, 388), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 215, 255), 1)
 
                 thumbnails.append(thumb)
 
@@ -443,6 +542,7 @@ class QuestionMappingOrchestrator:
                     canvas[r*400:(r+1)*400, c*300:(c+1)*300] = t
 
                 cv2.imwrite(out_path, canvas)
+                cv2.imwrite(layout_debug_path, canvas)
         except Exception as e:
             print(f"[DEBUG OVERLAY RENDER WARNING] {e}")
 
@@ -458,7 +558,7 @@ class QuestionMappingOrchestrator:
     ) -> Tuple[bool, str]:
         """
         Updates QuestionMapping DB records with teacher-approved choices and marks them confirmed.
-        Creates/updates SubmissionAnswer text for each question based on approved page ranges.
+        Creates/updates SubmissionAnswer text for each question using region-scoped extraction.
         """
         with transaction.atomic():
             submission = StudentSubmission.objects.get(id=submission_id)
@@ -479,11 +579,11 @@ class QuestionMappingOrchestrator:
                 q_map.is_confirmed = True
                 q_map.save()
 
-                # Concatenate answer text from mapped pages
+                # Concatenate region-scoped answer text from mapped pages
                 combined_ans_text = []
                 for p_num in pg_list:
                     if p_num in pages and pages[p_num].ocr_raw_text:
-                        combined_ans_text.append(f"--- PAGE {p_num} ---\n" + pages[p_num].ocr_raw_text)
+                        combined_ans_text.append(f"--- PAGE {p_num} --- \n" + pages[p_num].ocr_raw_text)
 
                 ans_text = "\n\n".join(combined_ans_text).strip() if combined_ans_text else f"[Question Q{q_obj.question_number} unmapped / skipped by student]"
 
