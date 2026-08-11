@@ -28,9 +28,9 @@ class BaseAIProvider(ABC):
     def log_health_event(provider_name: str, status: str, model_name: str = "AUTO", error_msg: str = "", response_time_ms: int = 0):
         """Logs provider health metrics, status changes, and rate limits to DB."""
         try:
-            import datetime
+            from django.utils import timezone
             from core.models import AIProviderHealth
-            now = datetime.datetime.now()
+            now = timezone.now()
             obj, _ = AIProviderHealth.objects.get_or_create(provider_name=provider_name)
             obj.current_model = model_name
             obj.status = status

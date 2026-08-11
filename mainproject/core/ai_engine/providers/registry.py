@@ -115,8 +115,9 @@ class ModelRegistryManager:
                 next_model = models[idx + 1]
 
         try:
+            from django.utils import timezone
             from core.models import AIProviderHealth
-            now = datetime.datetime.now()
+            now = timezone.now()
             obj, _ = AIProviderHealth.objects.get_or_create(provider_name=provider_name)
             obj.current_model = next_model
             obj.capabilities_json = ModelRegistryManager.get_capabilities_for_provider(provider_name)

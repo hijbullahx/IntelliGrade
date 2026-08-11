@@ -11,6 +11,15 @@ SECRET_KEY = 'django-insecure-%%-1)(=bufg&63^uk#*atap+qjp6pgv@q&2s12vh#9wsydiedz
 DEBUG = True
 ALLOWED_HOSTS = ['.pythonanywhere.com', 'localhost', '127.0.0.1', '*']
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.app.github.dev',
+    'https://*.githubpreview.dev',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
 # ==========================================
 # AI Engine Credentials Configuration (Auto-loads .env)
 # ==========================================

@@ -53,9 +53,9 @@ class OCREngineManager:
         Extracts high-resolution rendered pages (300 DPI), embedded figures/diagrams,
         layout bounding boxes, captions, and constructs a page-by-page Document DOM tree.
         """
-        import datetime
+        from django.utils import timezone
         from PIL import Image
-        now = datetime.datetime.now()
+        now = timezone.now()
         subfolder = now.strftime('%Y/%m')
         save_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', subfolder)
         thumb_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', 'thumbs', subfolder)

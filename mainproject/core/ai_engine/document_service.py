@@ -147,8 +147,9 @@ class DocumentService:
         """
         import cv2
         import numpy as np
+        from django.utils import timezone
 
-        now = datetime.datetime.now()
+        now = timezone.now()
         subfolder = now.strftime('%Y/%m')
         save_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', subfolder)
         thumb_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', 'thumbs', subfolder)
