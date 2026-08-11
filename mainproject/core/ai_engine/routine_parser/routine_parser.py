@@ -63,7 +63,52 @@ Return ONLY a valid JSON object matching this schema:
         except Exception:
             pass
 
-        return {"routine_schedule": []}
+        return {"routine_schedule": self._regex_fallback_parse(doc_str)}
+
+    def _regex_fallback_parse(self, text: str) -> List[Dict[str, Any]]:
+        """Best-effort extraction used when AI provider output is unavailable."""
+        if not text:
+            return []
+
+        course_code_rx = re.compile(r'\b([A-Z]{2,5}\s?-?\d{3,4})\b')
+        date_rx = re.compile(r'\b(\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b')
+        time_rx = re.compile(r'\b(\d{1,2}:\d{2}\s?(?:AM|PM)\s?-\s?\d{1,2}:\d{2}\s?(?:AM|PM))\b', re.IGNORECASE)
+
+        items: List[Dict[str, Any]] = []
+        seen_codes = set()
+
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if len(line) < 5:
+                continue
+
+            code_match = course_code_rx.search(line)
+            if not code_match:
+                continue
+
+            code = code_match.group(1).replace('-', ' ').upper().strip()
+            if code in seen_codes:
+                continue
+
+            seen_codes.add(code)
+            date_match = date_rx.search(line)
+            time_match = time_rx.search(line)
+            title_text = line.replace(code_match.group(0), '').strip(' -:|,')
+
+            items.append({
+                "exam_date": date_match.group(1) if date_match else "",
+                "exam_time": time_match.group(1).upper() if time_match else "",
+                "course_code": code,
+                "course_title": title_text[:200],
+                "instructor_name": "",
+                "room_number": "",
+                "section": "",
+                "department": "",
+                "semester": "",
+                "total_marks": 100.0,
+            })
+
+        return items
 
     def populate_database(self, routine_data: Dict[str, Any], created_by_user: Any = None) -> List[Dict[str, Any]]:
         """
