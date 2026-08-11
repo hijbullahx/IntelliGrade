@@ -20,31 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_environment_variables()
 
-<<<<<<< HEAD
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.app.github.dev',
-    'https://*.githubpreview.dev',
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
-
-# ==========================================
-# AI Engine Credentials Configuration (Auto-loads .env)
-# ==========================================
-env_path = BASE_DIR / '.env'
-if env_path.exists():
-    try:
-        with open(env_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    k, v = line.split('=', 1)
-                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-    except Exception:
-        pass
-=======
 RUNTIME_ENVIRONMENT = detect_runtime_environment()
 DEBUG = get_env_bool('DJANGO_DEBUG', default=get_env_bool('DEBUG', default=True), fallback_names=('DEBUG',))
 SECRET_KEY = get_env_value(
@@ -84,7 +59,6 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if USE_X_FORWARDED
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = get_env_bool('DJANGO_SECURE_SSL_REDIRECT', default=False, fallback_names=('SECURE_SSL_REDIRECT',))
->>>>>>> 08da691 (feat: update deployment configurations and enhance environment variable management)
 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')

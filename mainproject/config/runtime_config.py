@@ -138,10 +138,15 @@ def build_default_csrf_trusted_origins(
             'http://127.0.0.1:8000',
             'https://localhost:8000',
             'https://127.0.0.1:8000',
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
         ])
 
     if runtime_environment == 'CODESPACES':
-        origins.append('https://*.app.github.dev')
+        origins.extend([
+            'https://*.app.github.dev',
+            'https://*.githubpreview.dev',
+        ])
 
     for candidate in (site_url, public_url):
         origin = normalize_origin(candidate)
