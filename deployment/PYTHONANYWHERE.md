@@ -27,6 +27,9 @@ GEMINI_API_KEY="your-gemini-key"
 GROQ_API_KEY="your-groq-key"
 OPENAI_API_KEY="your-openai-key"
 DEFAULT_AI_PROVIDER="GROQ"
+DJANGO_ALLOWED_HOSTS="yourusername.pythonanywhere.com,.pythonanywhere.com"
+DJANGO_CSRF_TRUSTED_ORIGINS="https://yourusername.pythonanywhere.com"
+DJANGO_PUBLIC_URL="https://yourusername.pythonanywhere.com"
 EOF
 ```
 
@@ -57,6 +60,7 @@ application = get_wsgi_application()
 
 Run the configuration diagnostic:
 ```bash
+python manage.py check_deployment_config
 python manage.py check_ai_config
 ```
 

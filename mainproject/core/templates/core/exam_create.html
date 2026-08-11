@@ -127,7 +127,17 @@ function getCookie(name) {
             }
         }
     }
-    return cookieValue || '{{ csrf_token }}';
+    return cookieValue;
+}
+
+function getCsrfToken() {
+    const cookieToken = getCookie('csrftoken');
+    if (cookieToken) {
+        return cookieToken;
+    }
+
+    const hiddenToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return hiddenToken ? hiddenToken.value : '';
 }
 
 function runAIRoutineScan() {
@@ -149,11 +159,14 @@ function runAIRoutineScan() {
     if (routineFile) {
         formData.append('routine_file', routineFile);
     }
-    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
 
-    fetch("{% url 'scan_routine_ai' %}", {
+    const scanRoutineUrl = "{% url 'scan_routine_ai' %}";
+
+    fetch(scanRoutineUrl, {
         method: 'POST',
-        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': getCsrfToken() },
         body: formData
     })
     .then(async response => {

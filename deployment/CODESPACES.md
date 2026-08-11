@@ -11,6 +11,12 @@ In your GitHub repository settings, navigate to **Settings -> Secrets and variab
 - `OPENAI_API_KEY`: Your OpenAI API Key
 - `DEFAULT_AI_PROVIDER`: `GROQ` (or `GEMINI`)
 
+Optional deployment settings for custom origins:
+
+- `DJANGO_ALLOWED_HOSTS`: Comma-separated host list, for example `localhost,127.0.0.1,.app.github.dev`
+- `DJANGO_CSRF_TRUSTED_ORIGINS`: Comma-separated full origins, for example `https://localhost:8000,https://*.app.github.dev`
+- `DJANGO_PUBLIC_URL`: Your external Codespaces URL when you want an explicit public origin
+
 Alternatively, inside your active Codespace terminal, create a `.env` file in `mainproject/.env`:
 
 ```bash
@@ -27,6 +33,7 @@ Run the following commands in the Codespace terminal:
 cd mainproject
 pip install -r requirements.txt
 python manage.py check
+python manage.py check_deployment_config
 python manage.py check_ai_config
 ```
 

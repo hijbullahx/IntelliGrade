@@ -1,52 +1,52 @@
 {
   "routine_schedule": [
     {
-      "exam_date": "2026-05-17",
-      "exam_time": "09:00 AM - 12:00 PM",
+      "exam_date": "",
+      "exam_time": "",
       "course_code": "CSE 4383",
       "course_title": "",
-      "instructor_name": "Drs Ferdaus Anam Jibon",
-      "room_number": "405 (A-4)",
-      "section": "E",
+      "instructor_name": "",
+      "room_number": "",
+      "section": "",
       "department": "",
-      "semester": "Spring 2026",
-      "total_marks": 0.0
+      "semester": "",
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-19",
-      "exam_time": "09:00 AM - 12:00 PM",
+      "exam_date": "",
+      "exam_time": "",
       "course_code": "CSC 437",
       "course_title": "",
-      "instructor_name": "Kazi Johir Raihan Suny",
-      "room_number": "508 (D-2)",
-      "section": "Q",
+      "instructor_name": "",
+      "room_number": "",
+      "section": "",
       "department": "",
-      "semester": "Spring 2026",
-      "total_marks": 0.0
+      "semester": "",
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-20",
-      "exam_time": "02:00 PM - 05:00 PM",
+      "exam_date": "",
+      "exam_time": "",
       "course_code": "CSE 4317",
       "course_title": "",
-      "instructor_name": "Naeem Mia",
-      "room_number": "310 (F-4)",
-      "section": "C",
+      "instructor_name": "",
+      "room_number": "",
+      "section": "",
       "department": "",
-      "semester": "Spring 2026",
-      "total_marks": 0.0
+      "semester": "",
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-21",
-      "exam_time": "02:00 PM - 05:00 PM",
+      "exam_date": "",
+      "exam_time": "",
       "course_code": "CSC 465",
       "course_title": "",
-      "instructor_name": "Ms. Kashfi Shormita Kushal",
-      "room_number": "501 (E-3)",
-      "section": "K",
+      "instructor_name": "",
+      "room_number": "",
+      "section": "",
       "department": "",
-      "semester": "Spring 2026",
-      "total_marks": 0.0
+      "semester": "",
+      "total_marks": 100.0
     }
   ]
 }
