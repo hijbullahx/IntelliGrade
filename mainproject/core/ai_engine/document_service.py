@@ -6,6 +6,8 @@ from typing import Dict, Any, List, Optional
 from PIL import Image
 from django.conf import settings
 from core.models import AIConfiguration
+from config.paths import get_trace_dir
+from config.ocr_config import get_ocr_reader
 
 try:
     import fitz
@@ -52,8 +54,9 @@ class DocumentService:
     def extract_easyocr_text(image_bytes: bytes) -> Dict[str, Any]:
         """Extracts text from image bytes using EasyOCR."""
         try:
-            import easyocr
-            reader = easyocr.Reader(['en'], gpu=False)
+            reader = get_ocr_reader()
+            if reader is None:
+                return {"text": "", "confidence": 0.0, "engine": "EasyOCR Unavailable"}
             result = reader.readtext(image_bytes)
             lines = [res[1] for res in result]
             scores = [res[2] for res in result]
@@ -507,8 +510,7 @@ class DocumentService:
                     cv2.rectangle(union_img, (x0, y0), (x1, y1), color, 3)
                     cv2.putText(union_img, label, (x0 + 5, max(20, y0 + 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                 
-                trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
-                os.makedirs(trace_dir, exist_ok=True)
+                trace_dir = get_trace_dir()
                 cv2.imwrite(os.path.join(trace_dir, "candidate_union_debug.png"), union_img)
         except Exception as union_err:
             print(f"[DOCUMENT SERVICE WARNING] Candidate union debug image error: {union_err}")
@@ -549,14 +551,12 @@ class DocumentService:
         candidates = []
         try:
             h, w, _ = img_cv.shape
-            trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
-            os.makedirs(trace_dir, exist_ok=True)
+            trace_dir = get_trace_dir()
 
             words = []
             try:
-                import easyocr
-                reader = easyocr.Reader(['en'], gpu=False)
-                results = reader.readtext(img_cv)
+                reader = get_ocr_reader()
+                results = reader.readtext(img_cv) if reader else []
                 for res in results:
                     bbox_pts, text_val, conf = res
                     x_coords = [p[0] for p in bbox_pts]
@@ -814,8 +814,7 @@ class DocumentService:
             vertical = cv2.dilate(vertical, v_kernel, iterations=1)
 
             table_grid = cv2.add(horizontal, vertical)
-            trace_dir = 'd:/Projects/IntelliGrade/mainproject/request_trace'
-            os.makedirs(trace_dir, exist_ok=True)
+            trace_dir = get_trace_dir()
 
             # Save debug table_grid.png
             cv2.imwrite(os.path.join(trace_dir, "table_grid.png"), table_grid)
@@ -877,9 +876,8 @@ class DocumentService:
                     # OCR cell slice independently
                     cell_text = ""
                     try:
-                        import easyocr
-                        reader = easyocr.Reader(['en'], gpu=False)
-                        res = reader.readtext(cell_crop)
+                        reader = get_ocr_reader()
+                        res = reader.readtext(cell_crop) if reader else []
                         if res:
                             cell_text = " ".join([r[1].strip() for r in res])
                     except Exception:
@@ -1112,10 +1110,9 @@ class DocumentService:
                         tbl_filename = f"candidate_{tbl_idx:03d}.png"
                         tbl_rel_path = f"exam_tables/{subfolder}/{tbl_filename}" if subfolder else f"exam_tables/{tbl_filename}"
                         tbl_full_path = os.path.join(save_dir, tbl_filename)
-                        trace_candidate_path = os.path.join('d:/Projects/IntelliGrade/mainproject/request_trace', tbl_filename)
+                        trace_candidate_path = os.path.join(get_trace_dir(), tbl_filename)
 
                         os.makedirs(os.path.dirname(tbl_full_path), exist_ok=True)
-                        os.makedirs(os.path.dirname(trace_candidate_path), exist_ok=True)
 
                         with open(tbl_full_path, "wb") as f:
                             f.write(crop_bytes)

@@ -202,15 +202,16 @@ class OCREngineManager:
         # 1. Try EasyOCR Engine for Image Documents
         if not mime_type == "application/pdf" and self.engine_choice in [AIConfiguration.OCREngine.AUTO]:
             try:
-                import easyocr
-                reader = easyocr.Reader(['en'], gpu=False)
-                result = reader.readtext(image_bytes)
-                lines = [res[1] for res in result]
-                scores = [res[2] for res in result]
-                extracted = "\n".join(lines)
-                conf = sum(scores) / len(scores) if scores else 0.85
-                if extracted.strip():
-                    return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
+                from config.ocr_config import get_ocr_reader
+                reader = get_ocr_reader()
+                if reader:
+                    result = reader.readtext(image_bytes)
+                    lines = [res[1] for res in result]
+                    scores = [res[2] for res in result]
+                    extracted = "\n".join(lines)
+                    conf = sum(scores) / len(scores) if scores else 0.85
+                    if extracted.strip():
+                        return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
             except Exception:
                 pass
 

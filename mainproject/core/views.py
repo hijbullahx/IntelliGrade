@@ -2018,14 +2018,15 @@ def api_scan_question_paper(request):
     easy_text = ""
     easy_conf = 0.0
     try:
-        import easyocr
-        reader = easyocr.Reader(['en'], gpu=False)
-        e_results = reader.readtext(str(page1_path))
-        lines = [r[1] for r in e_results]
-        scores = [r[2] for r in e_results]
-        easy_text = "\n".join(lines).strip()
-        easy_conf = sum(scores) / len(scores) if scores else 0.85
-        print(f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)}")
+        from config.ocr_config import get_ocr_reader
+        reader = get_ocr_reader()
+        if reader:
+            e_results = reader.readtext(str(page1_path))
+            lines = [r[1] for r in e_results]
+            scores = [r[2] for r in e_results]
+            easy_text = "\n".join(lines).strip()
+            easy_conf = sum(scores) / len(scores) if scores else 0.85
+            print(f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)}")
     except Exception as easy_err:
         print(f"[EASYOCR FAILED] Traceback: {easy_err}")
 

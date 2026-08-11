@@ -48,8 +48,8 @@ class AcademicParserService:
 
         if not text_lines and page_renders:
             try:
-                import easyocr
-                reader = easyocr.Reader(['en'], gpu=False)
+                from config.ocr_config import get_ocr_reader
+                reader = get_ocr_reader()
                 for page_idx, render_item in enumerate(page_renders, 1):
                     p_cv = None
                     if isinstance(render_item, str):
@@ -69,7 +69,7 @@ class AcademicParserService:
                     elif isinstance(render_item, np.ndarray):
                         p_cv = render_item
                     
-                    if p_cv is not None:
+                    if p_cv is not None and reader is not None:
                         res = reader.readtext(p_cv)
                         for bbox_pts, text_val, conf in res:
                             if text_val.strip():
@@ -90,24 +90,25 @@ class AcademicParserService:
             try:
                 import fitz
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                from config.ocr_config import get_ocr_reader
+                reader = get_ocr_reader()
                 for page_idx, page in enumerate(doc, 1):
                     pix = page.get_pixmap(dpi=300)
                     p_bytes = pix.tobytes("png")
                     p_np = np.frombuffer(p_bytes, np.uint8)
                     p_cv = cv2.imdecode(p_np, cv2.IMREAD_COLOR)
                     
-                    import easyocr
-                    reader = easyocr.Reader(['en'], gpu=False)
-                    res = reader.readtext(p_cv)
-                    for bbox_pts, text_val, conf in res:
-                        if text_val.strip():
-                            ys = [pt[1] for pt in bbox_pts]
-                            xs = [pt[0] for pt in bbox_pts]
-                            dom_elements.append({
-                                "page": page_idx,
-                                "bbox": [min(xs), min(ys), max(xs), max(ys)],
-                                "text": text_val.strip()
-                            })
+                    if reader is not None:
+                        res = reader.readtext(p_cv)
+                        for bbox_pts, text_val, conf in res:
+                            if text_val.strip():
+                                ys = [pt[1] for pt in bbox_pts]
+                                xs = [pt[0] for pt in bbox_pts]
+                                dom_elements.append({
+                                    "page": page_idx,
+                                    "bbox": [min(xs), min(ys), max(xs), max(ys)],
+                                    "text": text_val.strip()
+                                })
             except Exception as e_ocr:
                 print(f"[DOM OCR FALLBACK WARNING] {e_ocr}")
 
