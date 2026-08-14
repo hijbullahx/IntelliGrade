@@ -155,29 +155,44 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
 
         # Deterministic Regex Question Fallback Extractor if LLM output fails
         fallback_questions = []
-        q_blocks = re.split(r'(?i)(?=(?:question\s*\d+|q\d+[\.\:]?|\b\d+[\.\)]\s+[A-Z]))', doc_text)
-        for q_idx, block in enumerate(q_blocks):
-            b_text = block.strip()
-            if len(b_text) > 20:
-                num_match = re.search(r'(?i)(question\s*\d+|q\d+|\b\d+[\.\)])', b_text)
-                q_num = num_match.group(1).upper() if num_match else f"Q{q_idx+1}"
-                
-                # Extract marks if present
-                marks_match = re.search(r'\[(\d+(?:\.\d+)?)\s*marks?\]', b_text, re.IGNORECASE)
-                allocated_marks = float(marks_match.group(1)) if marks_match else 25.0
+        pattern = re.compile(
+            r'(?i)(?:\b(?:question|ans|answer|sol|solution)\s*(?:no\.?|number|#)?\s*[:.-]?\s*\d+|\bq\s*[-.]?\s*\d+\b|^\s*\d+[\.\)]\s+(?:consider|a\b|digital|explain|calculate|derive|find|what|how|describe|discuss|solve|state|write|analyze|compare|contrast))',
+            re.MULTILINE
+        )
 
-                fallback_questions.append({
-                    "question_number": q_num,
-                    "prompt_text": b_text[:500],
-                    "allocated_marks": allocated_marks,
-                    "question_type": ["Theory"],
-                    "command_verbs": ["Explain"],
-                    "bloom_level": "Understand",
-                    "co_mapping": "CO1",
-                    "po_mapping": ["PO1"],
-                    "criteria": "Accurate response covering key concepts.",
-                    "ideal_answer": "Model answer covering core concepts."
-                })
+        matches = list(pattern.finditer(doc_text))
+        if matches:
+            for idx, match in enumerate(matches):
+                start_pos = match.start()
+                end_pos = matches[idx + 1].start() if idx + 1 < len(matches) else len(doc_text)
+                block_text = doc_text[start_pos:end_pos].strip()
+
+                # Filter out header instructions
+                b_lower = block_text.lower()[:100]
+                if "answer all" in b_lower or "marks allocated" in b_lower or "instructions:" in b_lower:
+                    continue
+
+                if len(block_text) > 15:
+                    q_num_match = re.search(r'(?i)(question\s*(?:no\.?)?\s*\d+|q\s*[-.]?\s*\d+|\b\d+)', match.group(0))
+                    raw_num = q_num_match.group(1).upper() if q_num_match else f"{len(fallback_questions)+1}"
+                    q_num_clean = re.sub(r'[^0-9]', '', raw_num)
+                    q_num_formatted = f"Q{q_num_clean}" if q_num_clean else f"Q{len(fallback_questions)+1}"
+
+                    marks_match = re.search(r'\[.*?(\d+(?:\.\d+)?)\s*marks?.*?\]', block_text, re.IGNORECASE)
+                    allocated_marks = float(marks_match.group(1)) if marks_match else 25.0
+
+                    fallback_questions.append({
+                        "question_number": q_num_formatted,
+                        "prompt_text": block_text[:1000],
+                        "allocated_marks": allocated_marks,
+                        "question_type": ["Theory"],
+                        "command_verbs": ["Explain"],
+                        "bloom_level": "Understand",
+                        "co_mapping": f"CO{len(fallback_questions)+1}",
+                        "po_mapping": ["PO1"],
+                        "criteria": "Accurate response covering key concepts.",
+                        "ideal_answer": "Model answer covering core concepts."
+                    })
 
         return {"questions": fallback_questions if fallback_questions else [
             {

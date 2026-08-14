@@ -1904,13 +1904,14 @@ def ai_config_view(request):
 
 def api_scan_question_paper(request):
     """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
-    print("=" * 80)
-    print("QUESTION PAPER SCAN REQUEST RECEIVED")
-    print(f"METHOD: {request.method}")
-    print(f"USER: {request.user}")
-    print(f"FILES: {list(request.FILES.keys())}")
-    print(f"POST KEYS: {list(request.POST.keys())}")
-    print("=" * 80)
+    try:
+        print("=" * 80)
+        print("QUESTION PAPER SCAN REQUEST RECEIVED")
+        print(f"METHOD: {request.method}")
+        print(f"USER: {request.user}")
+        print(f"FILES: {list(request.FILES.keys())}")
+        print(f"POST KEYS: {list(request.POST.keys())}")
+        print("=" * 80)
 
     if not request.user.is_authenticated:
         print("[QUESTION PAPER SCAN ERROR] User not authenticated.")
@@ -2025,12 +2026,14 @@ def api_scan_question_paper(request):
         print(f"[PIL READ FAILED] {pil_err}")
         return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
 
-    # 3. EasyOCR directly on verified page1.png
-    import resource
     from config.ocr_config import get_ocr_reader, prepare_easyocr_image
 
     def _ocr_rss_mb() -> float:
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+        try:
+            import resource
+            return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+        except ImportError:
+            return 0.0
 
     print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={pil_img.width}x{pil_img.height}")
     easy_text = ""
@@ -2072,9 +2075,8 @@ def api_scan_question_paper(request):
         }, status=400)
 
     try:
-        with transaction.atomic():
-            print("=" * 80)
-            print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
+        print("=" * 80)
+        print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
             print(f"  INPUT FILE: {qp_file.name} ({len(qp_bytes)} bytes)")
             print(f"  MIME TYPE: {mime_type}")
             print(f"  PYTHON EXEC: {sys.executable}")
@@ -2239,9 +2241,15 @@ def api_scan_question_paper(request):
         return JsonResponse({'success': False, 'error': str(pve)}, status=400)
     except Exception as e:
         import traceback
+        import uuid
         traceback.print_exc()
         print(f"[DETERMINISTIC PIPELINE EXCEPTION] {e}")
-        return JsonResponse({'success': False, 'error': f"Document AI Pipeline Exception: {str(e)}"}, status=500)
+        return JsonResponse({
+            'success': False,
+            'stage': 'SCAN_EXECUTION_FAILURE',
+            'error': f"Document AI Pipeline Exception: {str(e)}",
+            'trace_id': str(uuid.uuid4())
+        }, status=500)
 
 
 def api_finalize_scanned_paper(request):

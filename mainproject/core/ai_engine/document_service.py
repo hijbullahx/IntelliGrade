@@ -2,11 +2,17 @@ import os
 import io
 import re
 import datetime
-import resource
 import time
 from typing import Dict, Any, List, Optional
 from PIL import Image
 from django.conf import settings
+
+def get_rss_mb() -> float:
+    try:
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    except ImportError:
+        return 0.0
 from core.models import AIConfiguration
 from config.paths import get_trace_dir
 from config.ocr_config import get_ocr_reader, prepare_easyocr_image
@@ -63,7 +69,7 @@ class DocumentService:
             print(
                 f"[DOCUMENT SERVICE EASYOCR] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
                 f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']} | "
-                f"rss_mb={resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0:.1f}"
+                f"rss_mb={get_rss_mb():.1f}"
             )
             started = time.monotonic()
             result = reader.readtext(working_image)

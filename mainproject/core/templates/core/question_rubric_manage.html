@@ -839,9 +839,22 @@ function scanAcademicPaper() {
         body: formData,
         signal: signal
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success && data.data && data.data.questions && data.data.questions.length > 0) {
+    .then(async response => {
+        const contentType = response.headers.get('content-type') || '';
+        let data;
+        if (contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const rawText = await response.text();
+            data = {
+                success: false,
+                error: `Server returned non-JSON response (HTTP ${response.status}): ${rawText.slice(0, 200)}...`
+            };
+        }
+        return { ok: response.ok, data };
+    })
+    .then(({ ok, data }) => {
+        if (ok && data.success && data.data && data.data.questions && data.data.questions.length > 0) {
             currentStagedScanData = data;
             const count = data.extracted_count || data.data.questions.length;
             updateScanProgress(100, "🎉 Scan Complete!");
@@ -853,9 +866,10 @@ function scanAcademicPaper() {
             document.getElementById('scanCompletedControls').classList.remove('hidden');
             lucide.createIcons();
         } else {
-            appendScanLog(`❌ Scan Error: ${data.error || 'No questions detected'}`, 'error');
+            const errMsg = data.error || 'No questions detected';
+            appendScanLog(`❌ Scan Error: ${errMsg}`, 'error');
             updateScanProgress(0, "Scan Failed");
-            alert(data.error || 'Academic scan failed.');
+            alert(`Scan Error: ${errMsg}`);
         }
     })
     .catch(err => {
@@ -863,9 +877,9 @@ function scanAcademicPaper() {
             appendScanLog(`⏹️ Scan process aborted by user.`, 'warn');
             updateScanProgress(0, "Aborted");
         } else {
-            appendScanLog(`❌ Server Error: ${err.message}`, 'error');
+            appendScanLog(`❌ Server Network Error: ${err.message}`, 'error');
             updateScanProgress(0, "Server Error");
-            alert('Server error executing scan.');
+            alert(`Server Network Error: ${err.message}`);
         }
     });
 }
