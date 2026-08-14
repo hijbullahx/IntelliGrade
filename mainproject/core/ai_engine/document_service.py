@@ -156,6 +156,12 @@ class DocumentService:
         best = max(candidates, key=lambda c: (len(c["text"]), c["confidence"]))
         best["char_count"] = len(best["text"])
         print(f"[DOCUMENT SERVICE OCR] Selected Engine: {best['engine']} | Text Length: {best['char_count']} chars | Confidence: {best['confidence']}")
+
+        # Add a warning for potentially large payloads that might cause timeouts
+        if best["char_count"] > 30000: # Threshold for a large payload
+            print(f"[DOCUMENT SERVICE WARNING] Large OCR payload detected ({best['char_count']} chars). "
+                  "This may increase AI provider processing time and risk a timeout.")
+
         return best
 
     @classmethod

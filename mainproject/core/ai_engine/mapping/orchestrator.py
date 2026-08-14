@@ -133,8 +133,18 @@ class QuestionMappingOrchestrator:
             p_num = sp.page_number
             ocr_text = sp.ocr_raw_text or ""
             ocr_res = sp.ocr_results.first()
-            word_boxes = getattr(ocr_res, 'word_boxes_json', []) if ocr_res else []
-            line_boxes = getattr(ocr_res, 'line_boxes_json', []) if ocr_res else []
+            
+            word_boxes = []
+            line_boxes = []
+            if ocr_res:
+                # Safely load word and line boxes, handling empty or invalid JSON.
+                wb_json = getattr(ocr_res, 'word_boxes_json', None)
+                lb_json = getattr(ocr_res, 'line_boxes_json', None)
+                if wb_json and isinstance(wb_json, list):
+                    word_boxes = wb_json
+                if lb_json and isinstance(lb_json, list):
+                    line_boxes = lb_json
+
 
             # Step 1: Detect explicit question headings using reconstructed visual lines
             detections = StudentQuestionHeadingDetector.detect_questions_on_page(

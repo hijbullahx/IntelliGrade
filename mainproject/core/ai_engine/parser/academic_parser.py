@@ -286,6 +286,15 @@ class AcademicParserService:
                 "[STRICT PIPELINE FAILURE] Question Parser Failure: Zero academic questions were extracted by the AI Engine."
             )
 
+        # Assertion 3: AI Response Payload and Timeout Validation
+        if ai_response_data.get("error_type") == "timeout":
+            raise PipelineValidationError(
+                f"[STRICT PIPELINE FAILURE] AI Provider Timeout: The request to the AI provider timed out after {ai_response_data.get('timeout_duration', 'N/A')} seconds. "
+                "This is often caused by a very large document (many pages or dense text) exceeding the provider's processing limits. "
+                "Consider splitting the document into smaller parts or using a processor optimized for large documents. "
+                f"OCR Text Length: {char_count} characters."
+            )
+
         extracted_figures = graphics_result.get('figures', [])
         extracted_tables = graphics_result.get('tables', [])
         extracted_formulas = graphics_result.get('formulas', [])
