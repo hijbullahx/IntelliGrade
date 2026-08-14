@@ -7,6 +7,7 @@ from .preprocessor import ImagePreprocessor
 from core.models import AIConfiguration
 from core.ai_engine.providers.gemini import GeminiProvider
 from django.conf import settings
+from config.ocr_config import prepare_easyocr_image
 
 try:
     import fitz
@@ -205,7 +206,8 @@ class OCREngineManager:
                 from config.ocr_config import get_ocr_reader
                 reader = get_ocr_reader()
                 if reader:
-                    result = reader.readtext(image_bytes)
+                    working_image, _ocr_meta = prepare_easyocr_image(image_bytes)
+                    result = reader.readtext(working_image)
                     lines = [res[1] for res in result]
                     scores = [res[2] for res in result]
                     extracted = "\n".join(lines)

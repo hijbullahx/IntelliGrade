@@ -2,12 +2,14 @@ import os
 import io
 import re
 import datetime
+import resource
+import time
 from typing import Dict, Any, List, Optional
 from PIL import Image
 from django.conf import settings
 from core.models import AIConfiguration
 from config.paths import get_trace_dir
-from config.ocr_config import get_ocr_reader
+from config.ocr_config import get_ocr_reader, prepare_easyocr_image
 
 try:
     import fitz
@@ -57,11 +59,22 @@ class DocumentService:
             reader = get_ocr_reader()
             if reader is None:
                 return {"text": "", "confidence": 0.0, "engine": "EasyOCR Unavailable"}
-            result = reader.readtext(image_bytes)
+            working_image, ocr_meta = prepare_easyocr_image(image_bytes)
+            print(
+                f"[DOCUMENT SERVICE EASYOCR] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
+                f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']} | "
+                f"rss_mb={resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0:.1f}"
+            )
+            started = time.monotonic()
+            result = reader.readtext(working_image)
             lines = [res[1] for res in result]
             scores = [res[2] for res in result]
             extracted = "\n".join(lines).strip()
             conf = sum(scores) / len(scores) if scores else 0.85
+            print(
+                f"[DOCUMENT SERVICE EASYOCR SUCCESS] text_len={len(extracted)} | confidence={round(conf, 4)} | "
+                f"elapsed_s={time.monotonic() - started:.2f}"
+            )
             return {"text": extracted, "confidence": round(conf, 4), "engine": "EasyOCR"}
         except Exception:
             return {"text": "", "confidence": 0.0, "engine": "EasyOCR Unavailable"}
@@ -557,7 +570,8 @@ class DocumentService:
             words = []
             try:
                 reader = get_ocr_reader()
-                results = reader.readtext(img_cv) if reader else []
+                working_image, _ocr_meta = prepare_easyocr_image(img_cv)
+                results = reader.readtext(working_image) if reader else []
                 for res in results:
                     bbox_pts, text_val, conf = res
                     x_coords = [p[0] for p in bbox_pts]
@@ -878,7 +892,8 @@ class DocumentService:
                     cell_text = ""
                     try:
                         reader = get_ocr_reader()
-                        res = reader.readtext(cell_crop) if reader else []
+                        working_cell, _cell_meta = prepare_easyocr_image(cell_crop)
+                        res = reader.readtext(working_cell) if reader else []
                         if res:
                             cell_text = " ".join([r[1].strip() for r in res])
                     except Exception:

@@ -2026,27 +2026,48 @@ def api_scan_question_paper(request):
         return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
 
     # 3. EasyOCR directly on verified page1.png
-    print("[EASYOCR START] Running EasyOCR directly on page1.png...")
+    import resource
+    from config.ocr_config import get_ocr_reader, prepare_easyocr_image
+
+    def _ocr_rss_mb() -> float:
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+
+    print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={pil_img.width}x{pil_img.height}")
     easy_text = ""
     easy_conf = 0.0
+    easy_started = time.monotonic()
     try:
-        from config.ocr_config import get_ocr_reader
         reader = get_ocr_reader()
         if reader:
-            e_results = reader.readtext(str(page1_path))
+            working_image, ocr_meta = prepare_easyocr_image(page1_path)
+            print(
+                f"[EASYOCR IMAGE LOAD] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
+                f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']}"
+            )
+            print(f"[EASYOCR OCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f}")
+            e_results = reader.readtext(working_image)
             lines = [r[1] for r in e_results]
             scores = [r[2] for r in e_results]
             easy_text = "\n".join(lines).strip()
             easy_conf = sum(scores) / len(scores) if scores else 0.85
-            print(f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)}")
+            print(
+                f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)} | "
+                f"elapsed_s={time.monotonic() - easy_started:.2f} | rss_mb={_ocr_rss_mb():.1f}"
+            )
+        else:
+            print("[EASYOCR FAILURE] Reader initialization returned None.")
     except Exception as easy_err:
-        print(f"[EASYOCR FAILED] Traceback: {easy_err}")
+        print(f"[EASYOCR FAILURE] {easy_err}")
 
     if len(easy_text) == 0 and len(doc) > 0 and len(doc[0].get_text("text").strip()) < 10:
         page1_before_path = trace_dir / 'page1_before_ocr.png'
         pil_img.save(page1_before_path)
         return JsonResponse({
             'success': False,
+            'stage': 'OCR_EXTRACTION',
+            'error_code': 'EASYOCR_EMPTY_OUTPUT',
+            'message': 'EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.',
+            'retryable': True,
             'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.'
         }, status=400)
 

@@ -1,0 +1,22 @@
+{
+  "python": "3.12.1",
+  "platform": "Linux-6.8.0-1052-azure-x86_64-with-glibc2.39",
+  "packages": {
+    "torch": "2.13.0+cu130",
+    "easyocr": "1.7.2",
+    "cv2": "5.0.0",
+    "numpy": "2.5.1",
+    "PIL": "12.3.0",
+    "fitz": "1.28.2",
+    "django": "5.2.17"
+  },
+  "memory": {
+    "OMP_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "EASYOCR_MODEL_STORAGE_DIRECTORY": null,
+    "EASYOCR_MODULE_PATH": null,
+    "TORCH_HOME": null,
+    "/sys/fs/cgroup/memory.current": "3707129856",
+    "/sys/fs/cgroup/memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0"
+  }
+}
