@@ -1660,11 +1660,14 @@ def question_rubric_manage(request, exam_id=None):
 
         # Handle Document Deletion Action
         clear_doc = request.POST.get('clear_document')
-        if clear_doc == 'question_paper_file' and target_exam.question_paper_file:
-            target_exam.question_paper_file.delete(save=False)
-            target_exam.question_paper_file = None
+        if clear_doc == 'question_paper_file':
+            if target_exam.question_paper_file:
+                target_exam.question_paper_file.delete(save=False)
+                target_exam.question_paper_file = None
+            # Also remove all previously scanned/configured questions, figures, and rubrics
+            deleted_count, _ = target_exam.questions.all().delete()
             target_exam.save()
-            messages.success(request, f"Question Paper document removed for {target_exam.course.code}.")
+            messages.success(request, f"Question Paper document and {deleted_count} associated question(s) removed for {target_exam.course.code}. You can now scan a new Question Paper.")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
         elif clear_doc == 'rubric_file' and target_exam.rubric_file:
             target_exam.rubric_file.delete(save=False)
@@ -1943,10 +1946,15 @@ def api_scan_question_paper(request):
 
         print(f"[QUESTION PAPER SCAN] Matched Exam: {exam} (ID: {exam.id if exam else None})")
 
-        qp_file = request.FILES.get('question_paper_file')
-        if not qp_file:
+        qp_files = request.FILES.getlist('question_paper_files')
+        if not qp_files and request.FILES.get('question_paper_file'):
+            qp_files = [request.FILES.get('question_paper_file')]
+
+        if not qp_files:
             print("[QUESTION PAPER SCAN ERROR] No question_paper_file found in request.FILES.")
-            return JsonResponse({'error': 'Please select a Question Paper file (PDF or Image) to upload and scan.'}, status=400)
+            return JsonResponse({'error': 'Please select or capture Question Paper document/photo(s) to upload and scan.'}, status=400)
+
+        qp_file = qp_files[0]
 
         # Save newly uploaded Question Paper file to the examination record
         if exam:
@@ -1965,6 +1973,8 @@ def api_scan_question_paper(request):
                 mime_type = guessed_mime
             elif qp_file.name.lower().endswith('.pdf'):
                 mime_type = 'application/pdf'
+            elif qp_file.name.lower().endswith('.png'):
+                mime_type = 'image/png'
             print(f"[QUESTION PAPER SCAN] Uploaded File: {qp_file.name} | Size: {len(qp_bytes)} bytes | MIME: {mime_type}")
         except Exception as e:
             import traceback
@@ -2013,17 +2023,25 @@ def api_scan_question_paper(request):
         os.makedirs(trace_dir, exist_ok=True)
         page1_path = trace_dir / 'page1.png'
 
-        try:
-            doc = fitz.open(stream=qp_bytes, filetype="pdf")
-            if len(doc) == 0:
-                return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
-            
-            page0 = doc.load_page(0)
-            pix = page0.get_pixmap(dpi=300)
-            pix.save(str(page1_path))
-        except Exception as render_err:
-            print(f"[RENDERER FAILED] {render_err}")
-            return JsonResponse({'success': False, 'error': f'Page 1 rendering failed: {render_err}'}, status=500)
+        if mime_type.startswith('image/'):
+            with open(page1_path, 'wb') as f:
+                f.write(qp_bytes)
+        else:
+            try:
+                doc = fitz.open(stream=qp_bytes, filetype="pdf")
+                if len(doc) == 0:
+                    return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
+                
+                page0 = doc.load_page(0)
+                pix = page0.get_pixmap(dpi=300)
+                pix.save(str(page1_path))
+            except Exception as render_err:
+                try:
+                    with open(page1_path, 'wb') as f:
+                        f.write(qp_bytes)
+                except Exception:
+                    print(f"[RENDERER FAILED] {render_err}")
+                    return JsonResponse({'success': False, 'error': f'Document rendering failed: {render_err}'}, status=500)
 
         if not os.path.exists(page1_path):
             return JsonResponse({'success': False, 'error': 'page1.png failed to save to disk'}, status=500)

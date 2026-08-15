@@ -59,3 +59,21 @@ class RoutineScanUITestCase(TestCase):
         data = response.json()
         self.assertTrue(data.get('success'))
         self.assertEqual(len(data.get('routine_items', [])), 2)
+
+    def test_question_rubric_manage_renders_modal(self):
+        from core.models import Examination
+        from django.utils import timezone
+        exam = Examination.objects.create(
+            course=self.course,
+            title='Midterm Exam',
+            exam_date=timezone.now().date(),
+            total_marks=100.00,
+            assigned_faculty=self.user
+        )
+        self.client.login(username='controller_admin', password='testpassword123')
+        response = self.client.get(reverse('question_rubric_manage', kwargs={'exam_id': exam.id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'scanProgressModal')
+        self.assertContains(response, 'scanModalProgressView')
+        self.assertContains(response, 'runAIQuestionScanFromModal')
+        self.assertContains(response, 'openScanQuestionModal')
