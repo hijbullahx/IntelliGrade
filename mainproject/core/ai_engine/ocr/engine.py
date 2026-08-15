@@ -32,19 +32,19 @@ class OCREngineManager:
         """Extracts clean text from PDF bytes using PyMuPDF (fitz)."""
         try:
             import fitz
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            text_pages = []
-            for page in doc:
-                txt = page.get_text("text") or ""
-                clean_lines = []
-                for line in txt.split('\n'):
-                    s = line.strip()
-                    # Filter out font node garbage like 'node00000265', 'Skia/PDF', or PDF object refs '41 0 R'
-                    if s and not re.search(r'node\d{6,}', s) and not 'Skia/PDF' in s and not re.match(r'^\d+\s+\d+\s+R$', s):
-                        clean_lines.append(s)
-                if clean_lines:
-                    text_pages.append("\n".join(clean_lines))
-            return "\n".join(text_pages).strip()
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                text_pages = []
+                for page in doc:
+                    txt = page.get_text("text") or ""
+                    clean_lines = []
+                    for line in txt.split('\n'):
+                        s = line.strip()
+                        # Filter out font node garbage like 'node00000265', 'Skia/PDF', or PDF object refs '41 0 R'
+                        if s and not re.search(r'node\d{6,}', s) and not 'Skia/PDF' in s and not re.match(r'^\d+\s+\d+\s+R$', s):
+                            clean_lines.append(s)
+                    if clean_lines:
+                        text_pages.append("\n".join(clean_lines))
+                return "\n".join(text_pages).strip()
         except Exception:
             return ""
 
@@ -70,73 +70,73 @@ class OCREngineManager:
         try:
             import fitz
             if doc_bytes.startswith(b'%PDF'):
-                doc = fitz.open(stream=doc_bytes, filetype="pdf")
-                for page_idx, page in enumerate(doc):
-                    page_num = page_idx + 1
-                    
-                    # 1. High-DPI Render (300 DPI)
-                    pix = page.get_pixmap(dpi=300)
-                    page_png = pix.tobytes("png")
-                    page_renders.append(page_png)
+                with fitz.open(stream=doc_bytes, filetype="pdf") as doc:
+                    for page_idx, page in enumerate(doc):
+                        page_num = page_idx + 1
+                        
+                        # 1. High-DPI Render (300 DPI)
+                        pix = page.get_pixmap(dpi=300)
+                        page_png = pix.tobytes("png")
+                        page_renders.append(page_png)
 
-                    # 2. Extract Embedded Vector/Raster Images
-                    img_list = page.get_images(full=True)
-                    for img_idx, img_info in enumerate(img_list):
-                        xref = img_info[0]
-                        base_img = doc.extract_image(xref)
-                        image_bytes = base_img.get("image")
-                        image_ext = base_img.get("ext", "png")
+                        # 2. Extract Embedded Vector/Raster Images
+                        img_list = page.get_images(full=True)
+                        for img_idx, img_info in enumerate(img_list):
+                            xref = img_info[0]
+                            base_img = doc.extract_image(xref)
+                            image_bytes = base_img.get("image")
+                            image_ext = base_img.get("ext", "png")
 
-                        if image_bytes and len(image_bytes) > 500: # Filter out 1x1 tiny icons
-                            fig_filename = f"fig_p{page_num}_{img_idx+1}_{xref}.{image_ext}"
-                            fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
-                            fig_full_path = os.path.join(save_dir, fig_filename)
+                            if image_bytes and len(image_bytes) > 500: # Filter out 1x1 tiny icons
+                                fig_filename = f"fig_p{page_num}_{img_idx+1}_{xref}.{image_ext}"
+                                fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}"
+                                fig_full_path = os.path.join(save_dir, fig_filename)
 
-                            with open(fig_full_path, "wb") as f:
-                                f.write(image_bytes)
+                                with open(fig_full_path, "wb") as f:
+                                    f.write(image_bytes)
 
-                            # Generate Thumbnail
-                            thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
-                            thumb_full_path = os.path.join(thumb_dir, fig_filename)
-                            try:
-                                im = Image.open(io.BytesIO(image_bytes))
-                                im.thumbnail((300, 300))
-                                im.save(thumb_full_path)
-                            except Exception:
-                                thumb_rel_path = fig_rel_path
+                                # Generate Thumbnail
+                                thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}"
+                                thumb_full_path = os.path.join(thumb_dir, fig_filename)
+                                try:
+                                    with Image.open(io.BytesIO(image_bytes)) as pil_fig:
+                                        pil_fig.thumbnail((250, 250))
+                                        pil_fig.save(thumb_full_path)
+                                except Exception:
+                                    thumb_rel_path = fig_rel_path
 
-                            # Get Bounding Box Coordinates if available
-                            rects = page.get_image_rects(xref)
-                            bbox = [round(c, 2) for c in rects[0]] if rects else [0, 0, 0, 0]
+                                # Get Bounding Box Coordinates if available
+                                rects = page.get_image_rects(xref)
+                                bbox = [round(c, 2) for c in rects[0]] if rects else [0, 0, 0, 0]
 
-                            extracted_figures.append({
-                                "page_number": page_num,
-                                "caption": f"Figure {img_idx+1} (Page {page_num})",
-                                "image_path": fig_rel_path,
-                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
-                                "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
-                                "bounding_box": bbox,
-                                "display_order": img_idx + 1
-                            })
+                                extracted_figures.append({
+                                    "page_number": page_num,
+                                    "caption": f"Figure {img_idx+1} (Page {page_num})",
+                                    "image_path": fig_rel_path,
+                                    "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                    "thumbnail_url": f"{settings.MEDIA_URL}{thumb_rel_path}",
+                                    "bounding_box": bbox,
+                                    "display_order": img_idx + 1
+                                })
 
-                            dom_elements.append({
-                                "type": "figure",
-                                "page": page_num,
-                                "caption": f"Figure {img_idx+1}",
-                                "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
-                                "bbox": bbox
-                            })
+                                dom_elements.append({
+                                    "type": "figure",
+                                    "page": page_num,
+                                    "caption": f"Figure {img_idx+1}",
+                                    "image_url": f"{settings.MEDIA_URL}{fig_rel_path}",
+                                    "bbox": bbox
+                                })
 
-                    # DOM Page text blocks & coordinates
-                    text_blocks = page.get_text("blocks")
-                    for b in text_blocks:
-                        if b[4].strip():
-                            dom_elements.append({
-                                "type": "text_block",
-                                "page": page_num,
-                                "text": b[4].strip(),
-                                "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
-                            })
+                        # DOM Page text blocks & coordinates
+                        text_blocks = page.get_text("blocks")
+                        for b in text_blocks:
+                            if b[4].strip():
+                                dom_elements.append({
+                                    "type": "text_block",
+                                    "page": page_num,
+                                    "text": b[4].strip(),
+                                    "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
+                                })
             else:
                 # Direct Image Upload (JPEG/PNG)
                 page_renders.append(doc_bytes)
@@ -183,12 +183,12 @@ class OCREngineManager:
             # Scanned / Skia PDF: Render 300 DPI page image for Multimodal Vision OCR
             try:
                 import fitz
-                doc = fitz.open(stream=image_bytes, filetype="pdf")
-                if len(doc) > 0:
-                    page = doc.load_page(0)
-                    pix = page.get_pixmap(dpi=300)
-                    image_bytes = pix.tobytes("png")
-                    mime_type = "image/png"
+                with fitz.open(stream=image_bytes, filetype="pdf") as doc:
+                    if len(doc) > 0:
+                        page = doc.load_page(0)
+                        pix = page.get_pixmap(dpi=300)
+                        image_bytes = pix.tobytes("png")
+                        mime_type = "image/png"
             except Exception as e:
                 print(f"[ENGINE PDF RENDERING WARNING] {e}")
                 mime_type = "application/pdf"

@@ -1,16 +1,32 @@
 import os
 import io
+import re
+import sys
 import time
 import json
+import base64
 import hashlib
+import traceback
+import urllib.request
+import urllib.error
+from decimal import Decimal
+from typing import Dict, Any, List
+
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
+from django.http import JsonResponse, HttpResponse
+
 from .models import (
     College, School, Department, Course, Examination, AnswerScript,
-    AnswerSegment, Evaluation, Profile, Question, Rubric
+    AnswerSegment, Evaluation, Profile, Question, Rubric,
+    StudentSubmission, SubmissionPDF, SubmissionImage, SubmissionPage,
+    SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback,
+    TeacherReview, EvaluationHistory, PromptHistory, EvaluationAuditLog,
+    AIConfiguration, AIProviderHealth, DocumentDOM, QuestionDetection, QuestionMapping
 )
 from core.utils.question_accessor import QuestionAccessor, QuestionDTO
 
@@ -230,51 +246,10 @@ def exam_controller_dashboard(request):
         'colleges': colleges,
         'schools': schools,
         'standalone_departments': standalone_departments,
-        'departments': Department.objects.all(),
+        'departments': Department.objects.select_related('college', 'school').all(),
         'recheck_tickets': recheck_tickets,
         'ai_config': ai_config,
     })
-
-
-def ai_config_view(request):
-    """View to update AI Engine Configuration Settings from Chief Exam Controller Dashboard."""
-    if not request.user.is_authenticated or not (request.user.is_superuser or (hasattr(request.user, 'profile') and request.user.profile.role == Profile.Role.ADMIN)):
-        messages.error(request, "Access Denied: Restricted to Chief Exam Controller.")
-        return redirect('landing_page')
-
-    from core.ai_engine.config.manager import AIConfigManager
-    config = AIConfigManager.get_settings()
-
-    if request.method == 'POST':
-        provider = request.POST.get('provider', 'GEMINI')
-        selected_model = request.POST.get('model_version', '').strip()
-        ocr_engine = request.POST.get('ocr_engine', 'AUTO')
-        preprocess_image = request.POST.get('preprocess_image') == 'on'
-        enable_rag_learning = request.POST.get('enable_rag_learning') == 'on'
-        prompt_template = request.POST.get('prompt_template', '').strip()
-
-        gemini_model = config.gemini_model_name
-        openai_model = config.openai_model_name
-
-        if provider == 'GEMINI' and selected_model:
-            gemini_model = selected_model
-        elif provider == 'OPENAI' and selected_model:
-            openai_model = selected_model
-
-        AIConfigManager.update_settings(
-            provider=provider,
-            gemini_model=gemini_model,
-            openai_model=openai_model,
-            ocr_engine=ocr_engine,
-            preprocess=preprocess_image,
-            enable_rag=enable_rag_learning,
-            prompt_template=prompt_template
-        )
-
-        messages.success(request, f"AI Engine Settings updated! Active Provider: {provider} ({selected_model or 'Default'}).")
-        return redirect('exam_controller_dashboard')
-
-    return redirect('exam_controller_dashboard')
 
 
 def add_structure(request):
@@ -349,43 +324,6 @@ def teacher_login(request):
 def admin_dashboard(request):
     """Unified Redirect to Exam Controller Dashboard."""
     return redirect('exam_controller_dashboard')
-
-
-def add_faculty(request):
-    """Interface for Exam Controller to add new Faculty members with credentials."""
-    if request.method == 'POST':
-        full_name = request.POST.get('full_name', '').strip()
-        email = request.POST.get('email', '').strip()
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '')
-        dept_code = request.POST.get('department', '').strip()
-
-        if User.objects.filter(username=username).exists():
-            messages.error(request, f"User with Employee ID / Username '{username}' already exists.")
-            return redirect('add_faculty')
-
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password,
-            first_name=full_name,
-            last_name=''
-        )
-
-        dept_obj = Department.objects.filter(code=dept_code, is_active=True).first()
-        Profile.objects.update_or_create(
-            user=user,
-            defaults={
-                'role': Profile.Role.TEACHER,
-                'department': dept_obj
-            }
-        )
-
-        messages.success(request, f"Faculty member '{full_name}' ({username}) registered successfully! Credentials activated.")
-        return redirect('exam_controller_dashboard')
-
-    departments = Department.objects.filter(is_active=True)
-    return render(request, 'core/add_faculty.html', {'departments': departments})
 
 
 def add_student(request):
@@ -710,13 +648,7 @@ def dept_head_dashboard(request):
     return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
 
 
-import base64
-import json
-import os
-import re
-import urllib.request
-import urllib.error
-from django.http import JsonResponse
+
 
 def call_gemini_vision_api(api_key, text_content, file_obj=None):
     """Calls Google Gemini API (gemini-1.5-flash) to extract structured JSON routine details using standard library urllib."""
@@ -2023,18 +1955,21 @@ def api_scan_question_paper(request):
         os.makedirs(trace_dir, exist_ok=True)
         page1_path = trace_dir / 'page1.png'
 
+        pdf_page_count = 0
+        pdf_first_page_text = ""
         if mime_type.startswith('image/'):
             with open(page1_path, 'wb') as f:
                 f.write(qp_bytes)
         else:
             try:
-                doc = fitz.open(stream=qp_bytes, filetype="pdf")
-                if len(doc) == 0:
-                    return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
-                
-                page0 = doc.load_page(0)
-                pix = page0.get_pixmap(dpi=300)
-                pix.save(str(page1_path))
+                with fitz.open(stream=qp_bytes, filetype="pdf") as doc:
+                    pdf_page_count = len(doc)
+                    if pdf_page_count == 0:
+                        return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
+                    page0 = doc.load_page(0)
+                    pdf_first_page_text = page0.get_text("text").strip()
+                    pix = page0.get_pixmap(dpi=300)
+                    pix.save(str(page1_path))
             except Exception as render_err:
                 try:
                     with open(page1_path, 'wb') as f:
@@ -2047,8 +1982,9 @@ def api_scan_question_paper(request):
             return JsonResponse({'success': False, 'error': 'page1.png failed to save to disk'}, status=500)
 
         try:
-            pil_img = PILImage.open(page1_path)
-            print(f"[PAGE 1 RENDER VERIFIED] Width: {pil_img.width}px | Height: {pil_img.height}px | Mode: {pil_img.mode}")
+            with PILImage.open(page1_path) as pil_img:
+                print(f"[PAGE 1 RENDER VERIFIED] Width: {pil_img.width}px | Height: {pil_img.height}px | Mode: {pil_img.mode}")
+                img_width, img_height = pil_img.width, pil_img.height
         except Exception as pil_err:
             print(f"[PIL READ FAILED] {pil_err}")
             return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
@@ -2063,7 +1999,7 @@ def api_scan_question_paper(request):
             except ImportError:
                 return 0.0
 
-        print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={pil_img.width}x{pil_img.height}")
+        print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={img_width}x{img_height}")
         easy_text = ""
         easy_conf = 0.0
         easy_started = time.monotonic()
@@ -2090,16 +2026,14 @@ def api_scan_question_paper(request):
         except Exception as easy_err:
             print(f"[EASYOCR FAILURE] {easy_err}")
 
-        if len(easy_text) == 0 and len(doc) > 0 and len(doc[0].get_text("text").strip()) < 10:
-            page1_before_path = trace_dir / 'page1_before_ocr.png'
-            pil_img.save(page1_before_path)
+        if len(easy_text) == 0 and pdf_page_count > 0 and len(pdf_first_page_text) < 10:
             return JsonResponse({
                 'success': False,
                 'stage': 'OCR_EXTRACTION',
                 'error_code': 'EASYOCR_EMPTY_OUTPUT',
-                'message': 'EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.',
+                'message': 'EasyOCR returned 0 characters on page1.png.',
                 'retryable': True,
-                'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.'
+                'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png.'
             }, status=400)
 
         print("=" * 80)
@@ -2417,11 +2351,9 @@ def api_finalize_scanned_paper(request):
 # Production AI Script Evaluation & Teacher Review Views
 # ==========================================
 
-from core.models import StudentSubmission, SubmissionPDF, SubmissionImage, SubmissionPage, SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback, TeacherReview, EvaluationHistory, PromptHistory, EvaluationAuditLog
 from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
 from core.ai_engine.preprocessing.image_processor import ImagePreprocessingService
 from core.ai_engine.reports.report_generator import EvaluationReportGenerator
-from django.http import HttpResponse
 
 def _get_examination_or_fallback(exam_id):
     """
@@ -3053,6 +2985,34 @@ def api_delete_submission(request, submission_id):
         try:
             sub_id = submission.id
             student_name = submission.student_name
+
+            # Delete physical script file
+            if submission.script_file:
+                try:
+                    submission.script_file.delete(save=False)
+                except Exception:
+                    pass
+
+            # Delete page image files & thumbnails
+            for page in submission.pages.all():
+                if page.page_image:
+                    try:
+                        page.page_image.delete(save=False)
+                    except Exception:
+                        pass
+                if page.thumbnail:
+                    try:
+                        page.thumbnail.delete(save=False)
+                    except Exception:
+                        pass
+
+            # Clean working directory & trace files
+            try:
+                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+                WorkingCopyManager.cleanup_temporary_files(sub_id)
+            except Exception:
+                pass
+
             submission.delete()
             return JsonResponse({'success': True, 'message': f'Submission #{sub_id} for {student_name} deleted successfully.'})
         except Exception as e:

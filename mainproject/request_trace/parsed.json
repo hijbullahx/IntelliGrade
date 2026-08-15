@@ -1,18 +1,52 @@
 {
   "routine_schedule": [
     {
-      "course_code": "CSE 411",
-      "course_title": "Software Engineering",
-      "exam_date": "2026-08-15",
-      "exam_time": "10:00 AM - 01:00 PM",
-      "faculty_name": "Dr. Alan Turing"
+      "exam_date": "2026-05-17",
+      "exam_time": "09:00AM- 12:00PM",
+      "course_code": "CSE 4383",
+      "course_title": "",
+      "instructor_name": "Drs Ferdaus Anam",
+      "room_number": "",
+      "section": "",
+      "department": "",
+      "semester": "Spring 2026",
+      "total_marks": 100.0
     },
     {
-      "course_code": "CSE 4383",
-      "course_title": "Advanced DB",
-      "exam_date": "2026-08-18",
-      "exam_time": "02:00 PM - 05:00 PM",
-      "faculty_name": "Drs Ferdaus"
+      "exam_date": "2026-05-17",
+      "exam_time": "09:00AM- 12:00PM",
+      "course_code": "CSC 437",
+      "course_title": "",
+      "instructor_name": "Kazi Johir Raihan",
+      "room_number": "",
+      "section": "",
+      "department": "",
+      "semester": "Spring 2026",
+      "total_marks": 100.0
+    },
+    {
+      "exam_date": "2026-05-17",
+      "exam_time": "02:00PM- 05:00PM",
+      "course_code": "CSE 4317",
+      "course_title": "",
+      "instructor_name": "Naeem Mia",
+      "room_number": "",
+      "section": "",
+      "department": "",
+      "semester": "Spring 2026",
+      "total_marks": 100.0
+    },
+    {
+      "exam_date": "2026-05-17",
+      "exam_time": "02:00PM- 05:00PM",
+      "course_code": "CSC 465",
+      "course_title": "",
+      "instructor_name": "Ms. Kashfi Shormita",
+      "room_number": "",
+      "section": "",
+      "department": "",
+      "semester": "Spring 2026",
+      "total_marks": 100.0
     }
   ]
 }

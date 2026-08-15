@@ -1,5 +1,66 @@
---- Routine Document Page/Photo #1 (page1.png) ---
-CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing
-
---- Routine Document Page/Photo #2 (page2.png) ---
-CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing
+--- Routine Document Page/Photo #1 (Final Exam Routine.pdf) ---
+Exam Routine
+Spring 2026 (Final)
+Name of Student:
+Md. Taher Bin Omar Hijbullah
+Student ID#
+22303142
+Program:
+BCSE
+Information of Exam Routine
+#
+Day & Date
+Exam Time
+Course
+Code
+Section
+Room &
+Seat
+Course Faculty
+1
+2026-05-17(Sunday)
+09:00am-
+12:00pm
+CSE 4383
+E
+405 (A-4)
+Drs Ferdaus Anam
+Jibon
+2
+2026-05-
+19(Tuesday)
+09:00am-
+12:00pm
+CSC 437
+Q
+508 (D-2)
+Kazi Johir Raihan
+Suny
+3
+2026-05-
+20(Wednesday)
+02:00pm-
+05:00pm
+CSE 4317
+C
+310 (F-4)
+Naeem Mia
+4
+2026-05-
+21(Thursday)
+02:00pm-
+05:00pm
+CSC 465
+K
+501 (E-3)
+Ms. Kashfi Shormita
+Kushal
+ELCT Exam
+#
+Day & Date
+Exam Time
+Course Code
+Section
+Room & Seat
+Course Faculty
+Developed by IUBAT Automation
