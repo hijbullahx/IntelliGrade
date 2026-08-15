@@ -13,9 +13,9 @@
       "course_id": 1,
       "faculty_found": true,
       "faculty_id": 2,
-      "is_published": false,
-      "published_exam_id": null,
-      "published_exam_title": null
+      "is_published": true,
+      "published_exam_id": 1,
+      "published_exam_title": "CSE 4383 Examination"
     },
     {
       "course_code": "CSC 437",

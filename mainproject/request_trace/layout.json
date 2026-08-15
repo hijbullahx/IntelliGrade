@@ -3,10 +3,10 @@
   "questions": [
     {
       "question_number": "Q1",
-      "prompt_text": "1. Consider the 8-bit grayscale image shown in Figure 1, represented by the matrix given beside. Apply the\nhistogram equalization shifting technique to this image and determine the resulting pixel value of the 3rd row\nafter the transformation. [CO2, C3, PO1 \u2014 25 marks]\n50\n56\n60\n62\n100\n68\n52\n72\n70\n120\n140\n90\n54\n78\n136\n96\n150\n76\n110\n120\n132\n128\n96\n90\n98\n140\n148\n124\n130\n70\n99\n154\n86\n88\n80\n145\nFigure 1: Football Ground and Corresponding Image Matrix",
-      "allocated_marks": 25.0,
+      "prompt_text": "Explain the core concepts presented in the uploaded examination paper.",
+      "allocated_marks": 10.0,
       "question_type": [
-        "Theory"
+        "Explanation"
       ],
       "command_verbs": [
         "Explain"
@@ -16,8 +16,8 @@
       "po_mapping": [
         "PO1"
       ],
-      "criteria": "Accurate response covering key concepts.",
-      "ideal_answer": "Model answer covering core concepts.",
+      "criteria": "1. Accurate understanding of key principles.\n2. Clear, structured explanation.",
+      "ideal_answer": "Model answer covering the core principles outlined in the examination document.",
       "associated_figures": [
         {
           "page_number": 1,
@@ -175,75 +175,6 @@
       "associated_formulas": [],
       "start_y": 1435.041666666667,
       "page_number": 1
-    },
-    {
-      "question_number": "Q2",
-      "prompt_text": "2. Consider the following 3\u00d73 matrix, which represents the RGB values corresponding to Figure 1. Convert\nthe RGB value of the first pixel of the matrix into its equivalent HSI (Hue, Saturation, Intensity) and CMY\n(Cyan, Magenta, Yellow) representations. Justify your answer with an appropriate mathematical derivation.\n[CO2, C3, PO1 \u2014 15 + 10 = 25 marks]\n(120, 150, 180)\n(130, 0, 0)\n(0, 100, 0)\n(200, 0, 0)\n(0, 150, 90)\n(0, 0, 180)\n(255, 45, 0)\n(100, 0, 180)\n(0, 90, 255)",
-      "allocated_marks": 25.0,
-      "question_type": [
-        "Theory"
-      ],
-      "command_verbs": [
-        "Explain"
-      ],
-      "bloom_level": "Understand",
-      "co_mapping": "CO2",
-      "po_mapping": [
-        "PO1"
-      ],
-      "criteria": "Accurate response covering key concepts.",
-      "ideal_answer": "Model answer covering core concepts.",
-      "associated_figures": [],
-      "associated_tables": [],
-      "associated_formulas": [],
-      "start_y": 2339.041666666667,
-      "page_number": 1
-    },
-    {
-      "question_number": "Q3",
-      "prompt_text": "3. A university office is preparing to scan and store three documents: a black-and-white attendance sheet, a\ncolored event photo, and a student's ID card scan. The university authority has decided to prepare a report\nfor technical specifications and future reusability, the report should i) explain the different types of digital\nimages that may correspond to the files described above, ii) explain the technique used for representing\ndigital images in computers, and iii) state the commonly used digital image formats suitable for storing and\nprocessing each of the above files. Write and prepare the report for the university. [CO1, C2, PO1 \u2014 8 + 10\n+ 7 = 25 marks]",
-      "allocated_marks": 25.0,
-      "question_type": [
-        "Theory"
-      ],
-      "command_verbs": [
-        "Explain"
-      ],
-      "bloom_level": "Understand",
-      "co_mapping": "CO3",
-      "po_mapping": [
-        "PO1"
-      ],
-      "criteria": "Accurate response covering key concepts.",
-      "ideal_answer": "Model answer covering core concepts.",
-      "associated_figures": [],
-      "associated_tables": [],
-      "associated_formulas": [],
-      "start_y": 201.70833333333334,
-      "page_number": 2
-    },
-    {
-      "question_number": "Q4",
-      "prompt_text": "4. Digital Image Processing consists of five fundamental steps: Image Formation, Image Acquisition, Image\nTransformation, Feature Selection, and Classification. Briefly explain the core principles of Image\nTransformation and Feature Selection, and analyze the commonly used techniques and their applications in\nenhancing image analysis, pattern recognition, and classification tasks associated with these two steps.\n[CO1, C2, PO1 \u2014 10 + 15 = 25 marks]\nBloom's Taxonomy Levels in Cognitive Domain:\nC1: Remember; C2: Understand; C3: Apply; C4: Analyze; C5: Evaluate; C6: Create\nCourse Outcomes:\nCO1: Apply digital image processing techniques and computer vision algorithms to solve image analysis,\nidentification, recognition, segmentation, detection, and classification operations.\nCO2: Explain the fundamental concepts of computer vision and digital image processing for optimized\nsolution, interpretation, and decision making.\nProgram Outcomes:\nPO1: Apply knowledge of mathematics, natural science, ",
-      "allocated_marks": 25.0,
-      "question_type": [
-        "Theory"
-      ],
-      "command_verbs": [
-        "Explain"
-      ],
-      "bloom_level": "Understand",
-      "co_mapping": "CO4",
-      "po_mapping": [
-        "PO1"
-      ],
-      "criteria": "Accurate response covering key concepts.",
-      "ideal_answer": "Model answer covering core concepts.",
-      "associated_figures": [],
-      "associated_tables": [],
-      "associated_formulas": [],
-      "start_y": 705.875,
-      "page_number": 2
     }
   ],
   "figures": [
