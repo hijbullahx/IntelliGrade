@@ -77,3 +77,57 @@ class RoutineScanUITestCase(TestCase):
         self.assertContains(response, 'scanModalProgressView')
         self.assertContains(response, 'runAIQuestionScanFromModal')
         self.assertContains(response, 'openScanQuestionModal')
+
+
+class DatabaseConfigurationTestCase(TestCase):
+    def test_default_sqlite_configuration(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        from config.runtime_config import build_database_config
+
+        base_dir = Path('/fake/base/dir')
+        with patch.dict('os.environ', {}, clear=True):
+            db_cfg = build_database_config(base_dir)
+            self.assertEqual(db_cfg['default']['ENGINE'], 'django.db.backends.sqlite3')
+            self.assertEqual(db_cfg['default']['NAME'], base_dir / 'db.sqlite3')
+
+    def test_postgresql_valid_configuration(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        from config.runtime_config import build_database_config
+
+        base_dir = Path('/fake/base/dir')
+        env_vars = {
+            'DB_ENGINE': 'postgresql',
+            'DB_NAME': 'test_prod_db',
+            'DB_USER': 'test_user',
+            'DB_PASSWORD': 'supersecretpassword',
+            'DB_HOST': 'db.internal.example.com',
+            'DB_PORT': '5432',
+        }
+        with patch.dict('os.environ', env_vars, clear=True):
+            db_cfg = build_database_config(base_dir)
+            self.assertEqual(db_cfg['default']['ENGINE'], 'django.db.backends.postgresql')
+            self.assertEqual(db_cfg['default']['NAME'], 'test_prod_db')
+            self.assertEqual(db_cfg['default']['USER'], 'test_user')
+            self.assertEqual(db_cfg['default']['PASSWORD'], 'supersecretpassword')
+            self.assertEqual(db_cfg['default']['HOST'], 'db.internal.example.com')
+            self.assertEqual(db_cfg['default']['PORT'], '5432')
+
+    def test_postgresql_missing_credentials_raises_error(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        from django.core.exceptions import ImproperlyConfigured
+        from config.runtime_config import build_database_config
+
+        base_dir = Path('/fake/base/dir')
+        env_vars = {
+            'DB_ENGINE': 'postgresql',
+            # Missing DB_NAME, DB_USER, DB_PASSWORD
+        }
+        with patch.dict('os.environ', env_vars, clear=True):
+            with self.assertRaises(ImproperlyConfigured) as ctx:
+                build_database_config(base_dir)
+            self.assertIn('PostgreSQL selected', str(ctx.exception))
+            self.assertIn('DB_NAME', str(ctx.exception))
+

@@ -170,3 +170,74 @@ def is_cuda_available() -> bool:
         return torch.cuda.is_available()
     except ImportError:
         return False
+
+
+def build_database_config(base_dir: Path) -> dict:
+    """
+    Builds environment-aware Django DATABASES configuration.
+    Supports:
+      - DB_ENGINE=sqlite (default): uses SQLite at BASE_DIR / 'db.sqlite3'
+      - DB_ENGINE=postgresql / postgres: uses PostgreSQL with environment variables
+    
+    If PostgreSQL is selected, validates that required variables (DB_NAME, DB_USER, DB_PASSWORD, DB_HOST) exist.
+    Raises ImproperlyConfigured with a clear error message if any are missing.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    raw_engine = get_env_value('DB_ENGINE', default='sqlite', fallback_names=('DATABASE_ENGINE',)).lower()
+
+    if raw_engine in ('postgres', 'postgresql', 'django.db.backends.postgresql'):
+        db_name = get_env_value('DB_NAME', fallback_names=('DATABASE_NAME', 'POSTGRES_DB'))
+        db_user = get_env_value('DB_USER', fallback_names=('DATABASE_USER', 'POSTGRES_USER'))
+        db_password = get_env_value('DB_PASSWORD', fallback_names=('DATABASE_PASSWORD', 'POSTGRES_PASSWORD'))
+        db_host = get_env_value('DB_HOST', default='localhost', fallback_names=('DATABASE_HOST', 'POSTGRES_HOST'))
+        db_port = get_env_value('DB_PORT', default='5432', fallback_names=('DATABASE_PORT', 'POSTGRES_PORT'))
+        conn_max_age_str = get_env_value('DB_CONN_MAX_AGE', default='60', fallback_names=('DATABASE_CONN_MAX_AGE',))
+
+        missing = []
+        if not db_name:
+            missing.append('DB_NAME')
+        if not db_user:
+            missing.append('DB_USER')
+        if not db_password:
+            missing.append('DB_PASSWORD')
+        if not db_host:
+            missing.append('DB_HOST')
+
+        if missing:
+            raise ImproperlyConfigured(
+                f"PostgreSQL selected (DB_ENGINE={raw_engine}) but required configuration is missing: {', '.join(missing)}."
+            )
+
+        try:
+            conn_max_age = int(conn_max_age_str)
+        except (TypeError, ValueError):
+            conn_max_age = 60
+
+        print(f"[DATABASE CONFIG] Database backend: PostgreSQL | Database: {db_name} | User: {db_user} | Host: {db_host}:{db_port}")
+
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': db_name,
+                'USER': db_user,
+                'PASSWORD': db_password,
+                'HOST': db_host,
+                'PORT': str(db_port),
+                'CONN_MAX_AGE': conn_max_age,
+            }
+        }
+    else:
+        # SQLite (default)
+        sqlite_db_path = base_dir / 'db.sqlite3'
+        print(f"[DATABASE CONFIG] Database backend: SQLite | Database file: {sqlite_db_path.name}")
+        return {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': sqlite_db_path,
+                'OPTIONS': {
+                    'timeout': 30,
+                },
+            }
+        }
+
