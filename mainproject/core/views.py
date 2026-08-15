@@ -803,45 +803,64 @@ def scan_routine_ai(request):
         return JsonResponse({'error': 'Only POST is allowed.'}, status=405)
 
     routine_text = request.POST.get('routine_text', '').strip()
-    routine_file = request.FILES.get('routine_file')
+    routine_files = request.FILES.getlist('routine_files')
+    if not routine_files and request.FILES.get('routine_file'):
+        routine_files = [request.FILES.get('routine_file')]
+
     image_bytes = None
     file_name = ''
     mime_type = 'image/jpeg'
     trace_dir = settings.BASE_DIR / 'request_trace'
     os.makedirs(trace_dir, exist_ok=True)
 
-    if not routine_text and not routine_file:
+    if not routine_text and not routine_files:
         return JsonResponse({
             'success': False,
-            'error': 'Please provide routine text or upload a routine file before scanning.'
+            'error': 'Please provide routine text or upload routine document/photo(s) before scanning.'
         }, status=400)
 
-    if routine_file:
+    extracted_texts_from_files = []
+
+    for idx, r_file in enumerate(routine_files):
         try:
-            image_bytes = routine_file.read()
-            file_name = routine_file.name
-            fn_lower = file_name.lower()
+            curr_bytes = r_file.read()
+            curr_name = r_file.name
+            fn_lower = curr_name.lower()
             if fn_lower.endswith('.png'):
-                mime_type = 'image/png'
+                curr_mime = 'image/png'
             elif fn_lower.endswith('.pdf'):
-                mime_type = 'application/pdf'
+                curr_mime = 'application/pdf'
             elif fn_lower.endswith('.webp'):
-                mime_type = 'image/webp'
+                curr_mime = 'image/webp'
             else:
-                mime_type = 'image/jpeg'
+                curr_mime = 'image/jpeg'
+
+            if image_bytes is None:
+                image_bytes = curr_bytes
+                file_name = curr_name
+                mime_type = curr_mime
 
             # Trace Upload & Integrity
-            file_ext = os.path.splitext(file_name)[1].lower() or '.bin'
-            orig_hash = hashlib.sha256(image_bytes).hexdigest()
-            with open(trace_dir / 'original_uploaded_file', 'wb') as f:
-                f.write(image_bytes)
-            with open(trace_dir / f'django_uploaded_file{file_ext}', 'wb') as f:
-                f.write(image_bytes)
-            with open(trace_dir / f'saved_temp_file{file_ext}', 'wb') as f:
-                f.write(image_bytes)
-            print(f"[REQUEST TRACE INTEGRITY] Filename: {file_name} | SHA256: {orig_hash} | Size: {len(image_bytes)} bytes [PASS]")
+            file_ext = os.path.splitext(curr_name)[1].lower() or '.bin'
+            orig_hash = hashlib.sha256(curr_bytes).hexdigest()
+            with open(trace_dir / f'django_uploaded_file_{idx+1}{file_ext}', 'wb') as f:
+                f.write(curr_bytes)
+            print(f"[REQUEST TRACE INTEGRITY] File #{idx+1}: {curr_name} | SHA256: {orig_hash} | Size: {len(curr_bytes)} bytes [PASS]")
+
+            # Run OCR on each uploaded file/photo
+            ocr_res = OCREngineManager().extract_text(curr_bytes, mime_type=curr_mime)
+            txt = ocr_res.get('text', '').strip()
+            if txt:
+                extracted_texts_from_files.append(f"--- Routine Document Page/Photo #{idx+1} ({curr_name}) ---\n" + txt)
         except Exception as e:
-            print(f"[REQUEST TRACE ERROR] File upload read failed: {e}")
+            print(f"[REQUEST TRACE ERROR] File upload read/OCR failed for {getattr(r_file, 'name', 'file')}: {e}")
+
+    if extracted_texts_from_files:
+        combined_file_text = "\n\n".join(extracted_texts_from_files)
+        if routine_text:
+            routine_text = routine_text + "\n\n" + combined_file_text
+        else:
+            routine_text = combined_file_text
 
     provider = AIProviderFactory.get_provider()
     from core.ai_engine.routine_parser.routine_parser import RoutineParser
@@ -849,15 +868,6 @@ def scan_routine_ai(request):
     ai_used = True
     ai_error = None
     extracted_schedule = []
-
-    # Extract document text if file uploaded and no text pasted
-    if image_bytes and not routine_text:
-        try:
-            from core.ai_engine.ocr.engine import OCREngineManager
-            ocr_res = OCREngineManager().extract_text(image_bytes, mime_type=mime_type)
-            routine_text = ocr_res.get('text', '')
-        except Exception as e:
-            ai_error = f"OCR failed: {e}"
 
     if routine_text:
         try:

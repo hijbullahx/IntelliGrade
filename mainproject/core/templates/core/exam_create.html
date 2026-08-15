@@ -45,7 +45,7 @@
                 <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold border border-purple-500/20">AI Engine Ready</span>
             </div>
             <p class="text-xs theme-text-muted max-w-xl">
-                Have an official Exam Routine PDF or image? Launch the AI Scanner pop-up to automatically parse dates, times, course codes, and assign examiners in seconds.
+                Have an official Exam Routine (PDF, photos, or camera capture)? Launch the AI Scanner pop-up to upload one or multiple photos, parse schedules, and auto-match examiners.
             </p>
         </div>
         
@@ -161,37 +161,79 @@
             <!-- Tab Switcher -->
             <div class="flex items-center gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
                 <button type="button" id="tabUploadBtn" onclick="switchModalTab('upload')" class="flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow">
-                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload Document / Image
+                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload Document / Photo(s)
                 </button>
                 <button type="button" id="tabTextBtn" onclick="switchModalTab('text')" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
                     <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Paste Routine Text
                 </button>
             </div>
 
-            <!-- TAB 1 CONTENT: File Dropzone -->
-            <div id="modalTabUploadContent" class="space-y-3">
-                <div id="modalDropzone" onclick="document.getElementById('modalRoutineFileInput').click()" class="border-2 border-dashed border-purple-500/30 hover:border-purple-500/60 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-6 text-center cursor-pointer transition-all space-y-3 group">
-                    <div class="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
-                        <i data-lucide="upload-cloud" class="w-6 h-6"></i>
-                    </div>
-                    <div class="space-y-1">
-                        <p class="text-xs font-bold text-white">Click to browse or drag & drop routine file</p>
-                        <p class="text-[11px] text-slate-400">Supports PDF documents, JPG, PNG, WEBP, or TXT schedules</p>
-                    </div>
-                    <input type="file" id="modalRoutineFileInput" onchange="handleModalFileSelect(this)" accept="image/*,.pdf,.txt" class="hidden">
+            <!-- TAB 1 CONTENT: File Dropzone & Camera Options -->
+            <div id="modalTabUploadContent" class="space-y-4">
+                
+                <!-- Dual Action Zone: Browse / Drag Files OR Live Camera -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    <!-- 1. Browse / Drag Dropzone -->
+                    <label for="modalRoutineFileInput" id="modalDropzone" class="border-2 border-dashed border-purple-500/30 hover:border-purple-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Browse / Drag Files</p>
+                            <p class="text-[10px] text-slate-400">PDF, PNG, JPG (Multi-select)</p>
+                        </div>
+                    </label>
+
+                    <!-- 2. Direct Device Camera Capture Option -->
+                    <label for="modalCameraInput" class="border-2 border-dashed border-cyan-500/30 hover:border-cyan-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="camera" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Capture from Camera</p>
+                            <p class="text-[10px] text-slate-400">Take photo with device camera</p>
+                        </div>
+                    </label>
+
                 </div>
 
-                <!-- Selected File Preview Chip -->
-                <div id="modalFileBadge" class="hidden p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 flex items-center justify-between">
-                    <div class="flex items-center gap-2 truncate">
-                        <i data-lucide="file-text" class="w-4 h-4 text-purple-400 shrink-0"></i>
-                        <span id="modalFileNameText" class="font-mono font-bold truncate">filename.pdf</span>
-                        <span id="modalFileSizeText" class="text-[10px] text-slate-400 shrink-0">(0 KB)</span>
+                <!-- Hidden Inputs for File Browser & Direct Camera -->
+                <input type="file" id="modalRoutineFileInput" onchange="handleModalFilesSelect(this)" accept="image/*,.pdf,.txt" multiple class="hidden">
+                <input type="file" id="modalCameraInput" onchange="handleModalCameraCapture(this)" accept="image/*" capture="environment" class="hidden">
+
+                <!-- Selected Files / Photos Gallery Container -->
+                <div id="modalFilesGallerySection" class="hidden space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Staged Routine Photos / Documents:
+                        </span>
+                        <span id="modalTotalFilesCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold font-mono">
+                            0 Files
+                        </span>
                     </div>
-                    <button type="button" onclick="clearModalFile()" class="p-1 text-slate-400 hover:text-rose-400 transition-colors" title="Remove File">
-                        <i data-lucide="x" class="w-4 h-4"></i>
-                    </button>
+
+                    <!-- Dynamic List of Uploaded/Snapped Photos -->
+                    <div id="modalFilesList" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Add More Photos / Files Action Bar -->
+                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                        <div class="flex items-center gap-2">
+                            <label for="modalRoutineFileInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="plus" class="w-3 h-3"></i> Add More Files
+                            </label>
+                            <label for="modalCameraInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded-lg border border-cyan-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="camera" class="w-3 h-3"></i> Take Another Photo
+                            </label>
+                        </div>
+                        <button type="button" onclick="clearAllModalFiles()" class="text-[11px] text-rose-400 hover:underline flex items-center gap-1">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i> Clear All
+                        </button>
+                    </div>
                 </div>
+
             </div>
 
             <!-- TAB 2 CONTENT: Raw Textarea -->
@@ -204,7 +246,7 @@
             <!-- Modal Info Banner -->
             <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-400">
                 <i data-lucide="info" class="w-4 h-4 text-purple-400 shrink-0 mt-0.5"></i>
-                <p>Upon scanning, the AI engine will parse all schedule items, verify system database matches, and auto-close this pop-up when completed.</p>
+                <p>Upon scanning, the AI engine will parse all schedule items across all photos/pages, verify database matches, and auto-close this pop-up when completed.</p>
             </div>
 
             <!-- Modal Action Controls -->
@@ -333,10 +375,10 @@ function getCsrfToken() {
 }
 
 // ============================================================================
-// Modal Open / Close / Tab Management
+// Modal Open / Close / Tab & Files Management
 // ============================================================================
 let activeModalTab = 'upload';
-let selectedRoutineFile = null;
+let uploadedRoutineFiles = []; // Array of File objects (supports multi-photo)
 let scanStartTime = 0;
 let scanTimerInterval = null;
 
@@ -344,9 +386,7 @@ function openAIRoutineModal() {
     const modal = document.getElementById('routineScanModal');
     if (!modal) return;
     
-    // Reset to input view
     resetAIRoutineModalToInput();
-    
     modal.classList.remove('hidden');
     modal.classList.add('flex');
     lucide.createIcons();
@@ -387,20 +427,88 @@ function switchModalTab(tab) {
     }
 }
 
-function handleModalFileSelect(input) {
-    if (input.files && input.files[0]) {
-        selectedRoutineFile = input.files[0];
-        document.getElementById('modalFileNameText').innerText = selectedRoutineFile.name;
-        document.getElementById('modalFileSizeText').innerText = `(${(selectedRoutineFile.size / 1024).toFixed(1)} KB)`;
-        document.getElementById('modalFileBadge').classList.remove('hidden');
-        lucide.createIcons();
+// ============================================================================
+// Multi-File & Camera Handlers
+// ============================================================================
+function handleModalFilesSelect(input) {
+    if (input.files && input.files.length > 0) {
+        addFilesToList(Array.from(input.files));
+        input.value = ''; // Reset so same file can be re-selected if desired
     }
 }
 
-function clearModalFile() {
-    selectedRoutineFile = null;
-    document.getElementById('modalRoutineFileInput').value = '';
-    document.getElementById('modalFileBadge').classList.add('hidden');
+function handleModalCameraCapture(input) {
+    if (input.files && input.files.length > 0) {
+        addFilesToList(Array.from(input.files));
+        input.value = '';
+    }
+}
+
+function addFilesToList(newFiles) {
+    newFiles.forEach(f => {
+        uploadedRoutineFiles.push(f);
+    });
+    renderFilesGallery();
+}
+
+function removeFileFromList(index) {
+    if (index >= 0 && index < uploadedRoutineFiles.length) {
+        uploadedRoutineFiles.splice(index, 1);
+        renderFilesGallery();
+    }
+}
+
+function clearAllModalFiles() {
+    uploadedRoutineFiles = [];
+    renderFilesGallery();
+}
+
+function renderFilesGallery() {
+    const gallerySection = document.getElementById('modalFilesGallerySection');
+    const listContainer = document.getElementById('modalFilesList');
+    const badge = document.getElementById('modalTotalFilesCountBadge');
+
+    if (!gallerySection || !listContainer) return;
+
+    if (uploadedRoutineFiles.length === 0) {
+        gallerySection.classList.add('hidden');
+        listContainer.innerHTML = '';
+        return;
+    }
+
+    gallerySection.classList.remove('hidden');
+    badge.innerText = `${uploadedRoutineFiles.length} ${uploadedRoutineFiles.length === 1 ? 'File' : 'Files'}`;
+
+    let html = '';
+    uploadedRoutineFiles.forEach((file, index) => {
+        const isImg = file.type.startsWith('image/');
+        const previewUrl = isImg ? URL.createObjectURL(file) : '';
+        const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+
+        html += `
+        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2.5 min-w-0">
+                ${isImg ? 
+                    `<img src="${previewUrl}" class="w-9 h-9 rounded-lg object-cover border border-purple-500/30 bg-slate-900 shrink-0">` : 
+                    `<div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0"><i data-lucide="file-text" class="w-4 h-4"></i></div>`
+                }
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono text-[9px] font-bold">#${index + 1}</span>
+                        <p class="font-mono font-bold text-white truncate max-w-[130px] sm:max-w-[180px]">${file.name}</p>
+                    </div>
+                    <p class="text-[10px] text-slate-400">${sizeStr}</p>
+                </div>
+            </div>
+            <button type="button" onclick="removeFileFromList(${index})" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Remove Photo">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+        `;
+    });
+
+    listContainer.innerHTML = html;
+    lucide.createIcons();
 }
 
 // Drag & Drop event bindings
@@ -425,8 +533,7 @@ if (dropzone) {
     dropzone.addEventListener('drop', (e) => {
         const dt = e.dataTransfer;
         if (dt.files && dt.files.length > 0) {
-            document.getElementById('modalRoutineFileInput').files = dt.files;
-            handleModalFileSelect(document.getElementById('modalRoutineFileInput'));
+            addFilesToList(Array.from(dt.files));
         }
     }, false);
 }
@@ -468,11 +575,10 @@ function updateRoutineScanProgress(percent, stageText) {
 // ============================================================================
 function runAIRoutineScanFromModal() {
     const routineText = document.getElementById('modalRoutineTextArea').value.trim();
-    const fileInput = document.getElementById('modalRoutineFileInput');
-    const routineFile = selectedRoutineFile || (fileInput ? fileInput.files[0] : null);
+    const hasFiles = uploadedRoutineFiles.length > 0;
 
-    if (!routineText && !routineFile) {
-        alert('Please select an exam routine document/image or paste routine text before scanning.');
+    if (!routineText && !hasFiles) {
+        alert('Please select/capture routine photo(s) or paste routine text before scanning.');
         return;
     }
 
@@ -485,7 +591,7 @@ function runAIRoutineScanFromModal() {
     consoleEl.innerHTML = '';
 
     // Initialize Progress & Timer
-    updateRoutineScanProgress(10, "Stage 1: Document Ingestion & Spatial OCR Ingestion...");
+    updateRoutineScanProgress(10, "Stage 1: Multi-Page Document Ingestion & Spatial OCR Ingestion...");
     document.getElementById('routineScanStatusBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> LIVE EXECUTING`;
     document.getElementById('routineScanStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5 animate-pulse";
 
@@ -496,9 +602,12 @@ function runAIRoutineScanFromModal() {
         document.getElementById('routineScanTimer').innerText = `${elapsed}s`;
     }, 100);
 
-    if (routineFile) {
-        document.getElementById('routineScannerFileLabel').innerText = routineFile.name;
-        appendRoutineScanLog(`📁 Ingested Document: ${routineFile.name} (${(routineFile.size / 1024).toFixed(1)} KB)`, 'success');
+    if (hasFiles) {
+        document.getElementById('routineScannerFileLabel').innerText = `${uploadedRoutineFiles.length} Photo(s)/Document(s)`;
+        appendRoutineScanLog(`📁 Ingested ${uploadedRoutineFiles.length} file(s)/photo(s) for multi-page OCR analysis`, 'success');
+        uploadedRoutineFiles.forEach((f, idx) => {
+            appendRoutineScanLog(`  ➔ File #${idx + 1}: ${f.name} (${(f.size / 1024).toFixed(1)} KB)`, 'info');
+        });
     } else {
         document.getElementById('routineScannerFileLabel').innerText = "Raw Text Schedule";
         appendRoutineScanLog(`📝 Ingested Raw Text Buffer (${routineText.length} characters)`, 'success');
@@ -506,10 +615,10 @@ function runAIRoutineScanFromModal() {
 
     appendRoutineScanLog("🤖 Initializing Active AI Engine: Failover AI Provider (Gemini / Groq / OpenAI)...", 'stage');
 
-    // Simulate staged progress while waiting for server response
+    // Simulate staged progress
     setTimeout(() => {
-        updateRoutineScanProgress(35, "Stage 2: Spatial Line Clustering & Vision Matrix Analysis...");
-        appendRoutineScanLog("🔍 Running PyMuPDF & EasyOCR spatial line reconstructor...", "info");
+        updateRoutineScanProgress(35, "Stage 2: Spatial Line Clustering & Vision Matrix Analysis across all pages...");
+        appendRoutineScanLog("🔍 Running PyMuPDF & EasyOCR multi-page spatial line reconstructor...", "info");
     }, 500);
 
     setTimeout(() => {
@@ -519,8 +628,13 @@ function runAIRoutineScanFromModal() {
 
     const formData = new FormData();
     formData.append('routine_text', routineText);
-    if (routineFile) {
-        formData.append('routine_file', routineFile);
+    
+    // Append all staged files for multi-photo processing
+    if (hasFiles) {
+        uploadedRoutineFiles.forEach(file => {
+            formData.append('routine_files', file);
+        });
+        formData.append('routine_file', uploadedRoutineFiles[0]); // Backward compatibility
     }
     formData.append('csrfmiddlewaretoken', getCsrfToken());
 
@@ -559,7 +673,7 @@ function runAIRoutineScanFromModal() {
         document.getElementById('routineScanStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5";
         lucide.createIcons();
 
-        // Store last scan data in window memory for zero-latency local re-matching
+        // Store last scan data in window memory
         window.lastAIRoutineScanResult = data;
         
         // Render Extracted Routine Table on the main page
@@ -599,7 +713,6 @@ function runAIRoutineScanFromModal() {
     });
 }
 
-// Fallback / standard trigger
 function runAIRoutineScan() {
     openAIRoutineModal();
 }
