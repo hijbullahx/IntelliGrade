@@ -277,8 +277,10 @@ class AIScriptEvaluator:
     @classmethod
     def _run_ocr_on_bgr(cls, bgr_img: np.ndarray) -> Tuple[str, float]:
         try:
-            import easyocr
-            reader = easyocr.Reader(['en'], gpu=False)
+            from config.ocr_config import get_ocr_reader
+            reader = get_ocr_reader()
+            if not reader:
+                return "", 0.0
             results = reader.readtext(bgr_img)
             texts = [r[1].strip() for r in results if r[1].strip()]
             confs = [float(r[2]) for r in results if r[1].strip()]

@@ -799,163 +799,175 @@ def scan_routine_ai(request):
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required.'}, status=401)
 
-    if request.method == 'POST':
-        routine_text = request.POST.get('routine_text', '').strip()
-        routine_file = request.FILES.get('routine_file')
-        image_bytes = None
-        mime_type = 'image/jpeg'
-        trace_dir = settings.BASE_DIR / 'request_trace'
-        os.makedirs(trace_dir, exist_ok=True)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Only POST is allowed.'}, status=405)
 
-        if routine_file:
-            try:
-                image_bytes = routine_file.read()
-                file_name = routine_file.name
-                fn_lower = file_name.lower()
-                if fn_lower.endswith('.png'):
-                    mime_type = 'image/png'
-                elif fn_lower.endswith('.pdf'):
-                    mime_type = 'application/pdf'
-                elif fn_lower.endswith('.webp'):
-                    mime_type = 'image/webp'
-                else:
-                    mime_type = 'image/jpeg'
+    routine_text = request.POST.get('routine_text', '').strip()
+    routine_file = request.FILES.get('routine_file')
+    image_bytes = None
+    file_name = ''
+    mime_type = 'image/jpeg'
+    trace_dir = settings.BASE_DIR / 'request_trace'
+    os.makedirs(trace_dir, exist_ok=True)
 
-                # Trace Upload & Integrity
-                file_ext = os.path.splitext(file_name)[1].lower() or '.bin'
-                orig_hash = hashlib.sha256(image_bytes).hexdigest()
-                with open(trace_dir / 'original_uploaded_file', 'wb') as f:
-                    f.write(image_bytes)
-                with open(trace_dir / f'django_uploaded_file{file_ext}', 'wb') as f:
-                    f.write(image_bytes)
-                with open(trace_dir / f'saved_temp_file{file_ext}', 'wb') as f:
-                    f.write(image_bytes)
-                print(f"[REQUEST TRACE INTEGRITY] Filename: {file_name} | SHA256: {orig_hash} | Size: {len(image_bytes)} bytes [PASS]")
-            except Exception as e:
-                print(f"[REQUEST TRACE ERROR] File upload read failed: {e}")
+    if not routine_text and not routine_file:
+        return JsonResponse({
+            'success': False,
+            'error': 'Please provide routine text or upload a routine file before scanning.'
+        }, status=400)
 
-        provider = AIProviderFactory.get_provider()
-        from core.ai_engine.routine_parser.routine_parser import RoutineParser
-        routine_parser = RoutineParser()
-        ai_used = True
-        ai_error = None
-        extracted_schedule = []
+    if routine_file:
+        try:
+            image_bytes = routine_file.read()
+            file_name = routine_file.name
+            fn_lower = file_name.lower()
+            if fn_lower.endswith('.png'):
+                mime_type = 'image/png'
+            elif fn_lower.endswith('.pdf'):
+                mime_type = 'application/pdf'
+            elif fn_lower.endswith('.webp'):
+                mime_type = 'image/webp'
+            else:
+                mime_type = 'image/jpeg'
 
-        # Extract document text if file uploaded and no text pasted
-        if image_bytes and not routine_text:
+            # Trace Upload & Integrity
+            file_ext = os.path.splitext(file_name)[1].lower() or '.bin'
+            orig_hash = hashlib.sha256(image_bytes).hexdigest()
+            with open(trace_dir / 'original_uploaded_file', 'wb') as f:
+                f.write(image_bytes)
+            with open(trace_dir / f'django_uploaded_file{file_ext}', 'wb') as f:
+                f.write(image_bytes)
+            with open(trace_dir / f'saved_temp_file{file_ext}', 'wb') as f:
+                f.write(image_bytes)
+            print(f"[REQUEST TRACE INTEGRITY] Filename: {file_name} | SHA256: {orig_hash} | Size: {len(image_bytes)} bytes [PASS]")
+        except Exception as e:
+            print(f"[REQUEST TRACE ERROR] File upload read failed: {e}")
+
+    provider = AIProviderFactory.get_provider()
+    from core.ai_engine.routine_parser.routine_parser import RoutineParser
+    routine_parser = RoutineParser()
+    ai_used = True
+    ai_error = None
+    extracted_schedule = []
+
+    # Extract document text if file uploaded and no text pasted
+    if image_bytes and not routine_text:
+        try:
             from core.ai_engine.ocr.engine import OCREngineManager
             ocr_res = OCREngineManager().extract_text(image_bytes, mime_type=mime_type)
             routine_text = ocr_res.get('text', '')
-
-        if routine_text:
-            try:
-                with open(trace_dir / 'ocr_result.txt', 'w', encoding='utf-8') as f:
-                    f.write(routine_text)
-            except Exception:
-                pass
-
-        try:
-            ai_result = routine_parser.parse_routine(routine_text, image_bytes=image_bytes, mime_type=mime_type)
-            if isinstance(ai_result, dict):
-                extracted_schedule = ai_result.get('routine_schedule', [])
-                try:
-                    with open(trace_dir / 'parsed.json', 'w', encoding='utf-8') as f:
-                        json.dump(ai_result, f, indent=2)
-                except Exception:
-                    pass
         except Exception as e:
-            ai_error = str(e)
+            ai_error = f"OCR failed: {e}"
 
-        # Raw text representation (clean display)
-        if routine_text and not routine_text.startswith('%PDF-') and not '/Type' in routine_text:
-            display_raw_text = routine_text
-        elif file_name:
-            display_raw_text = f"📷 Uploaded Document File: {file_name}\n(Parsed via AI Multimodal OCR Engine)"
-        else:
-            display_raw_text = "Exam Routine Document"
-
-        # Process & DB Match Each Extracted Routine Item
-        routine_items = []
-        all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'))
-
-        for item in extracted_schedule:
-            c_code = item.get('course_code')
-            c_title = item.get('course_title')
-            f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
-            e_date = item.get('exam_date')
-            e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
-            t_marks = item.get('total_marks', 100.0)
-
-            # Match Course in DB (Strictly without overwriting c_code)
-            course_obj = None
-            if c_code:
-                course_obj = Course.objects.filter(code__iexact=c_code.strip()).first()
-            if not course_obj and c_title:
-                course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
-
-            # Match Faculty in DB (Strictly without overwriting f_name)
-            faculty_user = None
-            if f_name:
-                for prof in all_teachers:
-                    full_n = prof.user.get_full_name() or prof.user.username
-                    if f_name.lower().strip() in full_n.lower() or prof.user.username.lower() in f_name.lower():
-                        faculty_user = prof.user
-                        break
-
-            # Check if an exam for this course is ALREADY published in the database
-            is_published = False
-            published_exam_id = None
-            published_exam_title = None
-            if course_obj:
-                existing_exam = Examination.objects.filter(course=course_obj).order_by('-created_at').first()
-                if existing_exam:
-                    is_published = True
-                    published_exam_id = existing_exam.id
-                    published_exam_title = existing_exam.title
-
-            routine_items.append({
-                'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
-                'course_title': course_obj.title if course_obj else (c_title or ''),
-                'faculty_name': f_name or (faculty_user.get_full_name() if faculty_user else 'Unassigned'),
-                'exam_date': e_date,
-                'exam_time': e_time,
-                'total_marks': t_marks,
-                'course_found': bool(course_obj),
-                'course_id': course_obj.id if course_obj else None,
-                'faculty_found': bool(faculty_user),
-                'faculty_id': faculty_user.id if faculty_user else None,
-                'is_published': is_published,
-                'published_exam_id': published_exam_id,
-                'published_exam_title': published_exam_title,
-            })
-
-        first_item = routine_items[0] if routine_items else {}
-
-        response_payload = {
-            'success': True,
-            'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
-            'routine_items': routine_items,
-            'gemini_used': ai_used,
-            'ai_error': ai_error,
-            'provider_name': provider.__class__.__name__,
-            'detected_course_code': first_item.get('course_code'),
-            'course_found': first_item.get('course_found', False),
-            'course_id': first_item.get('course_id'),
-            'course_title': first_item.get('course_title'),
-            'detected_date': first_item.get('exam_date'),
-            'detected_faculty_name': first_item.get('faculty_name'),
-            'faculty_found': first_item.get('faculty_found', False),
-            'faculty_id': first_item.get('faculty_id'),
-            'total_marks': first_item.get('total_marks', 100.0),
-        }
-
+    if routine_text:
         try:
-            with open(trace_dir / 'frontend_response.json', 'w', encoding='utf-8') as f:
-                json.dump(response_payload, f, indent=2)
+            with open(trace_dir / 'ocr_result.txt', 'w', encoding='utf-8') as f:
+                f.write(routine_text)
         except Exception:
             pass
 
-        return JsonResponse(response_payload)
+    try:
+        ai_result = routine_parser.parse_routine(routine_text, image_bytes=image_bytes, mime_type=mime_type)
+        if isinstance(ai_result, dict):
+            extracted_schedule = ai_result.get('routine_schedule', [])
+            try:
+                with open(trace_dir / 'parsed.json', 'w', encoding='utf-8') as f:
+                    json.dump(ai_result, f, indent=2)
+            except Exception:
+                pass
+    except Exception as e:
+        ai_error = str(e)
+
+    # Raw text representation (clean display)
+    if routine_text and not routine_text.startswith('%PDF-') and '/Type' not in routine_text:
+        display_raw_text = routine_text
+    elif file_name:
+        display_raw_text = f"Uploaded Document File: {file_name}\n(Parsed via AI Multimodal OCR Engine)"
+    else:
+        display_raw_text = "Exam Routine Document"
+
+    # Process & DB Match Each Extracted Routine Item
+    routine_items = []
+    all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'))
+
+    for item in extracted_schedule:
+        c_code = item.get('course_code')
+        c_title = item.get('course_title')
+        f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
+        e_date = item.get('exam_date')
+        e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
+        t_marks = item.get('total_marks', 100.0)
+
+        # Match Course in DB (Strictly without overwriting c_code)
+        course_obj = None
+        if c_code:
+            course_obj = Course.objects.filter(code__iexact=c_code.strip()).first()
+        if not course_obj and c_title:
+            course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
+
+        # Match Faculty in DB (Strictly without overwriting f_name)
+        faculty_user = None
+        if f_name:
+            for prof in all_teachers:
+                full_n = prof.user.get_full_name() or prof.user.username
+                if f_name.lower().strip() in full_n.lower() or prof.user.username.lower() in f_name.lower():
+                    faculty_user = prof.user
+                    break
+
+        # Check if an exam for this course is ALREADY published in the database
+        is_published = False
+        published_exam_id = None
+        published_exam_title = None
+        if course_obj:
+            existing_exam = Examination.objects.filter(course=course_obj).order_by('-created_at').first()
+            if existing_exam:
+                is_published = True
+                published_exam_id = existing_exam.id
+                published_exam_title = existing_exam.title
+
+        routine_items.append({
+            'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
+            'course_title': course_obj.title if course_obj else (c_title or ''),
+            'faculty_name': f_name or (faculty_user.get_full_name() if faculty_user else 'Unassigned'),
+            'exam_date': e_date,
+            'exam_time': e_time,
+            'total_marks': t_marks,
+            'course_found': bool(course_obj),
+            'course_id': course_obj.id if course_obj else None,
+            'faculty_found': bool(faculty_user),
+            'faculty_id': faculty_user.id if faculty_user else None,
+            'is_published': is_published,
+            'published_exam_id': published_exam_id,
+            'published_exam_title': published_exam_title,
+        })
+
+    first_item = routine_items[0] if routine_items else {}
+
+    response_payload = {
+        'success': True,
+        'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
+        'routine_items': routine_items,
+        'gemini_used': ai_used,
+        'ai_error': ai_error,
+        'provider_name': provider.__class__.__name__,
+        'detected_course_code': first_item.get('course_code'),
+        'course_found': first_item.get('course_found', False),
+        'course_id': first_item.get('course_id'),
+        'course_title': first_item.get('course_title'),
+        'detected_date': first_item.get('exam_date'),
+        'detected_faculty_name': first_item.get('faculty_name'),
+        'faculty_found': first_item.get('faculty_found', False),
+        'faculty_id': first_item.get('faculty_id'),
+        'total_marks': first_item.get('total_marks', 100.0),
+    }
+
+    try:
+        with open(trace_dir / 'frontend_response.json', 'w', encoding='utf-8') as f:
+            json.dump(response_payload, f, indent=2)
+    except Exception:
+        pass
+
+    return JsonResponse(response_payload)
 
 
 def exam_create(request):
@@ -1883,7 +1895,6 @@ def ai_config_view(request):
         config.save()
         messages.success(request, "AI Engine Configuration updated successfully!")
         return redirect('ai_config_view')
-
     return render(request, 'core/ai_config.html', {
         'config': config,
         'health_monitors': health_monitors,
@@ -1892,322 +1903,352 @@ def ai_config_view(request):
 
 def api_scan_question_paper(request):
     """AJAX endpoint to scan uploaded Question Paper (Image or PDF), extract structured questions, and persist them to the database."""
-    print("=" * 80)
-    print("QUESTION PAPER SCAN REQUEST RECEIVED")
-    print(f"METHOD: {request.method}")
-    print(f"USER: {request.user}")
-    print(f"FILES: {list(request.FILES.keys())}")
-    print(f"POST KEYS: {list(request.POST.keys())}")
-    print("=" * 80)
-
-    if not request.user.is_authenticated:
-        print("[QUESTION PAPER SCAN ERROR] User not authenticated.")
-        return JsonResponse({'error': 'Authentication required.'}, status=401)
-
-    if request.method != 'POST':
-        print(f"[QUESTION PAPER SCAN ERROR] Invalid HTTP method: {request.method}")
-        return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
-
-    exam_id = request.POST.get('examination_id')
-    exam = None
-    if exam_id and exam_id.isdigit():
-        exam = Examination.objects.filter(id=exam_id).first()
-    if not exam:
-        profile = getattr(request.user, 'profile', None)
-        if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
-            exam = Examination.objects.first()
-        else:
-            exam = Examination.objects.filter(assigned_faculty=request.user).first()
-
-    print(f"[QUESTION PAPER SCAN] Matched Exam: {exam} (ID: {exam.id if exam else None})")
-
-    qp_file = request.FILES.get('question_paper_file')
-    if not qp_file:
-        print("[QUESTION PAPER SCAN ERROR] No question_paper_file found in request.FILES.")
-        return JsonResponse({'error': 'Please select a Question Paper file (PDF or Image) to upload and scan.'}, status=400)
-
-    # Save newly uploaded Question Paper file to the examination record
-    if exam:
-        exam.question_paper_file = qp_file
-        exam.save()
-
-    import mimetypes
-    qp_bytes = None
-    mime_type = 'image/jpeg'
-
     try:
-        qp_file.open('rb')
-        qp_bytes = qp_file.read()
-        guessed_mime, _ = mimetypes.guess_type(qp_file.name)
-        if guessed_mime:
-            mime_type = guessed_mime
-        elif qp_file.name.lower().endswith('.pdf'):
-            mime_type = 'application/pdf'
-        print(f"[QUESTION PAPER SCAN] Uploaded File: {qp_file.name} | Size: {len(qp_bytes)} bytes | MIME: {mime_type}")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"[QUESTION PAPER SCAN ERROR] Read failed: {e}")
-        return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
+        print("=" * 80)
+        print("QUESTION PAPER SCAN REQUEST RECEIVED")
+        print(f"METHOD: {request.method}")
+        print(f"USER: {request.user}")
+        print(f"FILES: {list(request.FILES.keys())}")
+        print(f"POST KEYS: {list(request.POST.keys())}")
+        print("=" * 80)
 
-    from django.db import transaction
-    from core.ai_engine.providers.factory import AIProviderFactory
-    from core.ai_engine.document_service import DocumentService
-    from core.ai_engine.parser.academic_parser import AcademicParserService, PipelineValidationError
-    from core.models import QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
+        if not request.user.is_authenticated:
+            print("[QUESTION PAPER SCAN ERROR] User not authenticated.")
+            return JsonResponse({'error': 'Authentication required.'}, status=401)
 
-    provider = AIProviderFactory.get_provider()
+        if request.method != 'POST':
+            print(f"[QUESTION PAPER SCAN ERROR] Invalid HTTP method: {request.method}")
+            return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
 
-    # 1. Environment & Module Diagnostics inside Django Request Handler
-    import sys
-    import subprocess
-    from PIL import Image as PILImage
+        exam_id = request.POST.get('examination_id')
+        exam = None
+        if exam_id and exam_id.isdigit():
+            exam = Examination.objects.filter(id=exam_id).first()
+        if not exam:
+            profile = getattr(request.user, 'profile', None)
+            if request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+                exam = Examination.objects.first()
+            else:
+                exam = Examination.objects.filter(assigned_faculty=request.user).first()
 
-    print("=" * 80)
-    print("[DJANGO SERVER REQUEST DIAGNOSTICS]")
-    print(f"  sys.executable: {sys.executable}")
-    print(f"  sys.version: {sys.version}")
+        print(f"[QUESTION PAPER SCAN] Matched Exam: {exam} (ID: {exam.id if exam else None})")
 
-    try:
-        import fitz
-        print("  FITZ OK")
-        print(f"  fitz.__file__: {fitz.__file__}")
-        print(f"  fitz.__doc__: {fitz.__doc__[:80].strip() if fitz.__doc__ else 'N/A'}")
-    except Exception as fitz_err:
-        print("  FITZ FAILED")
-        print(f"  Import Error: {repr(fitz_err)}")
+        qp_file = request.FILES.get('question_paper_file')
+        if not qp_file:
+            print("[QUESTION PAPER SCAN ERROR] No question_paper_file found in request.FILES.")
+            return JsonResponse({'error': 'Please select a Question Paper file (PDF or Image) to upload and scan.'}, status=400)
+
+        # Save newly uploaded Question Paper file to the examination record
+        if exam:
+            exam.question_paper_file = qp_file
+            exam.save()
+
+        import mimetypes
+        qp_bytes = None
+        mime_type = 'image/jpeg'
+
         try:
-            res = subprocess.run([sys.executable, "-m", "pip", "show", "PyMuPDF"], capture_output=True, text=True)
-            print(f"  pip show PyMuPDF stdout:\n{res.stdout}")
-        except Exception as p_err:
-            print(f"  pip show error: {p_err}")
-        return JsonResponse({
-            'success': False,
-            'error': f'PyMuPDF (fitz) import failed inside Django server process: {repr(fitz_err)}'
-        }, status=500)
+            qp_file.open('rb')
+            qp_bytes = qp_file.read()
+            guessed_mime, _ = mimetypes.guess_type(qp_file.name)
+            if guessed_mime:
+                mime_type = guessed_mime
+            elif qp_file.name.lower().endswith('.pdf'):
+                mime_type = 'application/pdf'
+            print(f"[QUESTION PAPER SCAN] Uploaded File: {qp_file.name} | Size: {len(qp_bytes)} bytes | MIME: {mime_type}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[QUESTION PAPER SCAN ERROR] Read failed: {e}")
+            return JsonResponse({'error': f"Failed to read file: {str(e)}"}, status=400)
 
-    # 2. Render Page 1 to request_trace/page1.png FIRST & Verify PIL Readability
-    trace_dir = settings.BASE_DIR / 'request_trace'
-    os.makedirs(trace_dir, exist_ok=True)
-    page1_path = trace_dir / 'page1.png'
+        from django.db import transaction
+        from core.ai_engine.providers.factory import AIProviderFactory
+        from core.ai_engine.document_service import DocumentService
+        from core.ai_engine.parser.academic_parser import AcademicParserService, PipelineValidationError
+        from core.models import QuestionFigure, QuestionTable, QuestionFormula, DocumentDOM
 
-    try:
-        doc = fitz.open(stream=qp_bytes, filetype="pdf")
-        if len(doc) == 0:
-            return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
-        
-        page0 = doc.load_page(0)
-        pix = page0.get_pixmap(dpi=300)
-        pix.save(str(page1_path))
-    except Exception as render_err:
-        print(f"[RENDERER FAILED] {render_err}")
-        return JsonResponse({'success': False, 'error': f'Page 1 rendering failed: {render_err}'}, status=500)
+        provider = AIProviderFactory.get_provider()
 
-    if not os.path.exists(page1_path):
-        return JsonResponse({'success': False, 'error': 'page1.png failed to save to disk'}, status=500)
+        # 1. Environment & Module Diagnostics inside Django Request Handler
+        import sys
+        import subprocess
+        from PIL import Image as PILImage
 
-    try:
-        pil_img = PILImage.open(page1_path)
-        print(f"[PAGE 1 RENDER VERIFIED] Width: {pil_img.width}px | Height: {pil_img.height}px | Mode: {pil_img.mode}")
-    except Exception as pil_err:
-        print(f"[PIL READ FAILED] {pil_err}")
-        return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
+        print("=" * 80)
+        print("[DJANGO SERVER REQUEST DIAGNOSTICS]")
+        print(f"  sys.executable: {sys.executable}")
+        print(f"  sys.version: {sys.version}")
 
-    # 3. EasyOCR directly on verified page1.png
-    print("[EASYOCR START] Running EasyOCR directly on page1.png...")
-    easy_text = ""
-    easy_conf = 0.0
-    try:
-        import easyocr
-        reader = easyocr.Reader(['en'], gpu=False)
-        e_results = reader.readtext(str(page1_path))
-        lines = [r[1] for r in e_results]
-        scores = [r[2] for r in e_results]
-        easy_text = "\n".join(lines).strip()
-        easy_conf = sum(scores) / len(scores) if scores else 0.85
-        print(f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)}")
-    except Exception as easy_err:
-        print(f"[EASYOCR FAILED] Traceback: {easy_err}")
+        try:
+            import fitz
+            print("  FITZ OK")
+            print(f"  fitz.__file__: {fitz.__file__}")
+            print(f"  fitz.__doc__: {fitz.__doc__[:80].strip() if fitz.__doc__ else 'N/A'}")
+        except Exception as fitz_err:
+            print("  FITZ FAILED")
+            print(f"  Import Error: {repr(fitz_err)}")
+            try:
+                res = subprocess.run([sys.executable, "-m", "pip", "show", "PyMuPDF"], capture_output=True, text=True)
+                print(f"  pip show PyMuPDF stdout:\n{res.stdout}")
+            except Exception as p_err:
+                print(f"  pip show error: {p_err}")
+            return JsonResponse({
+                'success': False,
+                'error': f'PyMuPDF (fitz) import failed inside Django server process: {repr(fitz_err)}'
+            }, status=500)
 
-    if len(easy_text) == 0 and len(doc) > 0 and len(doc[0].get_text("text").strip()) < 10:
-        page1_before_path = trace_dir / 'page1_before_ocr.png'
-        pil_img.save(page1_before_path)
-        return JsonResponse({
-            'success': False,
-            'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.'
-        }, status=400)
+        # 2. Render Page 1 to request_trace/page1.png FIRST & Verify PIL Readability
+        trace_dir = settings.BASE_DIR / 'request_trace'
+        os.makedirs(trace_dir, exist_ok=True)
+        page1_path = trace_dir / 'page1.png'
 
-    try:
-        with transaction.atomic():
-            print("=" * 80)
-            print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
-            print(f"  INPUT FILE: {qp_file.name} ({len(qp_bytes)} bytes)")
-            print(f"  MIME TYPE: {mime_type}")
-            print(f"  PYTHON EXEC: {sys.executable}")
-            print("=" * 80)
+        try:
+            doc = fitz.open(stream=qp_bytes, filetype="pdf")
+            if len(doc) == 0:
+                return JsonResponse({'success': False, 'error': 'PDF document contains 0 pages'}, status=500)
+            
+            page0 = doc.load_page(0)
+            pix = page0.get_pixmap(dpi=300)
+            pix.save(str(page1_path))
+        except Exception as render_err:
+            print(f"[RENDERER FAILED] {render_err}")
+            return JsonResponse({'success': False, 'error': f'Page 1 rendering failed: {render_err}'}, status=500)
 
-            print("[PIPELINE STAGE 2] DocumentService: Rendering 300 DPI Page Images & Extracting Graphics...")
-            graphics_res = DocumentService.process_graphics_and_figures(qp_bytes, mime_type=mime_type)
-            extracted_figures = graphics_res.get('figures', [])
-            extracted_tables = graphics_res.get('tables', [])
-            extracted_formulas = graphics_res.get('formulas', [])
-            dom_elements = graphics_res.get('dom_elements', [])
-            total_pages = graphics_res.get('total_pages', len(graphics_res.get('page_renders', [])))
-            page_renders = graphics_res.get('page_renders', [])
+        if not os.path.exists(page1_path):
+            return JsonResponse({'success': False, 'error': 'page1.png failed to save to disk'}, status=500)
 
-            print(f"  Renderer Selected: PyMuPDF (fitz) 300 DPI")
-            print(f"  Rendered Pages: {total_pages}")
-            print(f"  Graphics Figures Detected: {len(extracted_figures)}")
+        try:
+            pil_img = PILImage.open(page1_path)
+            print(f"[PAGE 1 RENDER VERIFIED] Width: {pil_img.width}px | Height: {pil_img.height}px | Mode: {pil_img.mode}")
+        except Exception as pil_err:
+            print(f"[PIL READ FAILED] {pil_err}")
+            return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
 
-            print("[PIPELINE STAGE 3] DocumentService: Executing Deterministic OCR on Rendered Page Images...")
-            ocr_res = DocumentService.extract_deterministic_ocr(qp_bytes, page_renders=page_renders, mime_type=mime_type)
-            doc_text = ocr_res.get('text', '').strip()
+        # 3. EasyOCR directly on verified page1.png
+        from config.ocr_config import get_ocr_reader, prepare_easyocr_image
 
-            print(f"  OCR Engine Selected: {ocr_res['engine']}")
-            print(f"  OCR Result Text Length: {len(doc_text)} chars (Confidence: {ocr_res['confidence']})")
+        def _ocr_rss_mb() -> float:
+            try:
+                import resource
+                return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+            except ImportError:
+                return 0.0
 
-            # STRICT OCR GATEWAY: Halt pipeline BEFORE calling LLM if OCR text is insufficient
-            if len(doc_text) < 50:
-                raise PipelineValidationError(
-                    f"[STRICT PIPELINE FAILURE] OCR Failure: Extracted text length ({len(doc_text)} chars) "
-                    f"is below required minimum (50 chars). LLM & Database Save halted."
+        print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={pil_img.width}x{pil_img.height}")
+        easy_text = ""
+        easy_conf = 0.0
+        easy_started = time.monotonic()
+        try:
+            reader = get_ocr_reader()
+            if reader:
+                working_image, ocr_meta = prepare_easyocr_image(page1_path)
+                print(
+                    f"[EASYOCR IMAGE LOAD] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
+                    f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']}"
+                )
+                print(f"[EASYOCR OCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f}")
+                e_results = reader.readtext(working_image)
+                lines = [r[1] for r in e_results]
+                scores = [r[2] for r in e_results]
+                easy_text = "\n".join(lines).strip()
+                easy_conf = sum(scores) / len(scores) if scores else 0.85
+                print(
+                    f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)} | "
+                    f"elapsed_s={time.monotonic() - easy_started:.2f} | rss_mb={_ocr_rss_mb():.1f}"
+                )
+            else:
+                print("[EASYOCR FAILURE] Reader initialization returned None.")
+        except Exception as easy_err:
+            print(f"[EASYOCR FAILURE] {easy_err}")
+
+        if len(easy_text) == 0 and len(doc) > 0 and len(doc[0].get_text("text").strip()) < 10:
+            page1_before_path = trace_dir / 'page1_before_ocr.png'
+            pil_img.save(page1_before_path)
+            return JsonResponse({
+                'success': False,
+                'stage': 'OCR_EXTRACTION',
+                'error_code': 'EASYOCR_EMPTY_OUTPUT',
+                'message': 'EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.',
+                'retryable': True,
+                'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png. Saved page1_before_ocr.png for inspection.'
+            }, status=400)
+
+        print("=" * 80)
+        print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
+        print(f"  INPUT FILE: {qp_file.name} ({len(qp_bytes)} bytes)")
+        print(f"  MIME TYPE: {mime_type}")
+        print(f"  PYTHON EXEC: {sys.executable}")
+        print("=" * 80)
+
+        print("[PIPELINE STAGE 2] DocumentService: Rendering 300 DPI Page Images & Extracting Graphics...")
+        graphics_res = DocumentService.process_graphics_and_figures(qp_bytes, mime_type=mime_type)
+        extracted_figures = graphics_res.get('figures', [])
+        extracted_tables = graphics_res.get('tables', [])
+        extracted_formulas = graphics_res.get('formulas', [])
+        dom_elements = graphics_res.get('dom_elements', [])
+        total_pages = graphics_res.get('total_pages', len(graphics_res.get('page_renders', [])))
+        page_renders = graphics_res.get('page_renders', [])
+
+        print(f"  Renderer Selected: PyMuPDF (fitz) 300 DPI")
+        print(f"  Rendered Pages: {total_pages}")
+        print(f"  Graphics Figures Detected: {len(extracted_figures)}")
+
+        print("[PIPELINE STAGE 3] DocumentService: Executing Deterministic OCR on Rendered Page Images...")
+        ocr_res = DocumentService.extract_deterministic_ocr(qp_bytes, page_renders=page_renders, mime_type=mime_type)
+        doc_text = ocr_res.get('text', '').strip()
+
+        print(f"  OCR Engine Selected: {ocr_res['engine']}")
+        print(f"  OCR Result Text Length: {len(doc_text)} chars (Confidence: {ocr_res['confidence']})")
+
+        # STRICT OCR GATEWAY: Halt pipeline BEFORE calling LLM if OCR text is insufficient
+        if len(doc_text) < 50:
+            raise PipelineValidationError(
+                f"[STRICT PIPELINE FAILURE] OCR Failure: Extracted text length ({len(doc_text)} chars) "
+                f"is below required minimum (50 chars). LLM & Database Save halted."
+            )
+
+        print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
+        res_data = provider.analyze_academic_exam_paper(
+            doc_text,
+            image_bytes=qp_bytes,
+            mime_type=mime_type,
+            extra_files=extracted_figures
+        )
+
+        print("[PIPELINE STAGE 5] AcademicParserService: Validating Question Schema & Figure Mapping...")
+        parsed_result = AcademicParserService.validate_and_parse(
+            ocr_res,
+            graphics_res,
+            res_data,
+            min_ocr_chars=50
+        )
+
+        parsed_questions = parsed_result['parsed_questions']
+
+        # Write Debug Trace Artifacts & Physical Verification Files
+        try:
+            from PIL import Image as PILImage
+            from core.ai_engine.visualizer import LayoutVisualizer
+
+            trace_dir = settings.BASE_DIR / 'request_trace'
+            os.makedirs(trace_dir, exist_ok=True)
+            ext = '.pdf' if mime_type == 'application/pdf' else '.png'
+            with open(trace_dir / f'original_upload{ext}', 'wb') as f:
+                f.write(qp_bytes)
+
+            # 1. Save and Verify Rendered Page PNGs
+            for idx, p_bytes in enumerate(page_renders):
+                p_path = trace_dir / f'rendered_page_{idx+1}.png'
+                with open(p_path, 'wb') as f:
+                    f.write(p_bytes)
+                img_chk = PILImage.open(p_path)
+                print(f"  [TRACE VERIFIED] Saved {p_path.name} | Dimensions: {img_chk.width}x{img_chk.height}px | Bytes: {len(p_bytes)}")
+
+            # 2. Render layout_debug.png overlay image (Blue=Questions, Green=Valid Figures, Red=Ignored Text Lines, Gray=Rejected Page Border)
+            if page_renders:
+                debug_overlay_path = trace_dir / 'layout_debug.png'
+                LayoutVisualizer.render_layout_debug_overlay(
+                    page_renders[0],
+                    dom_elements,
+                    parsed_questions,
+                    str(debug_overlay_path),
+                    all_contours=graphics_res.get('all_contours', [])
                 )
 
-            print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
-            res_data = provider.analyze_academic_exam_paper(
-                doc_text,
-                image_bytes=qp_bytes,
-                mime_type=mime_type,
-                extra_files=extracted_figures
-            )
+            # 3. Save OCR Text Output
+            with open(trace_dir / 'ocr_output.txt', 'w', encoding='utf-8') as f:
+                f.write(doc_text)
 
-            print("[PIPELINE STAGE 5] AcademicParserService: Validating Question Schema & Figure Mapping...")
-            parsed_result = AcademicParserService.validate_and_parse(
-                ocr_res,
-                graphics_res,
-                res_data,
-                min_ocr_chars=50
-            )
+            # 4. Save Structured layout.json
+            structured_layout = {
+                "page": 1,
+                "questions": parsed_questions,
+                "figures": extracted_figures,
+                "tables": [e for e in dom_elements if e.get('type') == 'table'],
+                "reading_order": dom_elements,
+                "all_contours": graphics_res.get('all_contours', [])
+            }
+            with open(trace_dir / 'layout.json', 'w', encoding='utf-8') as f:
+                json.dump(structured_layout, f, indent=2, default=str)
 
-            parsed_questions = parsed_result['parsed_questions']
+            # 5. Save Cropped Figures & Matrices
+            for f_idx, fig in enumerate(extracted_figures):
+                fig_bytes = fig.get('bytes')
+                if fig_bytes:
+                    fname = 'matrix_1.png' if 'Matrix' in fig.get('caption', '') else f'figure_{f_idx+1}.png'
+                    fig_path = trace_dir / fname
+                    with open(fig_path, 'wb') as f:
+                        f.write(fig_bytes)
+                    fig_chk = PILImage.open(fig_path)
+                    print(f"  [TRACE VERIFIED] Saved {fig_path.name} | Caption: {fig.get('caption')} | Dimensions: {fig_chk.width}x{fig_chk.height}px")
 
-            # Write Debug Trace Artifacts & Physical Verification Files
-            try:
-                from PIL import Image as PILImage
-                from core.ai_engine.visualizer import LayoutVisualizer
+        except Exception as debug_err:
+            print(f"[DEBUG TRACE WARNING] {debug_err}")
 
-                trace_dir = settings.BASE_DIR / 'request_trace'
-                os.makedirs(trace_dir, exist_ok=True)
-                ext = '.pdf' if mime_type == 'application/pdf' else '.png'
-                with open(trace_dir / f'original_upload{ext}', 'wb') as f:
-                    f.write(qp_bytes)
+        def _sanitize_for_json(obj):
+            if isinstance(obj, bytes):
+                return None
+            elif isinstance(obj, dict):
+                return {k: _sanitize_for_json(v) for k, v in obj.items() if not isinstance(v, bytes)}
+            elif isinstance(obj, list):
+                return [_sanitize_for_json(i) for i in obj if not isinstance(i, bytes)]
+            return obj
 
-                # 1. Save and Verify Rendered Page PNGs
-                for idx, p_bytes in enumerate(page_renders):
-                    p_path = trace_dir / f'rendered_page_{idx+1}.png'
-                    with open(p_path, 'wb') as f:
-                        f.write(p_bytes)
-                    img_chk = PILImage.open(p_path)
-                    print(f"  [TRACE VERIFIED] Saved {p_path.name} | Dimensions: {img_chk.width}x{img_chk.height}px | Bytes: {len(p_bytes)}")
+        clean_questions = _sanitize_for_json(parsed_questions)
+        clean_figures = _sanitize_for_json(extracted_figures)
+        clean_tables = _sanitize_for_json(extracted_tables)
+        clean_formulas = _sanitize_for_json(extracted_formulas)
+        clean_dom = _sanitize_for_json(dom_elements)
 
-                # 2. Render layout_debug.png overlay image (Blue=Questions, Green=Valid Figures, Red=Ignored Text Lines, Gray=Rejected Page Border)
-                if page_renders:
-                    debug_overlay_path = trace_dir / 'layout_debug.png'
-                    LayoutVisualizer.render_layout_debug_overlay(
-                        page_renders[0],
-                        dom_elements,
-                        parsed_questions,
-                        str(debug_overlay_path),
-                        all_contours=graphics_res.get('all_contours', [])
-                    )
+        # Stage scan data in session without writing to DB until user clicks Finalize
+        staged_data = {
+            'exam_id': exam.id if exam else None,
+            'qp_filename': qp_file.name if qp_file else 'scanned_doc.pdf',
+            'parsed_questions': clean_questions,
+            'extracted_figures': clean_figures,
+            'extracted_tables': clean_tables,
+            'extracted_formulas': clean_formulas,
+            'dom_elements': clean_dom,
+            'total_pages': total_pages
+        }
+        if exam:
+            request.session[f'staged_scan_data_{exam.id}'] = staged_data
+            request.session.modified = True
 
-                # 3. Save OCR Text Output
-                with open(trace_dir / 'ocr_output.txt', 'w', encoding='utf-8') as f:
-                    f.write(doc_text)
+        print(f"[STAGED SCAN EXTRACTION COMPLETE] Staged {len(parsed_questions)} questions, {len(extracted_figures)} figures, {len(extracted_tables)} tables in session for Exam ID {exam.id if exam else 'N/A'}.")
 
-                # 4. Save Structured layout.json
-                structured_layout = {
-                    "page": 1,
-                    "questions": parsed_questions,
-                    "figures": extracted_figures,
-                    "tables": [e for e in dom_elements if e.get('type') == 'table'],
-                    "reading_order": dom_elements,
-                    "all_contours": graphics_res.get('all_contours', [])
-                }
-                with open(trace_dir / 'layout.json', 'w', encoding='utf-8') as f:
-                    json.dump(structured_layout, f, indent=2, default=str)
-
-                # 5. Save Cropped Figures & Matrices
-                for f_idx, fig in enumerate(extracted_figures):
-                    fig_bytes = fig.get('bytes')
-                    if fig_bytes:
-                        fname = 'matrix_1.png' if 'Matrix' in fig.get('caption', '') else f'figure_{f_idx+1}.png'
-                        fig_path = trace_dir / fname
-                        with open(fig_path, 'wb') as f:
-                            f.write(fig_bytes)
-                        fig_chk = PILImage.open(fig_path)
-                        print(f"  [TRACE VERIFIED] Saved {fig_path.name} | Caption: {fig.get('caption')} | Dimensions: {fig_chk.width}x{fig_chk.height}px")
-
-            except Exception as debug_err:
-                print(f"[DEBUG TRACE WARNING] {debug_err}")
-
-            def _sanitize_for_json(obj):
-                if isinstance(obj, bytes):
-                    return None
-                elif isinstance(obj, dict):
-                    return {k: _sanitize_for_json(v) for k, v in obj.items() if not isinstance(v, bytes)}
-                elif isinstance(obj, list):
-                    return [_sanitize_for_json(i) for i in obj if not isinstance(i, bytes)]
-                return obj
-
-            clean_questions = _sanitize_for_json(parsed_questions)
-            clean_figures = _sanitize_for_json(extracted_figures)
-            clean_tables = _sanitize_for_json(extracted_tables)
-            clean_formulas = _sanitize_for_json(extracted_formulas)
-            clean_dom = _sanitize_for_json(dom_elements)
-
-            # Stage scan data in session without writing to DB until user clicks Finalize
-            staged_data = {
-                'exam_id': exam.id if exam else None,
-                'qp_filename': qp_file.name if qp_file else 'scanned_doc.pdf',
-                'parsed_questions': clean_questions,
-                'extracted_figures': clean_figures,
-                'extracted_tables': clean_tables,
-                'extracted_formulas': clean_formulas,
-                'dom_elements': clean_dom,
+        return JsonResponse({
+            'success': True,
+            'staged': True,
+            'extracted_count': len(parsed_questions),
+            'figures_count': len(extracted_figures) + len(extracted_tables),
+            'ocr_chars': len(doc_text),
+            'ocr_engine': ocr_res['engine'],
+            'total_pages': total_pages,
+            'data': {
+                'questions': clean_questions if isinstance(clean_questions, list) else [],
+                'figures': clean_figures if isinstance(clean_figures, list) else [],
+                'tables': clean_tables if isinstance(clean_tables, list) else [],
+                'dom_elements': dom_elements,
                 'total_pages': total_pages
             }
-            if exam:
-                request.session[f'staged_scan_data_{exam.id}'] = staged_data
-                request.session.modified = True
-
-            print(f"[STAGED SCAN EXTRACTION COMPLETE] Staged {len(parsed_questions)} questions, {len(extracted_figures)} figures, {len(extracted_tables)} tables in session for Exam ID {exam.id if exam else 'N/A'}.")
-
-            return JsonResponse({
-                'success': True,
-                'staged': True,
-                'extracted_count': len(parsed_questions),
-                'figures_count': len(extracted_figures) + len(extracted_tables),
-                'ocr_chars': len(doc_text),
-                'ocr_engine': ocr_res['engine'],
-                'total_pages': total_pages,
-                'data': {
-                    'questions': clean_questions if isinstance(clean_questions, list) else [],
-                    'figures': clean_figures if isinstance(clean_figures, list) else [],
-                    'tables': clean_tables if isinstance(clean_tables, list) else [],
-                    'dom_elements': dom_elements,
-                    'total_pages': total_pages
-                }
-            })
+        })
 
     except PipelineValidationError as pve:
         print(f"[DETERMINISTIC PIPELINE ABORTED] {pve}")
         return JsonResponse({'success': False, 'error': str(pve)}, status=400)
     except Exception as e:
         import traceback
+        import uuid
         traceback.print_exc()
         print(f"[DETERMINISTIC PIPELINE EXCEPTION] {e}")
-        return JsonResponse({'success': False, 'error': f"Document AI Pipeline Exception: {str(e)}"}, status=500)
+        return JsonResponse({
+            'success': False,
+            'stage': 'SCAN_EXECUTION_FAILURE',
+            'error': f"Document AI Pipeline Exception: {str(e)}",
+            'trace_id': str(uuid.uuid4())
+        }, status=500)
 
 
 def api_finalize_scanned_paper(request):

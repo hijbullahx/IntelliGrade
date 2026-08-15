@@ -2,51 +2,51 @@
   "routine_schedule": [
     {
       "exam_date": "2026-05-17",
-      "exam_time": "09:00 AM - 12:00 PM",
+      "exam_time": "09:00AM- 12:00PM",
       "course_code": "CSE 4383",
-      "course_title": null,
-      "instructor_name": "Drs Ferdaus Anam Jibon",
-      "room_number": "405 (A-4)",
-      "section": "E",
-      "department": "Computer Science & Engineering",
+      "course_title": "",
+      "instructor_name": "Drs Ferdaus Anam",
+      "room_number": "",
+      "section": "",
+      "department": "",
       "semester": "Spring 2026",
-      "total_marks": null
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-19",
-      "exam_time": "09:00 AM - 12:00 PM",
+      "exam_date": "2026-05-17",
+      "exam_time": "09:00AM- 12:00PM",
       "course_code": "CSC 437",
-      "course_title": null,
-      "instructor_name": "Kazi Johir Raihan Suny",
-      "room_number": "508 (D-2)",
-      "section": "Q",
-      "department": "Computer Science",
+      "course_title": "",
+      "instructor_name": "Kazi Johir Raihan",
+      "room_number": "",
+      "section": "",
+      "department": "",
       "semester": "Spring 2026",
-      "total_marks": null
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-20",
-      "exam_time": "02:00 PM - 05:00 PM",
+      "exam_date": "2026-05-17",
+      "exam_time": "02:00PM- 05:00PM",
       "course_code": "CSE 4317",
-      "course_title": null,
+      "course_title": "",
       "instructor_name": "Naeem Mia",
-      "room_number": "310 (F-4)",
-      "section": "C",
-      "department": "Computer Science & Engineering",
+      "room_number": "",
+      "section": "",
+      "department": "",
       "semester": "Spring 2026",
-      "total_marks": null
+      "total_marks": 100.0
     },
     {
-      "exam_date": "2026-05-21",
-      "exam_time": "02:00 PM - 05:00 PM",
+      "exam_date": "2026-05-17",
+      "exam_time": "02:00PM- 05:00PM",
       "course_code": "CSC 465",
-      "course_title": null,
-      "instructor_name": "Ms. Kashfi Shormita Kushal",
-      "room_number": "501 (E-3)",
-      "section": "K",
-      "department": "Computer Science",
+      "course_title": "",
+      "instructor_name": "Ms. Kashfi Shormita",
+      "room_number": "",
+      "section": "",
+      "department": "",
       "semester": "Spring 2026",
-      "total_marks": null
+      "total_marks": 100.0
     }
   ]
 }

@@ -7,6 +7,7 @@ from .preprocessor import ImagePreprocessor
 from core.models import AIConfiguration
 from core.ai_engine.providers.gemini import GeminiProvider
 from django.conf import settings
+from config.ocr_config import prepare_easyocr_image
 
 try:
     import fitz
@@ -53,9 +54,9 @@ class OCREngineManager:
         Extracts high-resolution rendered pages (300 DPI), embedded figures/diagrams,
         layout bounding boxes, captions, and constructs a page-by-page Document DOM tree.
         """
-        import datetime
+        from django.utils import timezone
         from PIL import Image
-        now = datetime.datetime.now()
+        now = timezone.now()
         subfolder = now.strftime('%Y/%m')
         save_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', subfolder)
         thumb_dir = os.path.join(settings.MEDIA_ROOT, 'exam_figures', 'thumbs', subfolder)
@@ -202,15 +203,17 @@ class OCREngineManager:
         # 1. Try EasyOCR Engine for Image Documents
         if not mime_type == "application/pdf" and self.engine_choice in [AIConfiguration.OCREngine.AUTO]:
             try:
-                import easyocr
-                reader = easyocr.Reader(['en'], gpu=False)
-                result = reader.readtext(image_bytes)
-                lines = [res[1] for res in result]
-                scores = [res[2] for res in result]
-                extracted = "\n".join(lines)
-                conf = sum(scores) / len(scores) if scores else 0.85
-                if extracted.strip():
-                    return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
+                from config.ocr_config import get_ocr_reader
+                reader = get_ocr_reader()
+                if reader:
+                    working_image, _ocr_meta = prepare_easyocr_image(image_bytes)
+                    result = reader.readtext(working_image)
+                    lines = [res[1] for res in result]
+                    scores = [res[2] for res in result]
+                    extracted = "\n".join(lines)
+                    conf = sum(scores) / len(scores) if scores else 0.85
+                    if extracted.strip():
+                        return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
             except Exception:
                 pass
 

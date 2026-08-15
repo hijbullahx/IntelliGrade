@@ -34,7 +34,7 @@ class LineReconstructor:
     ) -> List[Dict[str, Any]]:
         lines_output = []
 
-        if word_boxes and len(word_boxes) > 0:
+        if word_boxes and isinstance(word_boxes, list) and len(word_boxes) > 0:
             sorted_words = []
             for w in word_boxes:
                 bbox = w.get('bbox', {})
@@ -89,7 +89,7 @@ class LineReconstructor:
                     'line_index': idx
                 })
 
-        elif line_boxes and len(line_boxes) > 0:
+        elif line_boxes and isinstance(line_boxes, list) and len(line_boxes) > 0:
             for idx, lb in enumerate(line_boxes):
                 text = str(lb.get('text', '')).strip()
                 bbox = lb.get('bbox', {})

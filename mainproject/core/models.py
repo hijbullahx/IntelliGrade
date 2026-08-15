@@ -96,6 +96,11 @@ class Question(models.Model):
     prompt_text = models.TextField()
     max_marks = models.DecimalField(max_digits=5, decimal_places=2)
 
+    @property
+    def text(self) -> str:
+        """Helper alias returning prompt_text for question text compatibility."""
+        return self.prompt_text or ""
+
     # IUBAT Academic Hierarchy & Classification Fields
     question_type = models.JSONField(default=list, blank=True, help_text="Categories (e.g. Theory, Numerical, Algorithm, Scenario)")
     command_verbs = models.JSONField(default=list, blank=True, help_text="Instructional verbs (e.g. Explain, Calculate, Design)")

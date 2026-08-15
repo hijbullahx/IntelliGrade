@@ -127,7 +127,17 @@ function getCookie(name) {
             }
         }
     }
-    return cookieValue || '{{ csrf_token }}';
+    return cookieValue;
+}
+
+function getCsrfToken() {
+    const cookieToken = getCookie('csrftoken');
+    if (cookieToken) {
+        return cookieToken;
+    }
+
+    const hiddenToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return hiddenToken ? hiddenToken.value : '';
 }
 
 function runAIRoutineScan() {
@@ -135,6 +145,11 @@ function runAIRoutineScan() {
     const routineFile = document.getElementById('routineFile').files[0];
     const resultBox = document.getElementById('aiScanResult');
     const scanBtn = document.getElementById('scanBtn');
+
+    if (!routineText.trim() && !routineFile) {
+        alert('Please enter routine text or upload a routine file before scanning.');
+        return;
+    }
 
     scanBtn.disabled = true;
     scanBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Running AI Routine Scan...`;
@@ -144,14 +159,32 @@ function runAIRoutineScan() {
     if (routineFile) {
         formData.append('routine_file', routineFile);
     }
-    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    formData.append('csrfmiddlewaretoken', getCsrfToken());
 
-    fetch("{% url 'scan_routine_ai' %}", {
+    const scanRoutineUrl = "{% url 'scan_routine_ai' %}";
+
+    fetch(scanRoutineUrl, {
         method: 'POST',
-        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': getCsrfToken() },
         body: formData
     })
-    .then(response => response.json())
+    .then(async response => {
+        const rawText = await response.text();
+        let data = {};
+
+        try {
+            data = rawText ? JSON.parse(rawText) : {};
+        } catch (e) {
+            throw new Error(`Server returned invalid response (${response.status}).`);
+        }
+
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || data.ai_error || `Routine scan request failed (${response.status}).`);
+        }
+
+        return data;
+    })
     .then(data => {
         scanBtn.disabled = false;
         scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
@@ -168,7 +201,7 @@ function runAIRoutineScan() {
         scanBtn.disabled = false;
         scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
         lucide.createIcons();
-        alert('Routine scanning failed. Check DevTools console for details.');
+        alert(`Routine scanning failed: ${err.message}`);
     });
 }
 
