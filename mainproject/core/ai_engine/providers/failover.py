@@ -46,8 +46,13 @@ class FailoverAIProvider(BaseAIProvider):
 
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
         import time
+        import inspect
         last_error = None
         has_images = bool(kwargs.get('image_bytes') or (args and isinstance(args[0], bytes)))
+
+        total_budget = float(getattr(settings, 'AI_TOTAL_TIMEOUT_BUDGET', None) or os.environ.get('AI_TOTAL_TIMEOUT_BUDGET', 16.0))
+        overall_start = time.monotonic()
+        deadline = overall_start + total_budget
 
         # Dynamic Capability-Based Provider Selection
         chain_order = list(self._chain)
@@ -55,30 +60,51 @@ class FailoverAIProvider(BaseAIProvider):
             # Sort vision-capable providers to the front of the chain
             chain_order.sort(key=lambda p: 0 if p.get_capabilities().get('supports_images') else 1)
 
+        print(f"[AI TIMING] Failover Orchestrator START: method={method_name} | budget={total_budget:.1f}s | providers={[p.__class__.__name__ for p in chain_order]}")
+
         for provider in chain_order:
             provider_name = provider.__class__.__name__
-            start_time = time.time()
+            remaining_budget = deadline - time.monotonic()
+            if remaining_budget <= 1.0:
+                print(f"[AI TIMING] Failover budget exhausted ({remaining_budget:.2f}s remaining). Skipping {provider_name} to guarantee response before web gateway timeout.")
+                last_error = f"Global AI timeout budget exhausted ({total_budget:.1f}s)"
+                break
+
+            provider_timeout = min(float(os.environ.get('AI_REQUEST_TIMEOUT', 6.0)), remaining_budget)
+            call_kwargs = dict(kwargs)
+            call_kwargs['timeout'] = provider_timeout
+
+            start_time = time.monotonic()
+            print(f"[AI TIMING] {provider_name} START (timeout={provider_timeout:.1f}s, remaining_budget={remaining_budget:.1f}s)")
             try:
                 method = getattr(provider, method_name, None)
                 if method and callable(method):
-                    res = method(*args, **kwargs)
+                    sig = inspect.signature(method)
+                    if 'timeout' in sig.parameters:
+                        res = method(*args, **call_kwargs)
+                    else:
+                        res = method(*args, **kwargs)
+
+                    elapsed = time.monotonic() - start_time
                     if res and not (isinstance(res, str) and "quota_exceeded" in res):
-                        elapsed_ms = int((time.time() - start_time) * 1000)
+                        elapsed_ms = int(elapsed * 1000)
                         self.log_health_event(provider_name, 'HEALTHY', error_msg="", response_time_ms=elapsed_ms)
+                        print(f"[AI TIMING] {provider_name} SUCCESS in {elapsed:.2f}s (Total failover time: {time.monotonic() - overall_start:.2f}s)")
                         return res
             except Exception as e:
+                elapsed = time.monotonic() - start_time
                 last_error = str(e)
-                elapsed_ms = int((time.time() - start_time) * 1000)
+                elapsed_ms = int(elapsed * 1000)
                 status_code = 'RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else ('EXPIRED' if ('401' in last_error or '403' in last_error) else 'OFFLINE')
                 self.log_health_event(provider_name, status_code, error_msg=last_error, response_time_ms=elapsed_ms)
-                print(f"[FAILOVER WARNING] {provider_name}.{method_name} failed: {last_error}. Switching to next provider in chain...")
+                print(f"[AI TIMING] {provider_name} FAILED in {elapsed:.2f}s: {last_error}. Switching to next provider in chain...")
                 continue
 
         raise Exception(f"All AI Providers in the failover chain failed. Last error: {last_error}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
         try:
-            return self._execute_with_failover('generate_completion', prompt, system_instruction=system_instruction)
+            return self._execute_with_failover('generate_completion', prompt, system_instruction=system_instruction, timeout=timeout)
         except Exception as e:
             print(f"[FAILOVER COMPLETION ERROR] All providers failed: {e}. Returning fallback text.")
             return "Generated text completion (Offline Failover Fallback)."
@@ -90,7 +116,8 @@ class FailoverAIProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        timeout: Optional[float] = None
     ) -> Dict[str, Any]:
         try:
             return self._execute_with_failover(
@@ -100,7 +127,8 @@ class FailoverAIProvider(BaseAIProvider):
                 student_answer,
                 max_marks,
                 exemplars=exemplars,
-                custom_instructions=custom_instructions
+                custom_instructions=custom_instructions,
+                timeout=timeout
             )
         except Exception as e:
             print(f"[FAILOVER EVALUATE ERROR] All providers failed: {e}. Returning rubric fallback marks.")
@@ -111,23 +139,23 @@ class FailoverAIProvider(BaseAIProvider):
                 "partial_marking_breakdown": {"core_concept": round(float(max_marks) * 0.75, 2)}
             }
 
-    def analyze_question_paper(self, paper_text_or_image: Any, **kwargs) -> Dict[str, Any]:
+    def analyze_question_paper(self, paper_text_or_image: Any, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
         try:
-            return self._execute_with_failover('analyze_question_paper', paper_text_or_image, **kwargs)
+            return self._execute_with_failover('analyze_question_paper', paper_text_or_image, timeout=timeout, **kwargs)
         except Exception as e:
             print(f"[FAILOVER ROUTINE ERROR] All providers failed: {e}. Returning routine regex fallback.")
             return {"routine_schedule": []}
 
-    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         try:
-            return self._execute_with_failover('analyze_academic_exam_paper', qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files)
+            return self._execute_with_failover('analyze_academic_exam_paper', qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files, timeout=timeout)
         except Exception as chain_err:
             print(f"[FAILOVER CHAIN COMPLETE] All AI providers failed ({chain_err}). Executing deterministic regex question extraction fallback...")
-            return super().analyze_academic_exam_paper(qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=None, mime_type=mime_type, extra_files=None)
+            return super().analyze_academic_exam_paper(qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=None, mime_type=mime_type, extra_files=None, timeout=timeout)
 
-    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '') -> Dict[str, Any]:
+    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '', timeout: Optional[float] = None) -> Dict[str, Any]:
         try:
-            return self._execute_with_failover('analyze_question_full', question_text, max_marks=max_marks, course_outline_text=course_outline_text)
+            return self._execute_with_failover('analyze_question_full', question_text, max_marks=max_marks, course_outline_text=course_outline_text, timeout=timeout)
         except Exception as e:
             print(f"[FAILOVER QUESTION FULL ERROR] All providers failed: {e}. Returning academic metadata fallback.")
             return {
@@ -154,9 +182,9 @@ class FailoverAIProvider(BaseAIProvider):
                 "common_mistakes": ["Omission of core definitions", "Incomplete steps"]
             }
 
-    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None) -> Dict[str, Any]:
+    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         try:
-            return self._execute_with_failover('generate_rubric', question_text, max_marks, sample_answer=sample_answer)
+            return self._execute_with_failover('generate_rubric', question_text, max_marks, sample_answer=sample_answer, timeout=timeout)
         except Exception as e:
             print(f"[FAILOVER RUBRIC ERROR] All providers failed: {e}. Returning rubric fallback.")
             return {
@@ -165,9 +193,10 @@ class FailoverAIProvider(BaseAIProvider):
                 "mark_distribution": {"concept": float(max_marks * 0.5), "accuracy": float(max_marks * 0.5)}
             }
 
-    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg", timeout: Optional[float] = None) -> str:
         try:
-            return self._execute_with_failover('extract_ocr_text', image_bytes, mime_type=mime_type)
+            return self._execute_with_failover('extract_ocr_text', image_bytes, mime_type=mime_type, timeout=timeout)
         except Exception as e:
             return ""
+
 

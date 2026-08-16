@@ -1,3 +1,5 @@
+import os
+import time
 import json
 import re
 import urllib.request
@@ -15,7 +17,7 @@ class OpenAIProvider(BaseAIProvider):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None) -> str:
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("OpenAI API Key is not configured.")
 
@@ -43,23 +45,32 @@ class OpenAIProvider(BaseAIProvider):
             method='POST'
         )
 
-        timeout_sec = int(os.environ.get('AI_REQUEST_TIMEOUT', 12))
+        timeout_sec = float(timeout) if timeout is not None else float(os.environ.get('AI_REQUEST_TIMEOUT', 6.0))
+        start_t = time.monotonic()
+        print(f"[AI TIMING] OpenAI model {self.model_name} START (timeout={timeout_sec:.1f}s)")
         try:
             with urllib.request.urlopen(req, timeout=timeout_sec) as response:
                 res_bytes = response.read()
                 res_data = json.loads(res_bytes.decode('utf-8'))
                 choices = res_data.get('choices', [])
+                elapsed = time.monotonic() - start_t
                 if choices and choices[0].get('message', {}).get('content'):
+                    print(f"[AI TIMING] OpenAI model {self.model_name} END: {elapsed:.2f}s (SUCCESS)")
                     return choices[0]['message']['content']
+                print(f"[AI TIMING] OpenAI model {self.model_name} END: {elapsed:.2f}s (EMPTY CHOICES)")
                 raise ValueError("OpenAI returned empty response choices.")
         except urllib.error.HTTPError as e:
+            elapsed = time.monotonic() - start_t
             error_body = e.read().decode('utf-8', errors='ignore')
+            print(f"[AI TIMING] OpenAI model {self.model_name} END: {elapsed:.2f}s (HTTP {e.code} ERROR: {error_body[:120]})")
             raise Exception(f"OpenAI API HTTP Error {e.code}: {error_body}")
         except Exception as e:
+            elapsed = time.monotonic() - start_t
+            print(f"[AI TIMING] OpenAI model {self.model_name} END: {elapsed:.2f}s (FAILED: {str(e)[:120]})")
             raise Exception(f"OpenAI Request Failed: {str(e)}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        return self._call_api(prompt, system_instruction)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
+        return self._call_api(prompt, system_instruction, timeout=timeout)
 
     def evaluate_answer(
         self,

@@ -19,7 +19,7 @@ class GeminiProvider(BaseAIProvider):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> str:
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
 
@@ -50,9 +50,21 @@ class GeminiProvider(BaseAIProvider):
         payload = {"contents": [{"parts": parts}]}
         json_data = json.dumps(payload).encode('utf-8')
 
-        timeout_sec = int(os.environ.get('AI_REQUEST_TIMEOUT', 12))
+        default_model_timeout = float(os.environ.get('AI_REQUEST_TIMEOUT', 6.0))
+        total_provider_timeout = float(timeout) if timeout is not None else default_model_timeout * len(unique_models)
+        provider_deadline = time.monotonic() + total_provider_timeout
+
         last_error = None
         for model in unique_models:
+            model_remaining = provider_deadline - time.monotonic()
+            if model_remaining <= 0.8:
+                print(f"[AI TIMING] Gemini model {model} SKIPPED (provider time budget exhausted: {model_remaining:.2f}s remaining)")
+                break
+
+            call_timeout = min(default_model_timeout, model_remaining)
+            model_start = time.monotonic()
+            print(f"[AI TIMING] Gemini model {model} START (timeout={call_timeout:.1f}s, remaining_budget={model_remaining:.1f}s)")
+
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
             req = urllib.request.Request(
                 url,
@@ -62,15 +74,17 @@ class GeminiProvider(BaseAIProvider):
             )
 
             try:
-                with urllib.request.urlopen(req, timeout=timeout_sec) as response:
+                with urllib.request.urlopen(req, timeout=call_timeout) as response:
                     res_bytes = response.read()
                     res_data = json.loads(res_bytes.decode('utf-8'))
                     candidates = res_data.get('candidates', [])
+                    elapsed = time.monotonic() - model_start
                     if candidates:
                         content = candidates[0].get('content', {})
                         content_parts = content.get('parts', [])
                         if content_parts and 'text' in content_parts[0]:
                             text_out = content_parts[0]['text']
+                            print(f"[AI TIMING] Gemini model {model} END: {elapsed:.2f}s (SUCCESS)")
                             try:
                                 trace_dir = os.path.join(settings.BASE_DIR, 'request_trace')
                                 os.makedirs(trace_dir, exist_ok=True)
@@ -81,23 +95,26 @@ class GeminiProvider(BaseAIProvider):
                             except Exception:
                                 pass
                             return text_out
+                    print(f"[AI TIMING] Gemini model {model} END: {elapsed:.2f}s (EMPTY CANDIDATES)")
                     return ""
             except urllib.error.HTTPError as e:
+                elapsed = time.monotonic() - model_start
                 error_body = e.read().decode('utf-8', errors='ignore')
                 last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
-                print(f"[GEMINI MODEL {model} ERROR] {last_error}")
+                print(f"[AI TIMING] Gemini model {model} END: {elapsed:.2f}s (HTTP {e.code} ERROR: {last_error[:120]})")
                 if e.code in [429, 404, 403]:
                     ModelRegistryManager.handle_model_error("GeminiProvider", model, f"HTTP {e.code}: {error_body}")
                 continue
             except Exception as e:
+                elapsed = time.monotonic() - model_start
                 last_error = f"Gemini Request Failed ({model}): {str(e)}"
-                print(f"[GEMINI WARNING] Model {model} request failed: {e}")
+                print(f"[AI TIMING] Gemini model {model} END: {elapsed:.2f}s (FAILED: {last_error[:120]})")
                 continue
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        return self._call_api(prompt, system_instruction)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
+        return self._call_api(prompt, system_instruction, timeout=timeout)
 
     def evaluate_answer(
         self,
@@ -218,7 +235,7 @@ Return ONLY a valid JSON object in this exact schema:
 
         return {"routine_schedule": schedule}
 
-    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         doc_text = str(qp_text_or_bytes) if (qp_text_or_bytes and isinstance(qp_text_or_bytes, str)) else 'Read directly from uploaded image/document'
         
         prompt = f"""
@@ -251,7 +268,7 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
 }}
 """
         try:
-            response_text = self._call_api(prompt, system_instruction="Return ONLY raw JSON without commentary.", image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files)
+            response_text = self._call_api(prompt, system_instruction="Return ONLY raw JSON without commentary.", image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files, timeout=timeout)
             
             cleaned = re.sub(r'```json\s*', '', response_text)
             cleaned = re.sub(r'```\s*', '', cleaned).strip()

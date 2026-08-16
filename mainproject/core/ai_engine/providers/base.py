@@ -47,7 +47,7 @@ class BaseAIProvider(ABC):
             pass
 
     @abstractmethod
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
         """Generates raw text completion from prompt."""
         pass
 
@@ -59,7 +59,8 @@ class BaseAIProvider(ABC):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        timeout: Optional[float] = None
     ) -> Dict[str, Any]:
         """
         Evaluates a student's answer segment against rubric criteria and returns structured JSON.
@@ -67,24 +68,24 @@ class BaseAIProvider(ABC):
         pass
 
     @abstractmethod
-    def analyze_question_paper(self, paper_text_or_image: Any) -> Dict[str, Any]:
+    def analyze_question_paper(self, paper_text_or_image: Any, timeout: Optional[float] = None) -> Dict[str, Any]:
         """
         Analyzes a question paper to extract structured questions, marks, and subquestions.
         """
         pass
 
     @abstractmethod
-    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None) -> Dict[str, Any]:
+    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         """
         Generates a suggested grading rubric, key points, and mark distribution for a question.
         """
         pass
 
-    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg", timeout: Optional[float] = None) -> str:
         """Extracts text from document image via multimodal vision."""
         return ""
 
-    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         """Base implementation for analyzing academic question papers across all providers."""
         doc_text = str(qp_text_or_bytes) if (qp_text_or_bytes and isinstance(qp_text_or_bytes, str)) else 'Academic Examination Paper'
         
@@ -117,7 +118,7 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
   ]
 }}
 """
-        response_text = self.generate_completion(prompt, system_instruction="Return ONLY raw JSON without commentary.")
+        response_text = self.generate_completion(prompt, system_instruction="Return ONLY raw JSON without commentary.", timeout=timeout)
         cleaned = re.sub(r'```json\s*', '', response_text)
         cleaned = re.sub(r'```\s*', '', cleaned).strip()
 

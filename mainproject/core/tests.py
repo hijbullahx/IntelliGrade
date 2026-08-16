@@ -390,6 +390,71 @@ class AIFailoverResilienceTestCase(TestCase):
             self.assertEqual(data['data']['questions'][0]['question_number'], 'Q1')
             self.assertEqual(data['data']['questions'][1]['question_number'], 'Q2')
 
+    def test_global_failover_budget_exhaustion_skips_next_provider(self):
+        import time
+
+        def slow_failing_gemini(*args, **kwargs):
+            time.sleep(1.2)
+            raise Exception("Gemini timed out slowly")
+
+        def should_not_be_called_groq(*args, **kwargs):
+            raise AssertionError("Groq should NOT have been called because global budget was exhausted!")
+
+        self.gemini.analyze_academic_exam_paper = slow_failing_gemini
+        self.groq.analyze_academic_exam_paper = should_not_be_called_groq
+
+        doc_text = """
+        Question 1: Explain the principles of Distributed Systems. [10 marks]
+        Question 2: Describe the Byzantine Generals Problem. [15 marks]
+        """
+
+        # Set strict global budget of 1.5s
+        with patch.dict('os.environ', {'AI_TOTAL_TIMEOUT_BUDGET': '1.5', 'AI_REQUEST_TIMEOUT': '2.0'}):
+            start_t = time.monotonic()
+            result = self.failover_provider.analyze_academic_exam_paper(doc_text)
+            elapsed = time.monotonic() - start_t
+
+            self.assertLess(elapsed, 2.5) # Total execution finished rapidly
+            self.assertIn('questions', result)
+            self.assertGreaterEqual(len(result['questions']), 2)
+            q_nums = [q['question_number'] for q in result['questions']]
+            self.assertIn('Q1', q_nums)
+            self.assertIn('Q2', q_nums)
+
+    @patch('urllib.request.urlopen')
+    def test_successful_provider_response_within_budget(self, mock_urlopen):
+        # Gemini succeeds immediately within budget
+        gemini_resp = self._mock_http_response({
+            'candidates': [{
+                'content': {
+                    'parts': [{
+                        'text': json.dumps({
+                            'questions': [{
+                                'question_number': 'Q1',
+                                'prompt_text': 'What is ACID in Databases?',
+                                'allocated_marks': 10.0,
+                                'question_type': ['Theory'],
+                                'command_verbs': ['Explain'],
+                                'bloom_level': 'Understand',
+                                'co_mapping': 'CO1',
+                                'po_mapping': ['PO1'],
+                                'criteria': 'Atomicity, Consistency, Isolation, Durability.',
+                                'ideal_answer': 'ACID guarantees database transaction reliability.'
+                            }]
+                        })
+                    }]
+                }
+            }]
+        })
+        mock_urlopen.return_value = gemini_resp
+
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: What is ACID in Databases? [10 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(len(result['questions']), 1)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+        self.assertEqual(result['questions'][0]['prompt_text'], 'What is ACID in Databases?')
+
+
 
 
 
