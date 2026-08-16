@@ -32,3 +32,7 @@ Thumbs.db
 
 # Agent metadata
 .gemini/
+
+# Debug artifacts & traces
+request_trace/
+**/request_trace/

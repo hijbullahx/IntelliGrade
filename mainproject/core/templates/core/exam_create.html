@@ -3,52 +3,63 @@
 {% block title %}Create Examination & Assign Faculty | IntelliGrade{% endblock %}
 
 {% block content %}
+<style>
+@keyframes laser-scan {
+    0% { top: 0%; opacity: 0.8; }
+    50% { top: 96%; opacity: 1; }
+    100% { top: 0%; opacity: 0.8; }
+}
+.animate-laser-scan {
+    animation: laser-scan 1.6s ease-in-out infinite;
+}
+</style>
+
 <div class="max-w-4xl mx-auto space-y-8">
     
-    <!-- Title -->
-    <div class="flex items-center justify-between">
+    <!-- Title & Quick Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 text-xs font-semibold mb-2">
+                <i data-lucide="calendar" class="w-3.5 h-3.5"></i> Examination Scheduler & Faculty Assignment
+            </div>
             <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
                 <i data-lucide="plus-circle" class="w-6 h-6 text-brand-500"></i> Create Examination & Assign Faculty
             </h1>
             <p class="theme-text-muted text-sm mt-1">Configure exam parameters, select course modules, and assign registered faculty examiners.</p>
         </div>
-        <a href="{% url 'teacher_dashboard' %}" class="text-xs theme-text-muted hover:text-brand-500 flex items-center gap-1 transition-colors">
-            &larr; Back to Dashboard
-        </a>
-    </div>
-
-    <!-- AI Routine Auto-Reader Panel -->
-    <div class="glass-card p-6 rounded-2xl border-l-4 border-l-purple-500 space-y-4 shadow-xl">
-        <div class="flex items-center justify-between">
-            <h2 class="text-sm font-bold theme-text-primary flex items-center gap-2">
-                <i data-lucide="sparkles" class="w-4 h-4 text-purple-500"></i> AI Exam Routine Auto-Reader & Vision OCR
-            </h2>
-            <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold border border-purple-500/20">AI OCR Active</span>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'teacher_dashboard' %}" class="text-xs theme-text-muted hover:text-brand-500 flex items-center gap-1 transition-colors px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                &larr; Dashboard
+            </a>
         </div>
-        <p class="text-xs theme-text-muted">Paste your official exam routine text or upload a routine document/image below. The AI scanner will first extract the full routine content as-is, then verify if courses and faculty examiners exist in your system database.</p>
-
-        <form id="routineScanForm" class="space-y-3">
-            {% csrf_token %}
-            
-            <div>
-                <textarea id="routineText" rows="3" placeholder="Paste routine schedule here (e.g. CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing)..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
-            </div>
-            
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <label class="block text-[10px] theme-text-muted mb-0.5 font-bold">Upload Routine Document / Image (PDF, PNG, JPG)</label>
-                    <input type="file" id="routineFile" accept="image/*,.pdf,.txt" class="text-xs theme-text-muted">
-                </div>
-                <button type="button" id="scanBtn" onclick="runAIRoutineScan()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center justify-center gap-2">
-                    <i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI
-                </button>
-            </div>
-        </form>
-
-        <!-- AI Routine Detection Result Alert -->
-        <div id="aiScanResult" class="hidden p-4 rounded-xl border transition-all text-xs space-y-4"></div>
     </div>
+
+    <!-- AI Routine Auto-Reader Quick Action Banner -->
+    <div class="glass-card p-6 rounded-2xl border-l-4 border-l-purple-500 flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-xl relative overflow-hidden">
+        <div class="space-y-1.5 z-10">
+            <div class="flex items-center gap-2">
+                <span class="p-1.5 rounded-lg bg-purple-500/10 text-purple-500">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                </span>
+                <h2 class="text-sm font-bold theme-text-primary">AI Exam Routine Auto-Reader & Vision OCR</h2>
+                <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 text-[10px] font-bold border border-purple-500/20">AI Engine Ready</span>
+            </div>
+            <p class="text-xs theme-text-muted max-w-xl">
+                Have an official Exam Routine (PDF, photos, or camera capture)? Launch the AI Scanner pop-up to upload one or multiple photos, parse schedules, and auto-match examiners.
+            </p>
+        </div>
+        
+        <div class="flex items-center gap-3 z-10">
+            <button type="button" onclick="openAIRoutineModal()" class="px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 hover:shadow-purple-600/50 transition-all flex items-center justify-center gap-2 group">
+                <i data-lucide="cpu" class="w-4 h-4 group-hover:rotate-12 transition-transform"></i>
+                <span>Open Routine Scanner</span>
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Routine Detection Result Container (Rendered on main page) -->
+    <div id="aiScanResult" class="hidden p-5 rounded-2xl border transition-all text-xs space-y-4 shadow-lg"></div>
 
     <!-- Exam Form Card -->
     <form id="examForm" method="POST" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl">
@@ -114,7 +125,233 @@
 
 </div>
 
+<!-- ========================================================================= -->
+<!-- AI Exam Routine Scanner & OCR Terminal Pop-up Modal                        -->
+<!-- ========================================================================= -->
+<div id="routineScanModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0 flex flex-col max-h-[92vh]">
+        
+        <!-- Modal macOS Header Bar -->
+        <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block shadow-[0_0_8px_#f43f5e]"></span>
+                    <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block shadow-[0_0_8px_#f59e0b]"></span>
+                    <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block shadow-[0_0_8px_#10b981]"></span>
+                </div>
+                <div class="h-4 w-px bg-slate-800 mx-1"></div>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-purple-400"></i>
+                    <span class="font-mono text-xs font-bold text-white tracking-wide">INTELLIGRADE ROUTINE SCANNER & VISION OCR</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="modalProviderBadge" class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-mono font-bold">
+                    AI Active
+                </span>
+                <button type="button" onclick="closeAIRoutineModal()" class="text-slate-400 hover:text-white font-extrabold text-xl px-2 py-0.5 rounded-lg hover:bg-slate-800 transition-colors" title="Close Pop-up">&times;</button>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: Input & Configuration View        -->
+        <!-- ========================================== -->
+        <div id="routineModalInputView" class="p-6 space-y-5 flex-1 overflow-y-auto">
+            
+            <!-- Tab Switcher -->
+            <div class="flex items-center gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+                <button type="button" id="tabUploadBtn" onclick="switchModalTab('upload')" class="flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow">
+                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload Document / Photo(s)
+                </button>
+                <button type="button" id="tabTextBtn" onclick="switchModalTab('text')" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
+                    <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Paste Routine Text
+                </button>
+            </div>
+
+            <!-- TAB 1 CONTENT: File Dropzone & Camera Options -->
+            <div id="modalTabUploadContent" class="space-y-4">
+                
+                <!-- Dual Action Zone: Browse / Drag Files OR Live Camera -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    <!-- 1. Browse / Drag Dropzone -->
+                    <label for="modalRoutineFileInput" id="modalDropzone" class="border-2 border-dashed border-purple-500/30 hover:border-purple-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Browse / Drag Files</p>
+                            <p class="text-[10px] text-slate-400">PDF, PNG, JPG (Multi-select)</p>
+                        </div>
+                    </label>
+
+                    <!-- 2. Direct Device Camera Capture Option -->
+                    <label for="modalCameraInput" class="border-2 border-dashed border-cyan-500/30 hover:border-cyan-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="camera" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Capture from Camera</p>
+                            <p class="text-[10px] text-slate-400">Take photo with device camera</p>
+                        </div>
+                    </label>
+
+                </div>
+
+                <!-- Hidden Inputs for File Browser & Direct Camera -->
+                <input type="file" id="modalRoutineFileInput" onchange="handleModalFilesSelect(this)" accept="image/*,.pdf,.txt" multiple class="hidden">
+                <input type="file" id="modalCameraInput" onchange="handleModalCameraCapture(this)" accept="image/*" capture="environment" class="hidden">
+
+                <!-- Selected Files / Photos Gallery Container -->
+                <div id="modalFilesGallerySection" class="hidden space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Staged Routine Photos / Documents:
+                        </span>
+                        <span id="modalTotalFilesCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold font-mono">
+                            0 Files
+                        </span>
+                    </div>
+
+                    <!-- Dynamic List of Uploaded/Snapped Photos -->
+                    <div id="modalFilesList" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Add More Photos / Files Action Bar -->
+                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                        <div class="flex items-center gap-2">
+                            <label for="modalRoutineFileInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="plus" class="w-3 h-3"></i> Add More Files
+                            </label>
+                            <label for="modalCameraInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded-lg border border-cyan-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="camera" class="w-3 h-3"></i> Take Another Photo
+                            </label>
+                        </div>
+                        <button type="button" onclick="clearAllModalFiles()" class="text-[11px] text-rose-400 hover:underline flex items-center gap-1">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2 CONTENT: Raw Textarea -->
+            <div id="modalTabTextContent" class="hidden space-y-2">
+                <label class="block text-xs font-bold text-slate-300">Paste Examination Routine Text</label>
+                <textarea id="modalRoutineTextArea" rows="5" placeholder="Paste routine schedule here (e.g.&#10;CSC 437 (Q) - Operating Systems&#10;Date: 2026-05-19 (Tuesday) 09:00am - 12:00pm&#10;Course Faculty: Kazi Johir Raihan)..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none leading-relaxed"></textarea>
+                <p class="text-[10px] text-slate-400">The AI parser extracts dates, course codes, exam slots, and instructor names directly from pasted text.</p>
+            </div>
+
+            <!-- Modal Info Banner -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-400">
+                <i data-lucide="info" class="w-4 h-4 text-purple-400 shrink-0 mt-0.5"></i>
+                <p>Upon scanning, the AI engine will parse all schedule items across all photos/pages, verify database matches, and auto-close this pop-up when completed.</p>
+            </div>
+
+            <!-- Modal Action Controls -->
+            <div class="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button type="button" onclick="closeAIRoutineModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-all">Cancel</button>
+                <button type="button" id="modalStartScanBtn" onclick="runAIRoutineScanFromModal()" class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> Start AI Routine Scan
+                </button>
+            </div>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: Live Scanning & Progress Terminal -->
+        <!-- ========================================== -->
+        <div id="routineModalProgressView" class="hidden p-6 space-y-4 flex-1 flex flex-col min-h-0 bg-slate-950">
+            
+            <!-- Live Progress Header -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span id="routineScanStatusBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5 animate-pulse">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> LIVE EXECUTING
+                    </span>
+                    <span id="routineScanTimer" class="font-mono text-xs text-amber-400 font-bold">0.0s</span>
+                </div>
+                <div class="flex items-center gap-2 font-mono text-xs">
+                    <span class="text-slate-400">Pipeline:</span>
+                    <span id="routineScanProgressPercent" class="text-purple-400 font-bold">0%</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] font-mono">
+                    <span id="routineScanCurrentStage" class="text-cyan-400 font-bold">Initializing AI Routine OCR Engine...</span>
+                </div>
+                <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                    <div id="routineScanProgressBar" class="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-400 rounded-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <!-- Laser Scanning & Terminal Split Body -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0">
+                
+                <!-- Left: Laser Scanning Animation Viewport -->
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between items-center relative overflow-hidden">
+                    <div class="text-center w-full mb-1">
+                        <span class="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Vision Scanner</span>
+                        <span class="text-[11px] font-mono text-emerald-400 font-bold truncate block" id="routineScannerFileLabel">Document Ingestion</span>
+                    </div>
+
+                    <!-- Scanning Graphic with Laser Beam -->
+                    <div class="relative w-full h-36 rounded-lg overflow-hidden border border-purple-500/40 bg-black flex items-center justify-center shadow-inner">
+                        <div class="text-center space-y-1.5 opacity-80">
+                            <i data-lucide="file-spreadsheet" class="w-10 h-10 text-purple-400 mx-auto animate-pulse"></i>
+                            <span class="text-[10px] font-mono text-purple-300 block">Multimodal OCR Matrix</span>
+                        </div>
+                        
+                        <!-- Laser Beam -->
+                        <div class="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_#a855f7] animate-laser-scan"></div>
+                    </div>
+
+                    <div class="w-full text-center mt-2">
+                        <span class="text-[10px] font-mono text-slate-500">Spatial Line Matrix Analysis</span>
+                    </div>
+                </div>
+
+                <!-- Right: Real-time Terminal Log Console Stream (Spans 2 cols) -->
+                <div class="col-span-2 flex flex-col min-h-0 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <i data-lucide="terminal" class="w-3 h-3 text-emerald-400"></i> Real-Time Pipeline Execution Feed
+                        </span>
+                        <span class="text-[9px] font-mono text-slate-500">Auto-close on completion</span>
+                    </div>
+                    
+                    <div id="routineScanLogConsole" class="flex-1 bg-black font-mono text-[11px] text-emerald-400 p-3.5 rounded-xl h-44 overflow-y-auto border border-slate-800 space-y-1 shadow-inner select-text">
+                        <!-- Dynamic logs appended here -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer Status -->
+            <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2 text-slate-400 text-[11px]">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                    <span>Cross-matching with course & faculty database...</span>
+                </div>
+                <div id="routineScanErrorRetryControls" class="hidden flex items-center gap-2">
+                    <button type="button" onclick="resetAIRoutineModalToInput()" class="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg transition-all">
+                        &larr; Back to Input
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
 <script>
+// ============================================================================
+// CSRF & Helper Functions
+// ============================================================================
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -132,32 +369,272 @@ function getCookie(name) {
 
 function getCsrfToken() {
     const cookieToken = getCookie('csrftoken');
-    if (cookieToken) {
-        return cookieToken;
-    }
-
+    if (cookieToken) return cookieToken;
     const hiddenToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
     return hiddenToken ? hiddenToken.value : '';
 }
 
-function runAIRoutineScan() {
-    const routineText = document.getElementById('routineText').value;
-    const routineFile = document.getElementById('routineFile').files[0];
-    const resultBox = document.getElementById('aiScanResult');
-    const scanBtn = document.getElementById('scanBtn');
+// ============================================================================
+// Modal Open / Close / Tab & Files Management
+// ============================================================================
+let activeModalTab = 'upload';
+let uploadedRoutineFiles = []; // Array of File objects (supports multi-photo)
+let scanStartTime = 0;
+let scanTimerInterval = null;
 
-    if (!routineText.trim() && !routineFile) {
-        alert('Please enter routine text or upload a routine file before scanning.');
+function openAIRoutineModal() {
+    const modal = document.getElementById('routineScanModal');
+    if (!modal) return;
+    
+    resetAIRoutineModalToInput();
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    lucide.createIcons();
+}
+
+function closeAIRoutineModal() {
+    const modal = document.getElementById('routineScanModal');
+    if (!modal) return;
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+    if (scanTimerInterval) clearInterval(scanTimerInterval);
+}
+
+function resetAIRoutineModalToInput() {
+    document.getElementById('routineModalInputView').classList.remove('hidden');
+    document.getElementById('routineModalProgressView').classList.add('hidden');
+    document.getElementById('routineScanErrorRetryControls').classList.add('hidden');
+    if (scanTimerInterval) clearInterval(scanTimerInterval);
+}
+
+function switchModalTab(tab) {
+    activeModalTab = tab;
+    const uploadBtn = document.getElementById('tabUploadBtn');
+    const textBtn = document.getElementById('tabTextBtn');
+    const uploadContent = document.getElementById('modalTabUploadContent');
+    const textContent = document.getElementById('modalTabTextContent');
+
+    if (tab === 'upload') {
+        uploadBtn.className = "flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow";
+        textBtn.className = "flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+        uploadContent.classList.remove('hidden');
+        textContent.classList.add('hidden');
+    } else {
+        textBtn.className = "flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow";
+        uploadBtn.className = "flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+        textContent.classList.remove('hidden');
+        uploadContent.classList.add('hidden');
+    }
+}
+
+// ============================================================================
+// Multi-File & Camera Handlers
+// ============================================================================
+function handleModalFilesSelect(input) {
+    if (input.files && input.files.length > 0) {
+        addFilesToList(Array.from(input.files));
+        input.value = ''; // Reset so same file can be re-selected if desired
+    }
+}
+
+function handleModalCameraCapture(input) {
+    if (input.files && input.files.length > 0) {
+        addFilesToList(Array.from(input.files));
+        input.value = '';
+    }
+}
+
+function addFilesToList(newFiles) {
+    newFiles.forEach(f => {
+        uploadedRoutineFiles.push(f);
+    });
+    renderFilesGallery();
+}
+
+function removeFileFromList(index) {
+    if (index >= 0 && index < uploadedRoutineFiles.length) {
+        uploadedRoutineFiles.splice(index, 1);
+        renderFilesGallery();
+    }
+}
+
+function clearAllModalFiles() {
+    uploadedRoutineFiles = [];
+    renderFilesGallery();
+}
+
+function renderFilesGallery() {
+    const gallerySection = document.getElementById('modalFilesGallerySection');
+    const listContainer = document.getElementById('modalFilesList');
+    const badge = document.getElementById('modalTotalFilesCountBadge');
+
+    if (!gallerySection || !listContainer) return;
+
+    if (uploadedRoutineFiles.length === 0) {
+        gallerySection.classList.add('hidden');
+        listContainer.innerHTML = '';
         return;
     }
 
-    scanBtn.disabled = true;
-    scanBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Running AI Routine Scan...`;
+    gallerySection.classList.remove('hidden');
+    badge.innerText = `${uploadedRoutineFiles.length} ${uploadedRoutineFiles.length === 1 ? 'File' : 'Files'}`;
+
+    let html = '';
+    uploadedRoutineFiles.forEach((file, index) => {
+        const isImg = file.type.startsWith('image/');
+        const previewUrl = isImg ? URL.createObjectURL(file) : '';
+        const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+
+        html += `
+        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2.5 min-w-0">
+                ${isImg ? 
+                    `<img src="${previewUrl}" class="w-9 h-9 rounded-lg object-cover border border-purple-500/30 bg-slate-900 shrink-0">` : 
+                    `<div class="w-9 h-9 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0"><i data-lucide="file-text" class="w-4 h-4"></i></div>`
+                }
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <span class="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono text-[9px] font-bold">#${index + 1}</span>
+                        <p class="font-mono font-bold text-white truncate max-w-[130px] sm:max-w-[180px]">${file.name}</p>
+                    </div>
+                    <p class="text-[10px] text-slate-400">${sizeStr}</p>
+                </div>
+            </div>
+            <button type="button" onclick="removeFileFromList(${index})" class="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Remove Photo">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+        `;
+    });
+
+    listContainer.innerHTML = html;
+    lucide.createIcons();
+}
+
+// Drag & Drop event bindings
+const dropzone = document.getElementById('modalDropzone');
+if (dropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('border-purple-500', 'bg-slate-900');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('border-purple-500', 'bg-slate-900');
+        }, false);
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt.files && dt.files.length > 0) {
+            addFilesToList(Array.from(dt.files));
+        }
+    }, false);
+}
+
+// ============================================================================
+// Real-time Scanning Progress & Execution Stream
+// ============================================================================
+function appendRoutineScanLog(msg, type = 'info') {
+    const consoleEl = document.getElementById('routineScanLogConsole');
+    if (!consoleEl) return;
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    
+    let colorClass = 'text-emerald-400';
+    if (type === 'warn') colorClass = 'text-amber-400';
+    if (type === 'error') colorClass = 'text-rose-400 font-bold';
+    if (type === 'stage') colorClass = 'text-cyan-400 font-bold';
+    if (type === 'success') colorClass = 'text-purple-300 font-bold';
+
+    const line = document.createElement('div');
+    line.className = `py-0.5 ${colorClass}`;
+    line.innerHTML = `<span class="text-slate-500 font-mono text-[10px]">[${timeStr}]</span> ${msg}`;
+    consoleEl.appendChild(line);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function updateRoutineScanProgress(percent, stageText) {
+    const bar = document.getElementById('routineScanProgressBar');
+    const percentEl = document.getElementById('routineScanProgressPercent');
+    const stageEl = document.getElementById('routineScanCurrentStage');
+    
+    if (bar) bar.style.width = percent + '%';
+    if (percentEl) percentEl.innerText = percent + '%';
+    if (stageEl) stageEl.innerText = stageText;
+}
+
+// ============================================================================
+// Run Routine Scan from Modal
+// ============================================================================
+function runAIRoutineScanFromModal() {
+    const routineText = document.getElementById('modalRoutineTextArea').value.trim();
+    const hasFiles = uploadedRoutineFiles.length > 0;
+
+    if (!routineText && !hasFiles) {
+        alert('Please select/capture routine photo(s) or paste routine text before scanning.');
+        return;
+    }
+
+    // Switch to Progress View
+    document.getElementById('routineModalInputView').classList.add('hidden');
+    document.getElementById('routineModalProgressView').classList.remove('hidden');
+    document.getElementById('routineScanErrorRetryControls').classList.add('hidden');
+
+    const consoleEl = document.getElementById('routineScanLogConsole');
+    consoleEl.innerHTML = '';
+
+    // Initialize Progress & Timer
+    updateRoutineScanProgress(10, "Stage 1: Multi-Page Document Ingestion & Spatial OCR Ingestion...");
+    document.getElementById('routineScanStatusBadge').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> LIVE EXECUTING`;
+    document.getElementById('routineScanStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5 animate-pulse";
+
+    scanStartTime = Date.now();
+    if (scanTimerInterval) clearInterval(scanTimerInterval);
+    scanTimerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - scanStartTime) / 1000).toFixed(1);
+        document.getElementById('routineScanTimer').innerText = `${elapsed}s`;
+    }, 100);
+
+    if (hasFiles) {
+        document.getElementById('routineScannerFileLabel').innerText = `${uploadedRoutineFiles.length} Photo(s)/Document(s)`;
+        appendRoutineScanLog(`📁 Ingested ${uploadedRoutineFiles.length} file(s)/photo(s) for multi-page OCR analysis`, 'success');
+        uploadedRoutineFiles.forEach((f, idx) => {
+            appendRoutineScanLog(`  ➔ File #${idx + 1}: ${f.name} (${(f.size / 1024).toFixed(1)} KB)`, 'info');
+        });
+    } else {
+        document.getElementById('routineScannerFileLabel').innerText = "Raw Text Schedule";
+        appendRoutineScanLog(`📝 Ingested Raw Text Buffer (${routineText.length} characters)`, 'success');
+    }
+
+    appendRoutineScanLog("🤖 Initializing Active AI Engine: Failover AI Provider (Gemini / Groq / OpenAI)...", 'stage');
+
+    // Simulate staged progress
+    setTimeout(() => {
+        updateRoutineScanProgress(35, "Stage 2: Spatial Line Clustering & Vision Matrix Analysis across all pages...");
+        appendRoutineScanLog("🔍 Running PyMuPDF & EasyOCR multi-page spatial line reconstructor...", "info");
+    }, 500);
+
+    setTimeout(() => {
+        updateRoutineScanProgress(65, "Stage 3: AI Provider Multimodal Examination Schedule Extraction...");
+        appendRoutineScanLog("🧠 Querying AI Provider & validating exam schedule schema...", "stage");
+    }, 1400);
 
     const formData = new FormData();
     formData.append('routine_text', routineText);
-    if (routineFile) {
-        formData.append('routine_file', routineFile);
+    
+    // Append all staged files for multi-photo processing
+    if (hasFiles) {
+        uploadedRoutineFiles.forEach(file => {
+            formData.append('routine_files', file);
+        });
+        formData.append('routine_file', uploadedRoutineFiles[0]); // Backward compatibility
     }
     formData.append('csrfmiddlewaretoken', getCsrfToken());
 
@@ -186,34 +663,77 @@ function runAIRoutineScan() {
         return data;
     })
     .then(data => {
-        scanBtn.disabled = false;
-        scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
+        if (scanTimerInterval) clearInterval(scanTimerInterval);
+
+        updateRoutineScanProgress(100, "Stage 4: Complete! Cross-referencing Database Matches...");
+        appendRoutineScanLog(`✅ Extraction Successful! Found ${(data.routine_items || []).length} course schedule item(s).`, 'success');
+        appendRoutineScanLog("✨ Matching courses & faculty with institutional database records...", 'stage');
+
+        document.getElementById('routineScanStatusBadge').innerHTML = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> COMPLETED`;
+        document.getElementById('routineScanStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5";
         lucide.createIcons();
 
-        console.log("[AI ROUTINE SCAN RESPONSE RECEIVED]", data);
-
-        // Store last scan data in window memory for zero-latency local re-matching
+        // Store last scan data in window memory
         window.lastAIRoutineScanResult = data;
+        
+        // Render Extracted Routine Table on the main page
         renderExtractedRoutineTable(data);
+
+        // AUTO-CLOSE MODAL AFTER SHORT DELAY (Auto-close requirement)
+        setTimeout(() => {
+            closeAIRoutineModal();
+
+            // Show floating toast alert on main page
+            const alertBox = document.createElement('div');
+            alertBox.className = "fixed bottom-5 right-5 z-50 p-4 rounded-xl bg-purple-600 text-white font-bold text-xs shadow-2xl flex items-center gap-2.5 animate-bounce";
+            alertBox.innerHTML = `<i data-lucide="check-circle-2" class="w-5 h-5"></i> Exam Routine Scanned! ${(data.routine_items || []).length} schedule item(s) extracted.`;
+            document.body.appendChild(alertBox);
+            lucide.createIcons();
+
+            setTimeout(() => { alertBox.remove(); }, 4000);
+
+            // Scroll to results box smoothly
+            const resultBox = document.getElementById('aiScanResult');
+            if (resultBox) {
+                resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 700);
     })
     .catch(err => {
+        if (scanTimerInterval) clearInterval(scanTimerInterval);
         console.error("[AI ROUTINE SCAN JS ERROR]", err);
-        scanBtn.disabled = false;
-        scanBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i> Scan Routine with AI`;
+
+        updateRoutineScanProgress(100, "Error: Routine Scan Failed");
+        appendRoutineScanLog(`❌ Error: ${err.message}`, 'error');
+
+        document.getElementById('routineScanStatusBadge').innerHTML = `<i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> FAILED`;
+        document.getElementById('routineScanStatusBadge').className = "px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5";
+        document.getElementById('routineScanErrorRetryControls').classList.remove('hidden');
         lucide.createIcons();
-        alert(`Routine scanning failed: ${err.message}`);
     });
 }
 
+function runAIRoutineScan() {
+    openAIRoutineModal();
+}
+
+// ============================================================================
+// Render Extracted Routine Table (Main Page View)
+// ============================================================================
 function renderExtractedRoutineTable(data) {
     const resultBox = document.getElementById('aiScanResult');
     if (!resultBox) return;
     resultBox.classList.remove('hidden');
 
     let html = `<div class="space-y-4">`;
-    let statusHeader = `<span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">✨ Provider: ${data.provider_name || 'AI Engine'}</span>`;
+    let statusHeader = `<div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 font-bold text-[10px]">✨ Provider: ${data.provider_name || 'AI Engine'}</span>
+        <button type="button" onclick="openAIRoutineModal()" class="px-2.5 py-1 bg-purple-600/10 hover:bg-purple-600/20 text-purple-500 border border-purple-500/30 font-bold text-[10px] rounded-lg transition-all flex items-center gap-1">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Scan Another Routine
+        </button>
+    </div>`;
 
-    html += `<div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+    html += `<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         <h4 class="font-bold text-sm theme-text-primary flex items-center gap-2"><i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> AI Exam Routine Auto-Reader Summary:</h4>
         ${statusHeader}
     </div>`;
@@ -222,7 +742,7 @@ function renderExtractedRoutineTable(data) {
 
     if (items.length > 0) {
         html += `<div class="space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+            <div class="flex items-center justify-between">
                 <span class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
                     <i data-lucide="list-checks" class="w-4 h-4"></i> Extracted Routine Courses, Faculty Examiners, Date & Time:
                 </span>
@@ -312,7 +832,7 @@ function renderExtractedRoutineTable(data) {
 
     html += `</div>`;
     resultBox.innerHTML = html;
-    resultBox.className = "p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 transition-all text-xs";
+    resultBox.className = "glass-card p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-xl transition-all text-xs";
 
     try {
         if (data.course_found && data.course_id && document.getElementById('courseSelect')) {
@@ -334,6 +854,9 @@ function renderExtractedRoutineTable(data) {
     lucide.createIcons();
 }
 
+// ============================================================================
+// One-Click Exam Publishing from Scanned Row
+// ============================================================================
 function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMarks, courseCode) {
     btnElement.disabled = true;
     btnElement.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Publishing...`;
@@ -387,6 +910,9 @@ function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMark
     });
 }
 
+// ============================================================================
+// Zero-Latency Local Re-matching when Entity is Added
+// ============================================================================
 function syncDropdownsAndRescanRoutine() {
     fetch("{% url 'api_courses_and_faculty' %}")
     .then(r => r.json())
@@ -459,6 +985,14 @@ window.addEventListener('focus', function() {
                 syncDropdownsAndRescanRoutine();
             }
         } catch(e){}
+    }
+});
+
+// Auto-open modal if ?scan=1 in URL
+document.addEventListener("DOMContentLoaded", function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('scan') === '1' || urlParams.get('scan') === 'true') {
+        openAIRoutineModal();
     }
 });
 </script>

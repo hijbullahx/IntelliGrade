@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from config.runtime_config import (
+    build_database_config,
     build_default_allowed_hosts,
     build_default_csrf_trusted_origins,
     detect_runtime_environment,
@@ -104,15 +105,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'mainproject.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 30,
-        }
-    }
-}
+DATABASES = build_database_config(BASE_DIR)
 
 AUTH_PASSWORD_VALIDATORS = [
     {

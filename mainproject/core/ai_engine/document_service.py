@@ -40,20 +40,20 @@ class DocumentService:
         if not FITZ_AVAILABLE or not pdf_bytes.startswith(b'%PDF'):
             return {"text": "", "confidence": 0.0, "engine": "None"}
         try:
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            text_pages = []
-            for page in doc:
-                txt = page.get_text("text") or ""
-                clean_lines = []
-                for line in txt.split('\n'):
-                    s = line.strip()
-                    if s and not re.search(r'node\d{6,}', s) and not 'Skia/PDF' in s and not re.match(r'^\d+\s+\d+\s+R$', s):
-                        clean_lines.append(s)
-                if clean_lines:
-                    text_pages.append("\n".join(clean_lines))
-            extracted_text = "\n\n".join(text_pages).strip()
-            confidence = 0.98 if len(extracted_text) > 100 else 0.50
-            return {"text": extracted_text, "confidence": confidence, "engine": "PyMuPDF Native Extractor"}
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                text_pages = []
+                for page in doc:
+                    txt = page.get_text("text") or ""
+                    clean_lines = []
+                    for line in txt.split('\n'):
+                        s = line.strip()
+                        if s and not re.search(r'node\d{6,}', s) and not 'Skia/PDF' in s and not re.match(r'^\d+\s+\d+\s+R$', s):
+                            clean_lines.append(s)
+                    if clean_lines:
+                        text_pages.append("\n".join(clean_lines))
+                extracted_text = "\n\n".join(text_pages).strip()
+                confidence = 0.98 if len(extracted_text) > 100 else 0.50
+                return {"text": extracted_text, "confidence": confidence, "engine": "PyMuPDF Native Extractor"}
         except Exception as e:
             print(f"[DOCUMENT SERVICE WARNING] PyMuPDF Native OCR Error: {e}")
             return {"text": "", "confidence": 0.0, "engine": "PyMuPDF Error"}
@@ -191,11 +191,11 @@ class DocumentService:
         if FITZ_AVAILABLE and doc_bytes.startswith(b'%PDF'):
             # PDF Processing Pipeline
             try:
-                doc = fitz.open(stream=doc_bytes, filetype="pdf")
-                for page_num, page in enumerate(doc, start=1):
-                    pix = page.get_pixmap(dpi=300)
-                    p_bytes = pix.tobytes("png")
-                    page_renders.append(p_bytes)
+                with fitz.open(stream=doc_bytes, filetype="pdf") as doc:
+                    for page_num, page in enumerate(doc, start=1):
+                        pix = page.get_pixmap(dpi=300)
+                        p_bytes = pix.tobytes("png")
+                        page_renders.append(p_bytes)
 
                     # 1. Detect Tables & Grids in Page Image
                     page_tables = cls.detect_tables_and_grids(p_bytes, page_num=page_num, save_dir=save_dir, subfolder=subfolder)
@@ -601,22 +601,22 @@ class DocumentService:
 
             if not words and pdf_bytes:
                 try:
-                    pdf_doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                    page = pdf_doc[page_num - 1]
-                    scale_x = w / float(page.rect.width) if page.rect.width > 0 else 1.0
-                    scale_y = h / float(page.rect.height) if page.rect.height > 0 else 1.0
-                    
-                    for w_tuple in page.get_text("words"):
-                        x0, y0, x1, y1, w_text = w_tuple[0], w_tuple[1], w_tuple[2], w_tuple[3], w_tuple[4]
-                        wx1, wy1 = int(x0 * scale_x), int(y0 * scale_y)
-                        wx2, wy2 = int(x1 * scale_x), int(y1 * scale_y)
-                        if w_text.strip():
-                            words.append({
-                                "bbox": [wx1, wy1, wx2, wy2],
-                                "text": w_text.strip(),
-                                "xc": (wx1 + wx2) / 2.0,
-                                "yc": (wy1 + wy2) / 2.0
-                            })
+                    with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf_doc:
+                        page = pdf_doc[page_num - 1]
+                        scale_x = w / float(page.rect.width) if page.rect.width > 0 else 1.0
+                        scale_y = h / float(page.rect.height) if page.rect.height > 0 else 1.0
+                        
+                        for w_tuple in page.get_text("words"):
+                            x0, y0, x1, y1, w_text = w_tuple[0], w_tuple[1], w_tuple[2], w_tuple[3], w_tuple[4]
+                            wx1, wy1 = int(x0 * scale_x), int(y0 * scale_y)
+                            wx2, wy2 = int(x1 * scale_x), int(y1 * scale_y)
+                            if w_text.strip():
+                                words.append({
+                                    "bbox": [wx1, wy1, wx2, wy2],
+                                    "text": w_text.strip(),
+                                    "xc": (wx1 + wx2) / 2.0,
+                                    "yc": (wy1 + wy2) / 2.0
+                                })
                 except Exception as p_err:
                     print(f"[TEXT MATRIX DETECTOR WARNING] PyMuPDF word extraction failed: {p_err}")
 
@@ -916,8 +916,8 @@ class DocumentService:
                         if is_ok:
                             try:
                                 import fitz
-                                cdoc = fitz.open(stream=buf.tobytes(), filetype="png")
-                                cell_text = cdoc[0].get_text().strip()
+                                with fitz.open(stream=buf.tobytes(), filetype="png") as cdoc:
+                                    cell_text = cdoc[0].get_text().strip()
                             except Exception:
                                 pass
 
