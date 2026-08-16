@@ -1,2 +1,0 @@
-Question 1: Explain the MVC architecture pattern. [10 marks]
-Question 2: What is the purpose of ORM? [15 marks]

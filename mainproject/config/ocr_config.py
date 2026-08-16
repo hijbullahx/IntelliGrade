@@ -75,12 +75,21 @@ def prepare_easyocr_image(image_input: Any, max_dimension: Optional[int] = None)
         'max_dimension': max_dimension,
     }
 
+def is_easyocr_enabled() -> bool:
+    """Returns True only if EASYOCR_ENABLED environment variable is explicitly enabled."""
+    raw_val = get_env_value('EASYOCR_ENABLED', default='False')
+    return str(raw_val).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def get_ocr_reader(lang_list: Optional[list] = None) -> Any:
     """
     Lazy-loaded, thread-safe EasyOCR Reader singleton.
-    Prevents repeatedEasyOCR initialization across views and pipeline services.
+    Returns None immediately unless EASYOCR_ENABLED=True in environment.
     Auto-detects CUDA GPU availability safely.
     """
+    if not is_easyocr_enabled():
+        return None
+
     global _easyocr_reader_instance
     if lang_list is None:
         lang_list = ['en']
@@ -136,5 +145,6 @@ def get_ocr_config() -> Dict[str, Any]:
     return {
         "dpi": OCRConfig.DEFAULT_DPI,
         "gpu_accelerated": is_cuda_available(),
-        "easyocr_ready": get_ocr_reader() is not None,
+        "easyocr_enabled": is_easyocr_enabled(),
+        "easyocr_ready": get_ocr_reader() is not None if is_easyocr_enabled() else False,
     }

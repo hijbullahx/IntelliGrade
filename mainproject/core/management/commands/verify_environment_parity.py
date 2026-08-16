@@ -45,11 +45,15 @@ class Command(BaseCommand):
 
         # 4. EasyOCR Reader Acceleration / Fallback
         try:
-            from config.ocr_config import get_ocr_reader
-            ocr_ready = get_ocr_reader() is not None
+            from config.ocr_config import get_ocr_reader, is_easyocr_enabled
+            if is_easyocr_enabled():
+                ocr_ready = get_ocr_reader() is not None
+                ocr_status = 'PASS (Enabled & Ready)' if ocr_ready else 'FAIL'
+            else:
+                ocr_status = 'DISABLED (Safe for Passenger/cPanel)'
         except Exception:
-            ocr_ready = False
-        self.stdout.write(f"4. EasyOCR Reader Singleton           : {'PASS (Ready)' if ocr_ready else 'FAIL'}")
+            ocr_status = 'FAIL'
+        self.stdout.write(f"4. EasyOCR Reader Singleton           : {ocr_status}")
 
         # 5. Media & Static Directories
         media_ok = bool(settings.MEDIA_ROOT) and bool(settings.MEDIA_URL)
