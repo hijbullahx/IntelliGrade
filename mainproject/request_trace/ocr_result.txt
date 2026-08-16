@@ -1,5 +1,0 @@
---- Routine Document Page/Photo #1 (page1.png) ---
-CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing
-
---- Routine Document Page/Photo #2 (page2.png) ---
-CSE 411 Software Engineering Exam Date: 2026-08-15 Examiner: Dr. Alan Turing

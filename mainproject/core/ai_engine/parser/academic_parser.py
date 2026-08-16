@@ -49,8 +49,9 @@ class AcademicParserService:
 
         if not text_lines and page_renders:
             try:
-                from config.ocr_config import get_ocr_reader
-                reader = get_ocr_reader()
+                from config.ocr_config import get_ocr_reader, is_easyocr_enabled, prepare_easyocr_image
+                from PIL import Image as PILImg
+                import pytesseract
                 for page_idx, render_item in enumerate(page_renders, 1):
                     p_cv = None
                     if isinstance(render_item, str):
@@ -70,21 +71,40 @@ class AcademicParserService:
                     elif isinstance(render_item, np.ndarray):
                         p_cv = render_item
                     
-                    if p_cv is not None and reader is not None:
-                        working_page, _page_meta = prepare_easyocr_image(p_cv)
-                        res = reader.readtext(working_page)
-                        for bbox_pts, text_val, conf in res:
-                            if text_val.strip():
-                                ys = [pt[1] for pt in bbox_pts]
-                                xs = [pt[0] for pt in bbox_pts]
-                                text_lines.append({
-                                    "page": page_idx,
-                                    "bbox": [min(xs), min(ys), max(xs), max(ys)],
-                                    "text": text_val.strip()
-                                })
-                        print(f"  [DOM OCR FALLBACK SUCCESS] Extracted {len(text_lines)} text items from page_renders.")
-                        for dom_item in text_lines[:15]:
-                            print(f"    - Page {dom_item['page']}, Y={dom_item['bbox'][1]}: {dom_item['text']}")
+                    if p_cv is not None:
+                        # 1. Try PyTesseract first
+                        try:
+                            pil_img = PILImg.fromarray(cv2.cvtColor(p_cv, cv2.COLOR_BGR2RGB))
+                            data = pytesseract.image_to_data(pil_img, output_type=pytesseract.Output.DICT)
+                            for i in range(len(data.get('text', []))):
+                                t_val = str(data['text'][i]).strip()
+                                if t_val:
+                                    bx, by, bw, bh = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+                                    text_lines.append({
+                                        "page": page_idx,
+                                        "bbox": [bx, by, bx + bw, by + bh],
+                                        "text": t_val
+                                    })
+                        except Exception:
+                            pass
+
+                        # 2. Try EasyOCR if explicitly enabled and PyTesseract returned no lines
+                        if not text_lines and is_easyocr_enabled():
+                            reader = get_ocr_reader()
+                            if reader is not None:
+                                working_page, _page_meta = prepare_easyocr_image(p_cv)
+                                res = reader.readtext(working_page)
+                                for bbox_pts, text_val, conf in res:
+                                    if text_val.strip():
+                                        ys = [pt[1] for pt in bbox_pts]
+                                        xs = [pt[0] for pt in bbox_pts]
+                                        text_lines.append({
+                                            "page": page_idx,
+                                            "bbox": [min(xs), min(ys), max(xs), max(ys)],
+                                            "text": text_val.strip()
+                                        })
+                        if text_lines:
+                            print(f"  [DOM OCR FALLBACK SUCCESS] Extracted {len(text_lines)} text items from page_renders.")
             except Exception as e_ocr:
                 print(f"[DOM OCR FALLBACK WARNING] {e_ocr}")
 

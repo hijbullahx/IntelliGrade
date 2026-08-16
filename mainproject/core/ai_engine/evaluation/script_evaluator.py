@@ -276,8 +276,24 @@ class AIScriptEvaluator:
 
     @classmethod
     def _run_ocr_on_bgr(cls, bgr_img: np.ndarray) -> Tuple[str, float]:
+        # 1. Try PyTesseract first (fast, CPU safe)
         try:
-            from config.ocr_config import get_ocr_reader
+            import pytesseract
+            from PIL import Image as PILImg
+            import cv2
+            rgb = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+            pil_img = PILImg.fromarray(rgb)
+            text = pytesseract.image_to_string(pil_img).strip()
+            if text:
+                return text, 0.80
+        except Exception:
+            pass
+
+        # 2. Try EasyOCR if explicitly enabled
+        try:
+            from config.ocr_config import get_ocr_reader, is_easyocr_enabled
+            if not is_easyocr_enabled():
+                return "", 0.0
             reader = get_ocr_reader()
             if not reader:
                 return "", 0.0
