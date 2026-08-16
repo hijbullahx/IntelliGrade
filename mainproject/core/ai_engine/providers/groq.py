@@ -135,3 +135,111 @@ Return ONLY a raw JSON object with keys:
             "ideal_answer": sample_answer or "Model answer",
             "mark_distribution": {"concept": max_marks}
         }
+
+    def analyze_academic_exam_paper(
+        self,
+        qp_text_or_bytes: Any,
+        outline_text_or_bytes: Any = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = 'image/jpeg',
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None
+    ) -> Dict[str, Any]:
+        doc_text = str(qp_text_or_bytes) if (qp_text_or_bytes and isinstance(qp_text_or_bytes, str)) else 'Read directly from uploaded image/document'
+
+        fig_context = ""
+        if extra_files:
+            fig_summaries = []
+            for idx, f in enumerate(extra_files, start=1):
+                cap = f.get('caption', f'Figure {idx}')
+                page = f.get('page_number', 1)
+                fig_summaries.append(f"- {cap} on Page {page}")
+            fig_context = "\n\nDetected Visual Elements / Figures:\n" + "\n".join(fig_summaries)
+
+        prompt = f"""
+You are an expert University Academic Examination Question Scanner and OCR Engine.
+Read the uploaded examination paper image or document carefully and extract ALL examination questions, sub-parts, allocated marks, command verbs, Bloom taxonomy levels, CO/PO mappings, and expected answer criteria.
+{fig_context}
+
+CRITICAL INSTRUCTIONS:
+1. Extract the EXACT physical wording of each question statement without rewriting, shortening, or inventing text.
+2. Extract every question and sub-question (e.g. "1(a)", "1(b)", "2(a)", "Q1", "Q2") as a separate item.
+3. Escape all backslashes in mathematical formulas or LaTeX equations (e.g. write \\\\begin{{bmatrix}} instead of \\begin{{bmatrix}}).
+
+Question Paper Document Content:
+{doc_text}
+
+Return ONLY a valid JSON object in this exact schema without any markdown or commentary:
+{{
+  "questions": [
+    {{
+      "question_number": "e.g. 1(a) or Q1",
+      "prompt_text": "Exact verbatim text of the question statement from the paper",
+      "allocated_marks": 10.0,
+      "question_type": ["Theory", "Explanation"],
+      "command_verbs": ["Explain", "Calculate"],
+      "scenario": "Optional scenario context if present",
+      "bloom_level": "Understand",
+      "co_mapping": "CO1",
+      "po_mapping": ["PO(a)"],
+      "kp_mapping": ["KP1"],
+      "cep_mapping": ["CEP1"],
+      "cea_mapping": ["CEA1"],
+      "difficulty": "Medium",
+      "estimated_time": "15 mins",
+      "criteria": "Detailed step-by-step grading criteria with mark breakdown",
+      "ideal_answer": "Sample or model answer",
+      "expected_answer": "Structured expected answer summary",
+      "keywords": ["Key Term 1", "Key Term 2"],
+      "alternative_answers": "Alternative valid formulations",
+      "common_mistakes": ["Common error 1"]
+    }}
+  ]
+}}
+"""
+        response_text = self._call_api(
+            prompt,
+            system_instruction="Return ONLY raw JSON without commentary.",
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            timeout=timeout
+        )
+
+        cleaned = re.sub(r'```json\s*', '', response_text)
+        cleaned = re.sub(r'```\s*', '', cleaned).strip()
+
+        # Attempt 1: Direct JSON parse
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                return parsed
+        except Exception:
+            pass
+
+        # Attempt 2: Fix unescaped LaTeX backslashes
+        try:
+            fixed_escapes = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cleaned)
+            parsed = json.loads(fixed_escapes)
+            if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                return parsed
+        except Exception:
+            pass
+
+        # Attempt 3: Regex match
+        match = re.search(r'(\{[\s\S]*\})', response_text)
+        if match:
+            try:
+                parsed = json.loads(match.group(1))
+                if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                    return parsed
+            except Exception:
+                try:
+                    fixed_match = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', match.group(1))
+                    parsed = json.loads(fixed_match)
+                    if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
+                        return parsed
+                except Exception:
+                    pass
+
+        raise ValueError(f"Groq response could not be parsed as structured questions JSON: {response_text[:200]}")
+

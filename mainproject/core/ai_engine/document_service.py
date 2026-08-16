@@ -15,7 +15,7 @@ def get_rss_mb() -> float:
         return 0.0
 from core.models import AIConfiguration
 from config.paths import get_trace_dir
-from config.ocr_config import get_ocr_reader, prepare_easyocr_image, is_easyocr_enabled
+from config.ocr_config import get_ocr_reader, prepare_easyocr_image, is_easyocr_enabled, run_easyocr_isolated
 
 try:
     import fitz
@@ -29,10 +29,47 @@ class DocumentService:
     Deterministic Document Service responsible for:
     1. 300 DPI High-Resolution PDF Page Rendering
     2. Embedded Image Stream Extraction & Bounding Box Cropping
-    3. Multi-Engine OCR Text Extraction (PyMuPDF Native -> PyTesseract -> EasyOCR)
+    3. Multi-Engine OCR Text Extraction (PyMuPDF Native -> PyTesseract -> EasyOCR Subprocess)
     4. Hierarchical Document Object Model (DOM) Tree Construction
     5. Debug Artifact Persistence
     """
+
+    @staticmethod
+    def score_ocr_quality(text: str, confidence: float = 0.0) -> float:
+        """
+        Calculates a composite quality score (0.0 to 1.0) for extracted OCR text.
+        Evaluates length, alphanumeric ratio, word count, character diversity, and confidence.
+        """
+        if not text or len(text.strip()) == 0:
+            return 0.0
+        
+        stripped = text.strip()
+        length = len(stripped)
+        
+        # 1. Alphanumeric ratio (penalizes pure garbage/noise symbols)
+        alnum_count = sum(1 for c in stripped if c.isalnum() or c.isspace())
+        alnum_ratio = alnum_count / float(length) if length > 0 else 0.0
+        
+        # 2. Word count (words with length >= 2 containing alphabet chars)
+        words = [w for w in re.findall(r'\b[A-Za-z0-9_]{2,}\b', stripped)]
+        word_count = len(words)
+        
+        # 3. Unique character diversity (penalizes repeated single characters)
+        unique_chars = len(set(stripped.lower()))
+        diversity_ratio = min(1.0, unique_chars / 20.0)
+        
+        # 4. Length factor (scaled up to 300 characters)
+        length_factor = min(1.0, length / 300.0)
+        
+        # 5. Composite score (0.0 to 1.0)
+        score = (
+            (0.35 * length_factor) +
+            (0.25 * alnum_ratio) +
+            (0.20 * min(1.0, word_count / 30.0)) +
+            (0.10 * diversity_ratio) +
+            (0.10 * max(0.0, min(1.0, confidence)))
+        )
+        return round(score, 4)
 
     @staticmethod
     def extract_pdf_native_text(pdf_bytes: bytes) -> Dict[str, Any]:
@@ -60,32 +97,27 @@ class DocumentService:
 
     @staticmethod
     def extract_easyocr_text(image_bytes: bytes) -> Dict[str, Any]:
-        """Extracts text from image bytes using EasyOCR if explicitly enabled."""
+        """Extracts text from image bytes using EasyOCR in an isolated subprocess."""
         if not is_easyocr_enabled():
             return {"text": "", "confidence": 0.0, "engine": "EasyOCR Disabled"}
         try:
-            reader = get_ocr_reader()
-            if reader is None:
-                return {"text": "", "confidence": 0.0, "engine": "EasyOCR Unavailable"}
-            working_image, ocr_meta = prepare_easyocr_image(image_bytes)
-            print(
-                f"[DOCUMENT SERVICE EASYOCR] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
-                f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']} | "
-                f"rss_mb={get_rss_mb():.1f}"
-            )
             started = time.monotonic()
-            result = reader.readtext(working_image)
-            lines = [res[1] for res in result]
-            scores = [res[2] for res in result]
-            extracted = "\n".join(lines).strip()
-            conf = sum(scores) / len(scores) if scores else 0.85
-            print(
-                f"[DOCUMENT SERVICE EASYOCR SUCCESS] text_len={len(extracted)} | confidence={round(conf, 4)} | "
-                f"elapsed_s={time.monotonic() - started:.2f}"
-            )
-            return {"text": extracted, "confidence": round(conf, 4), "engine": "EasyOCR"}
-        except Exception:
-            return {"text": "", "confidence": 0.0, "engine": "EasyOCR Unavailable"}
+            res = run_easyocr_isolated(image_bytes)
+            elapsed = time.monotonic() - started
+            if res.get("success") and res.get("text"):
+                print(f"[DOCUMENT SERVICE EASYOCR SUCCESS] text_len={len(res['text'])} | confidence={res.get('confidence', 0.85)} | elapsed_s={elapsed:.2f}")
+                return {
+                    "text": res["text"],
+                    "confidence": res.get("confidence", 0.85),
+                    "boxes": res.get("boxes", []),
+                    "engine": "EasyOCR Engine"
+                }
+            else:
+                print(f"[DOCUMENT SERVICE EASYOCR FALLBACK] Subprocess returned no text (engine={res.get('engine')}).")
+                return {"text": "", "confidence": 0.0, "boxes": [], "engine": res.get("engine", "EasyOCR Failed")}
+        except Exception as e:
+            print(f"[DOCUMENT SERVICE EASYOCR ERROR] {e}")
+            return {"text": "", "confidence": 0.0, "boxes": [], "engine": "EasyOCR Error"}
 
     @staticmethod
     def extract_tesseract_text(image_bytes: bytes) -> Dict[str, Any]:
@@ -106,7 +138,7 @@ class DocumentService:
         Hierarchy:
         1. PyMuPDF Native Stream Text (fast, accurate for digital PDFs, 0 CPU overhead)
         2. PyTesseract CPU OCR (safe, deterministic)
-        3. EasyOCR (only if explicitly enabled via EASYOCR_ENABLED=True)
+        3. Isolated EasyOCR Subprocess
         """
         import sys
         if FITZ_AVAILABLE:
@@ -119,12 +151,15 @@ class DocumentService:
         # 1. PyMuPDF Native Stream Text (for digital PDFs)
         if FITZ_AVAILABLE and doc_bytes.startswith(b'%PDF'):
             native_res = cls.extract_pdf_native_text(doc_bytes)
-            if len(native_res["text"]) >= 50:
+            native_score = cls.score_ocr_quality(native_res.get("text", ""), native_res.get("confidence", 0.0))
+            native_res["quality_score"] = native_score
+            if len(native_res["text"]) >= 50 and native_score >= 0.40:
                 candidates.append(native_res)
 
         # 2. Perform OCR across rendered page images if native text is not present or insufficient
-        has_sufficient_native = any(c.get("confidence", 0) >= 0.50 and len(c.get("text", "")) >= 50 for c in candidates)
+        has_sufficient_native = any(c.get("quality_score", 0) >= 0.60 and len(c.get("text", "")) >= 80 for c in candidates)
         if page_renders and not has_sufficient_native:
+            # 2a. Try PyTesseract
             tess_text_pages = []
             for p_idx, page_png in enumerate(page_renders):
                 t_res = cls.extract_tesseract_text(page_png)
@@ -133,11 +168,12 @@ class DocumentService:
 
             if tess_text_pages:
                 full_tess = "\n\n".join(tess_text_pages).strip()
-                if len(full_tess) >= 50:
-                    candidates.append({"text": full_tess, "confidence": 0.85, "engine": "PyTesseract Engine"})
+                tess_score = cls.score_ocr_quality(full_tess, 0.85)
+                if len(full_tess) >= 30:
+                    candidates.append({"text": full_tess, "confidence": 0.85, "quality_score": tess_score, "engine": "PyTesseract Engine"})
 
-            # Only attempt EasyOCR if enabled and PyTesseract was not sufficient
-            if is_easyocr_enabled() and not any(len(c.get("text", "")) >= 50 for c in candidates):
+            # 2b. Try EasyOCR Subprocess
+            if is_easyocr_enabled():
                 easy_text_pages = []
                 for p_idx, page_png in enumerate(page_renders):
                     e_res = cls.extract_easyocr_text(page_png)
@@ -146,38 +182,44 @@ class DocumentService:
 
                 if easy_text_pages:
                     full_easy = "\n\n".join(easy_text_pages).strip()
-                    if len(full_easy) >= 50:
-                        candidates.append({"text": full_easy, "confidence": 0.88, "engine": "EasyOCR Engine"})
+                    easy_score = cls.score_ocr_quality(full_easy, 0.88)
+                    if len(full_easy) >= 30:
+                        candidates.append({"text": full_easy, "confidence": 0.88, "quality_score": easy_score, "engine": "EasyOCR Engine"})
 
         if not candidates and not doc_bytes.startswith(b'%PDF'):
             # Direct image file upload (.png, .jpg)
             t_res = cls.extract_tesseract_text(doc_bytes)
-            if len(t_res["text"]) >= 50:
+            if len(t_res["text"]) >= 30:
+                t_res["quality_score"] = cls.score_ocr_quality(t_res["text"], t_res["confidence"])
                 candidates.append(t_res)
-            elif is_easyocr_enabled():
+
+            if is_easyocr_enabled():
                 e_res = cls.extract_easyocr_text(doc_bytes)
-                if len(e_res["text"]) >= 50:
+                if len(e_res["text"]) >= 30:
+                    e_res["quality_score"] = cls.score_ocr_quality(e_res["text"], e_res["confidence"])
                     candidates.append(e_res)
 
         if not candidates:
             from core.ai_engine.parser.academic_parser import PipelineValidationError
             raise PipelineValidationError(
-                "[STRICT OCR FAILURE] All available OCR engines returned insufficient readable characters (< 50). "
-                "The uploaded document appears to be unreadable or empty. Pipeline halted before LLM execution."
+                "[STRICT OCR FAILURE] All available OCR engines returned insufficient readable characters (< 30). "
+                "The uploaded document appears to be empty, unreadable, or corrupted. Pipeline halted before LLM execution."
             )
 
-        best = max(candidates, key=lambda c: (len(c["text"]), c["confidence"]))
+        best = max(candidates, key=lambda c: (c.get("quality_score", 0.0), len(c["text"]), c.get("confidence", 0.0)))
         best["char_count"] = len(best["text"])
-        print(f"[DOCUMENT SERVICE OCR] Selected Engine: {best['engine']} | Text Length: {best['char_count']} chars | Confidence: {best['confidence']}")
+        print(f"[DOCUMENT SERVICE OCR] Selected Engine: {best['engine']} | Text Length: {best['char_count']} chars | Quality Score: {best.get('quality_score', 0):.2f} | Confidence: {best['confidence']}")
 
-        if best["char_count"] < 50:
+        if best["char_count"] < 30:
             from core.ai_engine.parser.academic_parser import PipelineValidationError
             raise PipelineValidationError(
-                f"[STRICT OCR FAILURE] Extracted text length ({best['char_count']} chars) is below the minimum threshold (50 chars)."
+                f"[STRICT OCR FAILURE] Extracted text length ({best['char_count']} chars) is below the minimum threshold (30 chars)."
             )
 
         # Add a warning for potentially large payloads that might cause timeouts
         if best["char_count"] > 30000:
+            print(f"[DOCUMENT SERVICE WARNING] Large OCR payload detected ({best['char_count']} chars). "
+                  "This may increase AI provider processing time and risk a timeout.")
             print(f"[DOCUMENT SERVICE WARNING] Large OCR payload detected ({best['char_count']} chars). "
                   "This may increase AI provider processing time and risk a timeout.")
 
@@ -525,7 +567,9 @@ class DocumentService:
             fig["source"] = "figure"
             union_candidates.append(fig)
         for tbl in extracted_tables:
-            tbl["source"] = "contour_table"
+            src = tbl.get("source", "contour_table")
+            if src not in ["figure", "text_matrix"]:
+                tbl["source"] = "contour_table"
             union_candidates.append(tbl)
         for tmat in text_matrix_tables:
             tmat["source"] = "text_matrix"
@@ -564,8 +608,21 @@ class DocumentService:
         nms_res = cls.apply_nms_deduplication(union_candidates, iou_threshold=0.50)
         final_accepted = nms_res.get("accepted", [])
 
-        final_figures = [c for c in final_accepted if c.get("source") == "figure"]
-        final_tables = [c for c in final_accepted if c.get("source") in ["contour_table", "text_matrix"]]
+        final_figures = [c for c in final_accepted if c.get("source") == "figure" or c.get("element_type") == "FIGURE"]
+        final_tables = [c for c in final_accepted if c.get("source") in ["contour_table", "text_matrix"] and c.get("element_type") != "FIGURE"]
+
+        contour_figs = [f for f in final_figures if "contour" in f.get("image_path", "") or "img" in f.get("image_path", "")]
+        embedded_figs = [f for f in final_figures if "pdf" in f.get("image_path", "") or "crop" in f.get("image_path", "")]
+
+        print(f"[FIGURE PIPELINE] Raw candidates: {len(union_candidates)} | Contour figures: {len(contour_figs)} | Embedded/Vector figures: {len(embedded_figs)} | After NMS: {len(final_accepted)} | Final unique figures: {len(final_figures)} | Final tables: {len(final_tables)}")
+
+        for f_idx, fig in enumerate(final_figures, start=1):
+            if "display_order" not in fig:
+                fig["display_order"] = f_idx
+            if "image_url" not in fig and "image_path" in fig:
+                fig["image_url"] = f"{settings.MEDIA_URL}{fig['image_path']}"
+            if "thumbnail_url" not in fig and "image_url" in fig:
+                fig["thumbnail_url"] = fig["image_url"]
 
         return {
             "figures": final_figures,

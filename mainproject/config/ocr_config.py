@@ -1,5 +1,6 @@
 import io
 import os
+import json
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -76,14 +77,117 @@ def prepare_easyocr_image(image_input: Any, max_dimension: Optional[int] = None)
     }
 
 def is_easyocr_enabled() -> bool:
-    """Returns True only if EASYOCR_ENABLED environment variable is explicitly enabled."""
-    raw_val = get_env_value('EASYOCR_ENABLED', default='False')
-    return str(raw_val).strip().lower() in ('1', 'true', 'yes', 'on')
+    """
+    Returns True unless EASYOCR_ENABLED is explicitly disabled.
+    Default is True so OCR is enabled everywhere while running safely in an isolated subprocess.
+    """
+    raw_val = get_env_value('EASYOCR_ENABLED', default='True')
+    return str(raw_val).strip().lower() not in ('0', 'false', 'no', 'off')
+
+
+def get_easyocr_subprocess_timeout() -> float:
+    """Returns timeout for isolated EasyOCR subprocess execution (default: 15.0s)."""
+    raw_val = get_env_value('EASYOCR_SUBPROCESS_TIMEOUT', default='15.0')
+    try:
+        return max(3.0, float(raw_val))
+    except Exception:
+        return 15.0
+
+
+def run_easyocr_isolated(image_bytes: bytes, timeout: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Executes EasyOCR in an isolated subprocess to protect the parent Django / Passenger worker.
+    If PyTorch/NNPACK fails with SIGILL or memory crash, only the subprocess terminates.
+    """
+    if not is_easyocr_enabled():
+        return {
+            "success": False,
+            "text": "",
+            "confidence": 0.0,
+            "boxes": [],
+            "engine": "EasyOCR Disabled"
+        }
+
+    import subprocess
+    import sys
+
+    runner_path = Path(__file__).resolve().parent / "easyocr_runner.py"
+    if not runner_path.exists():
+        return {
+            "success": False,
+            "text": "",
+            "confidence": 0.0,
+            "boxes": [],
+            "engine": "EasyOCR Runner Missing"
+        }
+
+    call_timeout = float(timeout) if timeout is not None else get_easyocr_subprocess_timeout()
+    cmd = [
+        sys.executable,
+        str(runner_path),
+        "--gpu", "true" if is_cuda_available() else "false",
+        "--threads", str(get_easyocr_cpu_threads()),
+        "--model-dir", str(get_env_value('EASYOCR_MODEL_STORAGE_DIRECTORY', default=_get_default_easyocr_model_directory())),
+        "--user-dir", str(get_env_value('EASYOCR_MODULE_PATH', default=_get_default_easyocr_user_directory()))
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=image_bytes,
+            capture_output=True,
+            timeout=call_timeout
+        )
+
+        if proc.returncode == 0:
+            stdout_str = proc.stdout.decode('utf-8', errors='ignore').strip()
+            try:
+                data = json.loads(stdout_str)
+                return data
+            except Exception:
+                return {
+                    "success": True,
+                    "text": stdout_str,
+                    "confidence": 0.85,
+                    "boxes": [],
+                    "engine": "EasyOCR Subprocess"
+                }
+        else:
+            # Subprocess failed or crashed (e.g. SIGILL = -4)
+            ret = proc.returncode
+            stderr_msg = proc.stderr.decode('utf-8', errors='ignore').strip()
+            print(f"[EASYOCR SUBPROCESS WARNING] Subprocess failed with exit code {ret}: {stderr_msg[:160]}")
+            return {
+                "success": False,
+                "text": "",
+                "confidence": 0.0,
+                "boxes": [],
+                "engine": f"EasyOCR Subprocess Failed (code {ret})"
+            }
+
+    except subprocess.TimeoutExpired:
+        print(f"[EASYOCR SUBPROCESS TIMEOUT] Subprocess exceeded time limit ({call_timeout}s). Fallback engaged.")
+        return {
+            "success": False,
+            "text": "",
+            "confidence": 0.0,
+            "boxes": [],
+            "engine": "EasyOCR Subprocess Timeout"
+        }
+    except Exception as e:
+        print(f"[EASYOCR SUBPROCESS ERROR] Failed to invoke subprocess: {e}")
+        return {
+            "success": False,
+            "text": "",
+            "confidence": 0.0,
+            "boxes": [],
+            "engine": "EasyOCR Invocation Error"
+        }
 
 
 def get_ocr_reader(lang_list: Optional[list] = None) -> Any:
     """
-    Lazy-loaded, thread-safe EasyOCR Reader singleton.
+    Lazy-loaded, thread-safe EasyOCR Reader singleton for in-process usage when safe.
     Returns None immediately unless EASYOCR_ENABLED=True in environment.
     Auto-detects CUDA GPU availability safely.
     """
@@ -146,5 +250,5 @@ def get_ocr_config() -> Dict[str, Any]:
         "dpi": OCRConfig.DEFAULT_DPI,
         "gpu_accelerated": is_cuda_available(),
         "easyocr_enabled": is_easyocr_enabled(),
-        "easyocr_ready": get_ocr_reader() is not None if is_easyocr_enabled() else False,
+        "easyocr_ready": is_easyocr_enabled(),
     }

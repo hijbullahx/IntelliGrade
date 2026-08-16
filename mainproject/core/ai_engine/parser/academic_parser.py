@@ -209,6 +209,7 @@ class AcademicParserService:
 
             if target_q_idx is not None and fig_idx not in claimed_fig_indices:
                 claimed_fig_indices.add(fig_idx)
+                fig["owner_question"] = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
                 questions[target_q_idx]['associated_figures'].append(fig)
 
         # 2. Associate Tables
@@ -264,6 +265,11 @@ class AcademicParserService:
             if target_q_idx is not None and form_idx not in claimed_form_indices:
                 claimed_form_indices.add(form_idx)
                 questions[target_q_idx]['associated_formulas'].append(form)
+
+        attached_fig_count = sum(len(q.get('associated_figures', [])) for q in questions)
+        attached_tbl_count = sum(len(q.get('associated_tables', [])) for q in questions)
+        raw_candidates_count = len((graphics_result or {}).get('all_contours', [])) or len(figures or [])
+        print(f"[FIGURE PIPELINE DIAGNOSTICS] Raw candidates: {raw_candidates_count} | NMS accepted: {len(figures or [])} | Extracted figures: {len(figures or [])} | Final figures: {len(figures or [])} | Figures attached to questions: {attached_fig_count} | Tables attached: {attached_tbl_count}")
 
         return questions
 
