@@ -1,3 +1,8 @@
+import io
+import json
+import os
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -158,5 +163,233 @@ class DatabaseConfigurationTestCase(TestCase):
                 self.assertEqual(db_cfg['default']['PASSWORD'], 'test_secret_pass')
                 self.assertEqual(db_cfg['default']['HOST'], 'localhost')
                 self.assertEqual(db_cfg['default']['PORT'], '5432')
+
+
+class AIFailoverResilienceTestCase(TestCase):
+    """
+    Test suite for AI Provider failover, timeout handling, error propagation,
+    and graceful deterministic regex fallback during Question Paper Scanning.
+    """
+
+    def setUp(self):
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        self.gemini = GeminiProvider(api_key="test_gemini_key")
+        self.groq = GroqProvider(api_key="test_groq_key")
+        self.failover_provider = FailoverAIProvider(primary_provider=self.gemini)
+        # Explicitly configure chain with Gemini -> Groq
+        self.failover_provider._chain = [self.gemini, self.groq]
+
+    def _mock_http_response(self, data_dict):
+        resp = MagicMock()
+        resp.__enter__.return_value = resp
+        resp.read.return_value = json.dumps(data_dict).encode('utf-8')
+        return resp
+
+    @patch('urllib.request.urlopen')
+    def test_provider_timeout_triggers_failover(self, mock_urlopen):
+        import socket
+        groq_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'Explain Software Design Patterns.',
+                            'allocated_marks': 10.0,
+                            'question_type': ['Theory'],
+                            'command_verbs': ['Explain'],
+                            'bloom_level': 'Understand',
+                            'co_mapping': 'CO1',
+                            'po_mapping': ['PO1'],
+                            'criteria': 'Correct definition and example.',
+                            'ideal_answer': 'Patterns are reusable architectural solutions.'
+                        }]
+                    })
+                }
+            }]
+        })
+
+        # Gemini times out on both attempts/models, then Groq succeeds
+        mock_urlopen.side_effect = [
+            socket.timeout("The read operation timed out"),
+            socket.timeout("The read operation timed out"),
+            groq_resp
+        ]
+
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Software Design Patterns. [10 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(len(result['questions']), 1)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+
+    @patch('urllib.request.urlopen')
+    def test_provider_http_error_triggers_failover(self, mock_urlopen):
+        import urllib.error
+        fp = io.BytesIO(b'{"error": {"message": "Resource exhausted / Rate limit exceeded"}}')
+        http_err = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 429, "Too Many Requests", {}, fp)
+
+        groq_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'Derive the quadratic formula.',
+                            'allocated_marks': 15.0
+                        }]
+                    })
+                }
+            }]
+        })
+
+        mock_urlopen.side_effect = [
+            http_err,
+            http_err,
+            groq_resp
+        ]
+
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Derive the quadratic formula. [15 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+
+    @patch('urllib.request.urlopen')
+    def test_empty_or_non_json_provider_response_triggers_failover(self, mock_urlopen):
+        bad_resp = MagicMock()
+        bad_resp.__enter__.return_value = bad_resp
+        bad_resp.read.return_value = b"Internal Provider Error - Non JSON"
+
+        groq_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'Explain Database Normalization.',
+                            'allocated_marks': 20.0
+                        }]
+                    })
+                }
+            }]
+        })
+
+        mock_urlopen.side_effect = [
+            bad_resp,
+            bad_resp,
+            groq_resp
+        ]
+
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Database Normalization. [20 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+
+    @patch('urllib.request.urlopen')
+    def test_complete_provider_failure_graceful_fallback(self, mock_urlopen):
+        # All providers fail / throw exceptions
+        mock_urlopen.side_effect = Exception("All network connections refused")
+
+        doc_text = """
+        Question 1: Discuss the advantages of Convolutional Neural Networks over Fully Connected Networks. [10 marks]
+        Question 2: Calculate the output dimensions of a 3x3 convolution layer with stride 1 and padding 0. [15 marks]
+        """
+
+        result = self.failover_provider.analyze_academic_exam_paper(doc_text)
+        # Should gracefully extract questions via deterministic regex without raising an unhandled exception
+        self.assertIn('questions', result)
+        self.assertGreaterEqual(len(result['questions']), 2)
+        q_nums = [q['question_number'] for q in result['questions']]
+        self.assertIn('Q1', q_nums)
+        self.assertIn('Q2', q_nums)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_api_scan_question_paper_endpoint_with_failover(self, mock_get_provider):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core.models import Examination
+        from django.utils import timezone
+        import fitz
+
+        mock_get_provider.return_value = self.failover_provider
+
+        # Create a simple PDF document with fitz
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((50, 72), "Question 1: Explain the MVC architecture pattern. [10 marks]\nQuestion 2: What is the purpose of ORM? [15 marks]")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        user = User.objects.create_user(username='faculty_tester', password='testpassword123')
+        Profile.objects.create(user=user, role=Profile.Role.TEACHER)
+        dept = Department.objects.create(name='CSE Dept', code='CSED')
+        course = Course.objects.create(code='CSE 4385', title='Software Engg', department=dept)
+        exam = Examination.objects.create(
+            course=course,
+            title='Midterm Examination CSE 4385',
+            assigned_faculty=user,
+            total_marks=25.0,
+            exam_date=timezone.now().date()
+        )
+
+        client = Client()
+        client.login(username='faculty_tester', password='testpassword123')
+
+        uploaded_pdf = SimpleUploadedFile("Midterm_Questions_CSE4385.pdf", pdf_bytes, content_type="application/pdf")
+
+        # Force mock urlopen inside failover provider to fail Gemini and pass Groq
+        groq_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [
+                            {
+                                'question_number': 'Q1',
+                                'prompt_text': 'Explain the MVC architecture pattern.',
+                                'allocated_marks': 10.0,
+                                'question_type': ['Theory'],
+                                'command_verbs': ['Explain'],
+                                'bloom_level': 'Understand',
+                                'co_mapping': 'CO1',
+                                'po_mapping': ['PO1'],
+                                'criteria': 'Model-View-Controller definition.',
+                                'ideal_answer': 'Architectural pattern decoupling UI from data.'
+                            },
+                            {
+                                'question_number': 'Q2',
+                                'prompt_text': 'What is the purpose of ORM?',
+                                'allocated_marks': 15.0,
+                                'question_type': ['Theory'],
+                                'command_verbs': ['Explain'],
+                                'bloom_level': 'Understand',
+                                'co_mapping': 'CO2',
+                                'po_mapping': ['PO1'],
+                                'criteria': 'Object-relational mapping definition.',
+                                'ideal_answer': 'Maps object-oriented models to relational schemas.'
+                            }
+                        ]
+                    })
+                }
+            }]
+        })
+
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            # Gemini fails with 429, Groq succeeds
+            import urllib.error
+            fp = io.BytesIO(b'{"error": {"message": "Gemini 429 Rate Limit"}}')
+            http_err = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 429, "Too Many Requests", {}, fp)
+            mock_urlopen.side_effect = [http_err, http_err, groq_resp]
+
+            response = client.post(reverse('api_scan_question_paper'), {
+                'examination_id': str(exam.id),
+                'question_paper_files': [uploaded_pdf]
+            })
+
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertTrue(data.get('success'))
+            self.assertEqual(data.get('extracted_count'), 2)
+            self.assertEqual(len(data['data']['questions']), 2)
+            self.assertEqual(data['data']['questions'][0]['question_number'], 'Q1')
+            self.assertEqual(data['data']['questions'][1]['question_number'], 'Q2')
+
+
 
 

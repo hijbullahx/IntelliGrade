@@ -1989,53 +1989,6 @@ def api_scan_question_paper(request):
             print(f"[PIL READ FAILED] {pil_err}")
             return JsonResponse({'success': False, 'error': f'PIL failed to open page1.png: {pil_err}'}, status=500)
 
-        # 3. EasyOCR directly on verified page1.png
-        from config.ocr_config import get_ocr_reader, prepare_easyocr_image
-
-        def _ocr_rss_mb() -> float:
-            try:
-                import resource
-                return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
-            except ImportError:
-                return 0.0
-
-        print(f"[EASYOCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f} | page1={img_width}x{img_height}")
-        easy_text = ""
-        easy_conf = 0.0
-        easy_started = time.monotonic()
-        try:
-            reader = get_ocr_reader()
-            if reader:
-                working_image, ocr_meta = prepare_easyocr_image(page1_path)
-                print(
-                    f"[EASYOCR IMAGE LOAD] original={ocr_meta['original_size'][0]}x{ocr_meta['original_size'][1]} | "
-                    f"working={ocr_meta['working_size'][0]}x{ocr_meta['working_size'][1]} | resized={ocr_meta['resized']}"
-                )
-                print(f"[EASYOCR OCR START] pid={os.getpid()} | rss_mb={_ocr_rss_mb():.1f}")
-                e_results = reader.readtext(working_image)
-                lines = [r[1] for r in e_results]
-                scores = [r[2] for r in e_results]
-                easy_text = "\n".join(lines).strip()
-                easy_conf = sum(scores) / len(scores) if scores else 0.85
-                print(
-                    f"[EASYOCR SUCCESS] Text Length: {len(easy_text)} chars | Conf: {round(easy_conf, 4)} | "
-                    f"elapsed_s={time.monotonic() - easy_started:.2f} | rss_mb={_ocr_rss_mb():.1f}"
-                )
-            else:
-                print("[EASYOCR FAILURE] Reader initialization returned None.")
-        except Exception as easy_err:
-            print(f"[EASYOCR FAILURE] {easy_err}")
-
-        if len(easy_text) == 0 and pdf_page_count > 0 and len(pdf_first_page_text) < 10:
-            return JsonResponse({
-                'success': False,
-                'stage': 'OCR_EXTRACTION',
-                'error_code': 'EASYOCR_EMPTY_OUTPUT',
-                'message': 'EasyOCR returned 0 characters on page1.png.',
-                'retryable': True,
-                'error': '[STRICT OCR FAILURE] EasyOCR returned 0 characters on page1.png.'
-            }, status=400)
-
         print("=" * 80)
         print("PIPELINE STAGE 1: FILE VALIDATION & DPI RENDERING")
         print(f"  INPUT FILE: {qp_file.name} ({len(qp_bytes)} bytes)")
@@ -2071,9 +2024,10 @@ def api_scan_question_paper(request):
             )
 
         print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
+        payload_image = qp_bytes if (not mime_type.startswith('application/pdf') and len(qp_bytes) < 4 * 1024 * 1024) else None
         res_data = provider.analyze_academic_exam_paper(
             doc_text,
-            image_bytes=qp_bytes,
+            image_bytes=payload_image,
             mime_type=mime_type,
             extra_files=extracted_figures
         )

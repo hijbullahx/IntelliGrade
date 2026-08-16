@@ -91,27 +91,16 @@ class AcademicParserService:
         if not dom_elements and pdf_bytes:
             try:
                 import fitz
-                from config.ocr_config import get_ocr_reader
-                reader = get_ocr_reader()
                 with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
                     for page_idx, page in enumerate(doc, 1):
-                        pix = page.get_pixmap(dpi=300)
-                        p_bytes = pix.tobytes("png")
-                        p_np = np.frombuffer(p_bytes, np.uint8)
-                        p_cv = cv2.imdecode(p_np, cv2.IMREAD_COLOR)
-                        
-                        if reader is not None:
-                            working_page, _page_meta = prepare_easyocr_image(p_cv)
-                            res = reader.readtext(working_page)
-                            for bbox_pts, text_val, conf in res:
-                                if text_val.strip():
-                                    ys = [pt[1] for pt in bbox_pts]
-                                    xs = [pt[0] for pt in bbox_pts]
-                                    dom_elements.append({
-                                        "page": page_idx,
-                                        "bbox": [min(xs), min(ys), max(xs), max(ys)],
-                                        "text": text_val.strip()
-                                    })
+                        blocks = page.get_text("blocks")
+                        for b in blocks:
+                            if len(b) >= 5 and b[4].strip():
+                                dom_elements.append({
+                                    "page": page_idx,
+                                    "bbox": [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)],
+                                    "text": b[4].strip()
+                                })
             except Exception as e_ocr:
                 print(f"[DOM OCR FALLBACK WARNING] {e_ocr}")
 
