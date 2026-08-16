@@ -2024,6 +2024,7 @@ def api_scan_question_paper(request):
             )
 
         print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
+        ai_stage_start = time.monotonic()
         payload_image = qp_bytes if (not mime_type.startswith('application/pdf') and len(qp_bytes) < 4 * 1024 * 1024) else None
         res_data = provider.analyze_academic_exam_paper(
             doc_text,
@@ -2031,6 +2032,7 @@ def api_scan_question_paper(request):
             mime_type=mime_type,
             extra_files=extracted_figures
         )
+        print(f"[PIPELINE STAGE 4 COMPLETE] AI Querying completed in {time.monotonic() - ai_stage_start:.2f}s")
 
         print("[PIPELINE STAGE 5] AcademicParserService: Validating Question Schema & Figure Mapping...")
         parsed_result = AcademicParserService.validate_and_parse(
