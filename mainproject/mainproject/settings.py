@@ -19,7 +19,7 @@ from config.runtime_config import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_environment_variables()
+load_environment_variables(base_dir=BASE_DIR)
 
 RUNTIME_ENVIRONMENT = detect_runtime_environment()
 DEBUG = get_env_bool('DJANGO_DEBUG', default=get_env_bool('DEBUG', default=True), fallback_names=('DEBUG',))

@@ -6,34 +6,70 @@ from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-def load_environment_variables():
+def load_environment_variables(env_path: Optional[str] = None, base_dir: Optional[Path] = None):
     """
     Loads environment variables from:
-    1. Custom path specified via INTELLIGRADE_ENV_FILE environment variable.
-    2. Default .env file in BASE_DIR if it exists.
-    3. Keeps existing os.environ variables intact.
+    1. Custom path specified via INTELLIGRADE_ENV_FILE / ENV_FILE / DJANGO_ENV_FILE or env_path argument.
+    2. .env files located at:
+       - base_dir / '.env' (if provided)
+       - base_dir.parent / '.env' (if provided)
+       - PROJECT_ROOT / '.env' (mainproject/.env)
+       - PROJECT_ROOT.parent / '.env' (repository root .env)
+       - Path.cwd() / '.env'
+    3. Keeps existing os.environ variables intact (does not overwrite already exported OS env vars).
     Does not crash if .env does not exist physically.
     """
-    custom_env_path = os.environ.get('INTELLIGRADE_ENV_FILE')
-    target_env_file = None
+    candidates = []
 
-    if custom_env_path and os.path.exists(custom_env_path):
-        target_env_file = Path(custom_env_path)
-    else:
-        default_env = PROJECT_ROOT / '.env'
-        if default_env.exists():
-            target_env_file = default_env
+    for env_var_name in ('INTELLIGRADE_ENV_FILE', 'ENV_FILE', 'DJANGO_ENV_FILE'):
+        custom = os.environ.get(env_var_name)
+        if custom and os.path.exists(custom):
+            candidates.append(Path(custom).resolve())
 
-    if target_env_file and target_env_file.exists():
-        try:
-            with open(target_env_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        k, v = line.split('=', 1)
-                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
-        except Exception as e:
-            print(f"[RUNTIME CONFIG WARNING] Error reading env file {target_env_file}: {e}")
+    if env_path and os.path.exists(env_path):
+        candidates.append(Path(env_path).resolve())
+
+    if base_dir:
+        candidates.append((base_dir / '.env').resolve())
+        candidates.append((base_dir.parent / '.env').resolve())
+
+    candidates.append((PROJECT_ROOT / '.env').resolve())
+    candidates.append((PROJECT_ROOT.parent / '.env').resolve())
+
+    try:
+        cwd = Path.cwd().resolve()
+        candidates.append((cwd / '.env').resolve())
+        candidates.append((cwd.parent / '.env').resolve())
+    except Exception:
+        pass
+
+    seen = set()
+
+    for target_env_file in candidates:
+        if target_env_file not in seen and target_env_file.is_file():
+            seen.add(target_env_file)
+            try:
+                try:
+                    from dotenv import load_dotenv
+                    load_dotenv(str(target_env_file), override=False)
+                except ImportError:
+                    pass
+
+                with open(target_env_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            k, v = line.split('=', 1)
+                            k = k.strip()
+                            v = v.strip()
+                            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                                v = v[1:-1]
+                            os.environ.setdefault(k, v)
+            except Exception as e:
+                print(f"[RUNTIME CONFIG WARNING] Error reading env file {target_env_file}: {e}")
+
+# Call load_environment_variables at module load to ensure environment is prepared early
+load_environment_variables()
 
 def detect_runtime_environment() -> str:
     """Returns detected runtime environment: 'CODESPACES', 'PYTHONANYWHERE', or 'LOCAL'."""
@@ -183,6 +219,9 @@ def build_database_config(base_dir: Path) -> dict:
     Raises ImproperlyConfigured with a clear error message if any are missing.
     """
     from django.core.exceptions import ImproperlyConfigured
+
+    # Ensure environment variables are loaded prior to evaluating DB_ENGINE
+    load_environment_variables(base_dir=base_dir)
 
     raw_engine = get_env_value('DB_ENGINE', default='sqlite', fallback_names=('DATABASE_ENGINE',)).lower()
 

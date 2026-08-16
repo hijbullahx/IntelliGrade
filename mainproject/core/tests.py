@@ -131,3 +131,32 @@ class DatabaseConfigurationTestCase(TestCase):
             self.assertIn('PostgreSQL selected', str(ctx.exception))
             self.assertIn('DB_NAME', str(ctx.exception))
 
+    def test_env_file_loaded_before_database_config(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from config.runtime_config import build_database_config
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_path = Path(tmpdir)
+            env_file = temp_path / '.env'
+            env_file.write_text(
+                "DB_ENGINE=postgresql\n"
+                "DB_NAME=dsriubatac_intelligrade\n"
+                "DB_USER=dsriubatac_intelligrade_db\n"
+                "DB_PASSWORD=test_secret_pass\n"
+                "DB_HOST=localhost\n"
+                "DB_PORT=5432\n"
+            )
+
+            # Clear environment to prove .env file is read and loaded before database configuration
+            with patch.dict('os.environ', {}, clear=True):
+                db_cfg = build_database_config(temp_path)
+                self.assertEqual(db_cfg['default']['ENGINE'], 'django.db.backends.postgresql')
+                self.assertEqual(db_cfg['default']['NAME'], 'dsriubatac_intelligrade')
+                self.assertEqual(db_cfg['default']['USER'], 'dsriubatac_intelligrade_db')
+                self.assertEqual(db_cfg['default']['PASSWORD'], 'test_secret_pass')
+                self.assertEqual(db_cfg['default']['HOST'], 'localhost')
+                self.assertEqual(db_cfg['default']['PORT'], '5432')
+
+
