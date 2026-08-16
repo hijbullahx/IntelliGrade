@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 Django>=4.2,<6.0
 PyMuPDF>=1.23.0
 opencv-python-headless>=4.8.0
@@ -7,9 +9,9 @@ reportlab>=4.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
 gunicorn>=21.2.0
+torch==2.8.0+cpu
+torchvision==0.23.0+cpu
 easyocr>=1.7.0
-torch>=2.0.0
-torchvision>=0.15.0
 pandas>=2.0.0
 openpyxl>=3.1.0
 google-generativeai>=0.3.0
