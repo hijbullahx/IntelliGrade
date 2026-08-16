@@ -1,12 +1,13 @@
+import os
 import json
 import re
 import urllib.request
 import urllib.error
 import time
-from typing import Dict, Any, Optional, List
-from .base import BaseAIProvider
-
 import base64
+from typing import Dict, Any, Optional, List
+from django.conf import settings
+from .base import BaseAIProvider
 
 class GeminiProvider(BaseAIProvider):
     """
@@ -36,7 +37,8 @@ class GeminiProvider(BaseAIProvider):
             full_text = f"System Instruction:\n{system_instruction}\n\nUser Request:\n{prompt}"
 
         parts = [{"text": full_text}]
-        if image_bytes:
+        # Only attach image if it is reasonably sized (< 4MB) to prevent large payload network timeouts
+        if image_bytes and len(image_bytes) < 4 * 1024 * 1024 and not mime_type.startswith('application/pdf'):
             b64_data = base64.b64encode(image_bytes).decode('utf-8')
             parts.append({
                 "inline_data": {
@@ -45,20 +47,10 @@ class GeminiProvider(BaseAIProvider):
                 }
             })
 
-        if extra_files:
-            for ef in extra_files:
-                if ef.get('bytes'):
-                    b64_ef = base64.b64encode(ef['bytes']).decode('utf-8')
-                    parts.append({
-                        "inline_data": {
-                            "mime_type": ef.get('mime_type', 'application/pdf'),
-                            "data": b64_ef
-                        }
-                    })
-
         payload = {"contents": [{"parts": parts}]}
         json_data = json.dumps(payload).encode('utf-8')
 
+        timeout_sec = int(os.environ.get('AI_REQUEST_TIMEOUT', 12))
         last_error = None
         for model in unique_models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
@@ -69,14 +61,16 @@ class GeminiProvider(BaseAIProvider):
                 method='POST'
             )
 
-            for attempt in range(3):
-                try:
-                    with urllib.request.urlopen(req, timeout=30) as response:
-                        res_bytes = response.read()
-                        res_data = json.loads(res_bytes.decode('utf-8'))
-                        candidates = res_data.get('candidates', [])
-                        if candidates:
-                            text_out = candidates[0]['content']['parts'][0]['text']
+            try:
+                with urllib.request.urlopen(req, timeout=timeout_sec) as response:
+                    res_bytes = response.read()
+                    res_data = json.loads(res_bytes.decode('utf-8'))
+                    candidates = res_data.get('candidates', [])
+                    if candidates:
+                        content = candidates[0].get('content', {})
+                        content_parts = content.get('parts', [])
+                        if content_parts and 'text' in content_parts[0]:
+                            text_out = content_parts[0]['text']
                             try:
                                 trace_dir = os.path.join(settings.BASE_DIR, 'request_trace')
                                 os.makedirs(trace_dir, exist_ok=True)
@@ -87,28 +81,23 @@ class GeminiProvider(BaseAIProvider):
                             except Exception:
                                 pass
                             return text_out
-                        return ""
-                except urllib.error.HTTPError as e:
-                    error_body = e.read().decode('utf-8', errors='ignore')
-                    last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
-                    print(f"[GEMINI MODEL {model} ERROR] {last_error}")
-                    if e.code in [429, 404, 403]:
-                        ModelRegistryManager.handle_model_error("GeminiProvider", model, f"HTTP {e.code}: {error_body}")
-                        break
-                    time.sleep(2.0)
-                except Exception as e:
-                    last_error = f"Gemini Request Failed ({model}): {str(e)}"
-                    break
+                    return ""
+            except urllib.error.HTTPError as e:
+                error_body = e.read().decode('utf-8', errors='ignore')
+                last_error = f"Gemini API HTTP Error {e.code} ({model}): {error_body}"
+                print(f"[GEMINI MODEL {model} ERROR] {last_error}")
+                if e.code in [429, 404, 403]:
+                    ModelRegistryManager.handle_model_error("GeminiProvider", model, f"HTTP {e.code}: {error_body}")
+                continue
+            except Exception as e:
+                last_error = f"Gemini Request Failed ({model}): {str(e)}"
+                print(f"[GEMINI WARNING] Model {model} request failed: {e}")
+                continue
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
-        try:
-            return self._call_api(prompt, system_instruction)
-        except Exception as e:
-            if "Return ONLY raw JSON" in (system_instruction or "") or "JSON" in prompt:
-                return '{"status": "quota_exceeded", "message": "API Quota Limit reached. Please provide a fresh Gemini API Key."}'
-            return "Generated text completion (Offline fallback)."
+        return self._call_api(prompt, system_instruction)
 
     def evaluate_answer(
         self,
@@ -298,25 +287,11 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                             return parsed
                     except Exception:
                         pass
+            
+            raise ValueError(f"Gemini response could not be parsed as structured questions JSON: {response_text[:200]}")
         except Exception as e:
-            print(f"[EXAM PAPER SCAN ERROR] {e}")
-
-        return {
-            "questions": [
-                {
-                    "question_number": "Q1",
-                    "prompt_text": "Explain the core concepts presented in the uploaded examination paper.",
-                    "allocated_marks": 10.0,
-                    "question_type": ["Explanation"],
-                    "command_verbs": ["Explain"],
-                    "bloom_level": "Understand",
-                    "co_mapping": "CO1",
-                    "po_mapping": ["PO1"],
-                    "criteria": "1. Accurate understanding of key principles.\n2. Clear, structured explanation.",
-                    "ideal_answer": "Model answer covering the core principles outlined in the examination document."
-                }
-            ]
-        }
+            print(f"[GEMINI EXAM PAPER SCAN ERROR] {e}")
+            raise e
 
     def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '') -> Dict[str, Any]:
         prompt = f"""

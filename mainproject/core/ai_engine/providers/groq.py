@@ -58,13 +58,14 @@ class GroqProvider(BaseAIProvider):
             method='POST'
         )
 
+        timeout_sec = int(os.environ.get('AI_REQUEST_TIMEOUT', 12))
         try:
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=timeout_sec) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
                 choices = res_data.get('choices', [])
-                if choices:
+                if choices and choices[0].get('message', {}).get('content'):
                     return choices[0]['message']['content']
-                return ""
+                raise ValueError("Groq returned empty response choices.")
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='ignore')
             raise Exception(f"Groq API Error {e.code}: {error_body}")

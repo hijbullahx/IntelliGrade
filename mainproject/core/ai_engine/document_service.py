@@ -116,8 +116,9 @@ class DocumentService:
             if len(native_res["text"]) > 30:
                 candidates.append(native_res)
 
-        # 2. Perform OCR across all 300 DPI rendered page images
-        if page_renders:
+        # 2. Perform OCR across rendered page images if native text is not present or insufficient
+        has_high_confidence_native = any(c.get("confidence", 0) >= 0.95 and len(c.get("text", "")) >= 80 for c in candidates)
+        if page_renders and not has_high_confidence_native:
             easy_text_pages = []
             tess_text_pages = []
             for p_idx, page_png in enumerate(page_renders):
