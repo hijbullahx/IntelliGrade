@@ -2956,7 +2956,7 @@ def api_delete_submission(request, submission_id):
                         page.page_image.delete(save=False)
                     except Exception:
                         pass
-                if page.thumbnail:
+                if getattr(page, 'thumbnail', None):
                     try:
                         page.thumbnail.delete(save=False)
                     except Exception:

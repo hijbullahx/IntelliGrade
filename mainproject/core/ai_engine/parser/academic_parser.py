@@ -209,6 +209,7 @@ class AcademicParserService:
 
             if target_q_idx is not None and fig_idx not in claimed_fig_indices:
                 claimed_fig_indices.add(fig_idx)
+                fig["owner_question"] = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
                 questions[target_q_idx]['associated_figures'].append(fig)
 
         # 2. Associate Tables
