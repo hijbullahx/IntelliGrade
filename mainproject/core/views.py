@@ -2236,14 +2236,25 @@ def api_finalize_scanned_paper(request):
                         'co_mapping': q_co,
                         'po_mapping': q_po if isinstance(q_po, list) else [q_po],
                         'question_type': item.get('question_type', []),
-                        'command_verbs': item.get('command_verbs', [])
+                        'command_verbs': item.get('command_verbs', []),
+                        'scenario': item.get('scenario', ''),
+                        'difficulty': item.get('difficulty', 'Medium'),
+                        'estimated_time': item.get('estimated_time', '15 mins'),
+                        'kp_mapping': item.get('kp_mapping', []),
+                        'cep_mapping': item.get('cep_mapping', []),
+                        'cea_mapping': item.get('cea_mapping', []),
+                        'teacher_notes': item.get('teacher_notes', '')
                     }
                 )
                 Rubric.objects.update_or_create(
                     question=q_obj,
                     defaults={
                         'criteria': q_criteria,
-                        'expected_answer': q_answer
+                        'ideal_answer': q_answer,
+                        'expected_answer': item.get('expected_answer') or q_answer,
+                        'keywords': item.get('keywords', []),
+                        'alternative_answers': item.get('alternative_answers', ''),
+                        'common_mistakes': item.get('common_mistakes', [])
                     }
                 )
 

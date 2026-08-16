@@ -266,6 +266,11 @@ class AcademicParserService:
                 claimed_form_indices.add(form_idx)
                 questions[target_q_idx]['associated_formulas'].append(form)
 
+        attached_fig_count = sum(len(q.get('associated_figures', [])) for q in questions)
+        attached_tbl_count = sum(len(q.get('associated_tables', [])) for q in questions)
+        raw_candidates_count = len((graphics_result or {}).get('all_contours', [])) or len(figures or [])
+        print(f"[FIGURE PIPELINE DIAGNOSTICS] Raw candidates: {raw_candidates_count} | NMS accepted: {len(figures or [])} | Extracted figures: {len(figures or [])} | Final figures: {len(figures or [])} | Figures attached to questions: {attached_fig_count} | Tables attached: {attached_tbl_count}")
+
         return questions
 
     @classmethod

@@ -168,9 +168,10 @@ You are an expert University Academic Examination Question Scanner and OCR Engin
 Read the uploaded examination paper image or document carefully and extract ALL examination questions, sub-parts, allocated marks, command verbs, Bloom taxonomy levels, CO/PO mappings, and expected answer criteria.
 {fig_context}
 
-CRITICAL INSTRUCTION:
-1. Extract EVERY SINGLE question (Question 1, Question 2, Question 3, Question 4, etc.) from the entire paper.
-2. Escape all backslashes in mathematical formulas or LaTeX equations (e.g. write \\\\begin{{bmatrix}} instead of \\begin{{bmatrix}}).
+CRITICAL INSTRUCTIONS:
+1. Extract the EXACT physical wording of each question statement without rewriting, shortening, or inventing text.
+2. Extract every question and sub-question (e.g. "1(a)", "1(b)", "2(a)", "Q1", "Q2") as a separate item.
+3. Escape all backslashes in mathematical formulas or LaTeX equations (e.g. write \\\\begin{{bmatrix}} instead of \\begin{{bmatrix}}).
 
 Question Paper Document Content:
 {doc_text}
@@ -179,16 +180,26 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
 {{
   "questions": [
     {{
-      "question_number": "e.g. Q1",
-      "prompt_text": "Exact text of the question statement from the paper",
-      "allocated_marks": 25.0,
+      "question_number": "e.g. 1(a) or Q1",
+      "prompt_text": "Exact verbatim text of the question statement from the paper",
+      "allocated_marks": 10.0,
       "question_type": ["Theory", "Explanation"],
       "command_verbs": ["Explain", "Calculate"],
-      "bloom_level": "Apply",
-      "co_mapping": "CO2",
-      "po_mapping": ["PO1"],
-      "criteria": "Key criteria for grading",
-      "ideal_answer": "Expected model answer summary"
+      "scenario": "Optional scenario context if present",
+      "bloom_level": "Understand",
+      "co_mapping": "CO1",
+      "po_mapping": ["PO(a)"],
+      "kp_mapping": ["KP1"],
+      "cep_mapping": ["CEP1"],
+      "cea_mapping": ["CEA1"],
+      "difficulty": "Medium",
+      "estimated_time": "15 mins",
+      "criteria": "Detailed step-by-step grading criteria with mark breakdown",
+      "ideal_answer": "Sample or model answer",
+      "expected_answer": "Structured expected answer summary",
+      "keywords": ["Key Term 1", "Key Term 2"],
+      "alternative_answers": "Alternative valid formulations",
+      "common_mistakes": ["Common error 1"]
     }}
   ]
 }}
