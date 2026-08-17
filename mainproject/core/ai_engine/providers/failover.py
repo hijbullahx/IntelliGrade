@@ -44,6 +44,8 @@ class FailoverAIProvider(BaseAIProvider):
         if not isinstance(self.primary_provider, OllamaProvider):
             self._chain.append(OllamaProvider())
 
+        print(f"[AI PROVIDER STATUS] Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'} | Ollama: CONFIGURED")
+
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
         import time
         import inspect
@@ -95,9 +97,13 @@ class FailoverAIProvider(BaseAIProvider):
                 elapsed = time.monotonic() - start_time
                 last_error = str(e)
                 elapsed_ms = int(elapsed * 1000)
-                status_code = 'RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else ('EXPIRED' if ('401' in last_error or '403' in last_error) else 'OFFLINE')
+                is_auth_fail = ('401' in last_error or '403' in last_error or 'invalid api key' in last_error.lower() or 'unauthenticated' in last_error.lower() or 'invalid authentication' in last_error.lower())
+                status_code = 'AUTH_FAILURE' if is_auth_fail else ('RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else 'OFFLINE')
                 self.log_health_event(provider_name, status_code, error_msg=last_error, response_time_ms=elapsed_ms)
-                print(f"[AI TIMING] {provider_name} FAILED in {elapsed:.2f}s: {last_error}. Switching to next provider in chain...")
+                if is_auth_fail:
+                    print(f"[AI PROVIDER AUTH FAILURE] {provider_name}: Authentication error ({last_error[:100]}). Immediately failing over...")
+                else:
+                    print(f"[AI TIMING] {provider_name} FAILED in {elapsed:.2f}s: {last_error}. Switching to next provider in chain...")
                 continue
 
         raise Exception(f"All AI Providers in the failover chain failed. Last error: {last_error}")
