@@ -3,7 +3,7 @@ from typing import Dict, List, Any, Optional
 
 MODEL_REGISTRY = {
     "gemini": {
-        "models": ["gemini-2.0-flash", "gemini-2.0-flash-lite"],
+        "models": ["gemini-flash-latest"],
         "capabilities": {
             "supports_text": True,
             "supports_images": True,
