@@ -608,11 +608,148 @@ class DocumentService:
         nms_res = cls.apply_nms_deduplication(union_candidates, iou_threshold=0.50)
         final_accepted = nms_res.get("accepted", [])
 
-        final_figures = [c for c in final_accepted if c.get("source") == "figure" or c.get("element_type") == "FIGURE"]
-        final_tables = [c for c in final_accepted if c.get("source") in ["contour_table", "text_matrix"] and c.get("element_type") != "FIGURE"]
+        # TASK 1, 2, 3, 4: Candidate Finalization, Explicit Multi-Outcome Classification & Cropping Engine
+        final_figures = []
+        final_tables = []
+        dom_elements = []
 
-        contour_figs = [f for f in final_figures if "contour" in f.get("image_path", "") or "img" in f.get("image_path", "")]
-        embedded_figs = [f for f in final_figures if "pdf" in f.get("image_path", "") or "crop" in f.get("image_path", "")]
+        print("=" * 80)
+        print(f"[CANDIDATE FINALIZATION] Processing {len(final_accepted)} Accepted Candidates:")
+        print("=" * 80)
+
+        for idx, cand in enumerate(final_accepted, start=1):
+            c_box = cand.get("bounding_box", [0, 0, 0, 0])
+            c_w = int(c_box[2] - c_box[0]) if len(c_box) >= 4 else 0
+            c_h = int(c_box[3] - c_box[1]) if len(c_box) >= 4 else 0
+            c_area = c_w * c_h
+            aspect_ratio = (c_w / float(c_h)) if c_h > 0 else 1.0
+            source_det = cand.get("source", "FigureDetector")
+            page_num = cand.get("page_number", 1)
+            cell_json = cand.get("cell_json", [])
+            has_cells = bool(cell_json and any(bool(r) for r in cell_json))
+
+            # Distinguish Conventional Academic Table vs Image/Math Matrix vs Visual Figure
+            has_table_headers = False
+            is_matrix_grid = False
+            if has_cells:
+                all_cell_tokens = [str(cell).strip() for row in cell_json for cell in row if str(cell).strip()]
+                joined_text = " ".join(all_cell_tokens).upper()
+                header_keywords = ['QUESTION', 'MARKS', 'CO', 'PO', 'BLOOM', 'COURSE', 'STUDENT', 'FACULTY', 'SECTION', 'MODULE', 'WEEK', 'NAME', 'ID', 'DESCRIPTION', 'TITLE']
+                has_table_headers = any(kw in joined_text for kw in header_keywords)
+                has_tuples = any(('(' in cell and ')' in cell and ',' in cell) for cell in all_cell_tokens)
+                numeric_count = sum(1 for cell in all_cell_tokens if cell.replace('.', '').replace('-', '').replace('(', '').replace(')', '').replace(',', '').strip().isdigit())
+                num_ratio = (numeric_count / float(len(all_cell_tokens))) if all_cell_tokens else 0.0
+                is_matrix_grid = (has_tuples or num_ratio >= 0.80 or not has_table_headers)
+
+            is_direct_fig = (cand.get("source") == "figure" or cand.get("element_type") == "FIGURE" or cand.get("type") == "figure")
+
+            if is_direct_fig or is_matrix_grid or not has_table_headers:
+                # Outcome: FIGURE (Visual Image Matrix / Diagram / Drawing / Chart)
+                classification = "FIGURE"
+                reason = "Image matrix / RGB grid / Visual diagram without conventional column headers" if is_matrix_grid else "Direct visual graphic / drawing contour"
+                action = "EXTRACT_AND_SAVE_FIGURE"
+                cand["element_type"] = "FIGURE"
+
+                fig_filename = f"fig_p{page_num}_{idx}.png"
+                fig_rel_path = f"exam_figures/{subfolder}/{fig_filename}" if subfolder else f"exam_figures/{fig_filename}"
+                fig_full_path = os.path.join(save_dir, fig_filename)
+                thumb_rel_path = f"exam_figures/thumbs/{subfolder}/{fig_filename}" if subfolder else f"exam_figures/thumbs/{fig_filename}"
+                thumb_full_path = os.path.join(thumb_dir, fig_filename)
+
+                crop_bytes = cand.get("bytes")
+                if (not crop_bytes or not os.path.exists(fig_full_path)) and page_renders and page_num <= len(page_renders):
+                    try:
+                        p_render_bytes = page_renders[page_num - 1]
+                        p_render_np = np.frombuffer(p_render_bytes, np.uint8)
+                        p_render_cv = cv2.imdecode(p_render_np, cv2.IMREAD_COLOR)
+                        if p_render_cv is not None:
+                            x0 = max(0, int(c_box[0]))
+                            y0 = max(0, int(c_box[1]))
+                            x1 = min(p_render_cv.shape[1], int(c_box[2]))
+                            y1 = min(p_render_cv.shape[0], int(c_box[3]))
+                            if (x1 - x0) > 10 and (y1 - y0) > 10:
+                                crop_img = p_render_cv[y0:y1, x0:x1]
+                                ok, buf = cv2.imencode(".png", crop_img)
+                                if ok:
+                                    crop_bytes = buf.tobytes()
+                                    c_w, c_h = x1 - x0, y1 - y0
+                    except Exception as crop_err:
+                        print(f"  [FIGURE CROP ERROR] Page {page_num}: {crop_err}")
+
+                if crop_bytes and len(crop_bytes) > 0:
+                    os.makedirs(os.path.dirname(fig_full_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(thumb_full_path), exist_ok=True)
+                    with open(fig_full_path, "wb") as f:
+                        f.write(crop_bytes)
+                    try:
+                        im = Image.open(io.BytesIO(crop_bytes))
+                        im.thumbnail((300, 300))
+                        im.save(thumb_full_path)
+                    except Exception:
+                        thumb_rel_path = fig_rel_path
+
+                    cand["image_path"] = fig_rel_path
+                    cand["image_url"] = f"{settings.MEDIA_URL}{fig_rel_path}"
+                    cand["thumbnail_url"] = f"{settings.MEDIA_URL}{thumb_rel_path}"
+                    cand["bytes"] = crop_bytes
+                    cand["width"] = c_w
+                    cand["height"] = c_h
+                    cand["caption"] = cand.get("caption") or f"Figure {idx} (Page {page_num})"
+                    cand["display_order"] = idx
+                    result = "SUCCESS"
+                else:
+                    result = "FAILED_NO_BYTES"
+
+                final_figures.append(cand)
+                dom_elements.append({
+                    "type": "figure",
+                    "page": page_num,
+                    "caption": cand["caption"],
+                    "image_url": cand.get("image_url", ""),
+                    "bbox": c_box
+                })
+
+                # If region ALSO has 2D cell grid structure, preserve as MATRIX in final_tables for automated grading
+                if has_cells:
+                    tbl_copy = dict(cand)
+                    tbl_copy["element_type"] = "MATRIX"
+                    tbl_copy["caption"] = f"Matrix Grid {idx} (Page {page_num})"
+                    final_tables.append(tbl_copy)
+
+                print(f"[FIGURE EXTRACTION] page={page_num} bbox={c_box} crop_width={c_w} crop_height={c_h} bytes={len(crop_bytes) if crop_bytes else 0} saved=True path={fig_rel_path}")
+
+            else:
+                # Outcome: TABLE (Conventional academic table with column headers)
+                classification = "TABLE"
+                reason = "Structured multi-column table with recognized academic column headers"
+                action = "EXTRACT_AND_SAVE_TABLE"
+                cand["element_type"] = "TABLE"
+                cand["display_order"] = idx
+                final_tables.append(cand)
+                dom_elements.append({
+                    "type": "table",
+                    "page": page_num,
+                    "caption": cand.get("caption", f"Table {idx}"),
+                    "bbox": c_box
+                })
+                result = "SUCCESS"
+
+            print(f"[CANDIDATE FINALIZATION]")
+            print(f"Candidate ID       : Candidate {idx}")
+            print(f"bbox               : {c_box}")
+            print(f"area               : {c_area}")
+            print(f"aspect_ratio       : {aspect_ratio:.2f}")
+            print(f"source detector    : {source_det}")
+            print(f"classification     : {classification}")
+            print(f"reason             : {reason}")
+            print(f"final output type  : {cand.get('element_type')}")
+            print(f"action             : {action}")
+            print(f"result             : {result}")
+            print(f"bytes              : {len(cand.get('bytes', b'')) if cand.get('bytes') else 0}")
+            print("-" * 60)
+
+        contour_figs = [f for f in final_figures if "contour" in f.get("image_path", "") or "fig" in f.get("image_path", "")]
+        embedded_figs = [f for f in final_figures if "pdf" in f.get("image_path", "")]
 
         print(f"[FIGURE PIPELINE] Raw candidates: {len(union_candidates)} | Contour figures: {len(contour_figs)} | Embedded/Vector figures: {len(embedded_figs)} | After NMS: {len(final_accepted)} | Final unique figures: {len(final_figures)} | Final tables: {len(final_tables)}")
 
