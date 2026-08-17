@@ -204,10 +204,23 @@ class QuestionMappingOrchestrator:
                                 matched_q = q
                                 break
 
-                    y_start = det.get('ymin_pct', 0.0)
-                    y_end = detections[r_idx]['ymin_pct'] if r_idx < len(detections) else 1.0
+                    y_start = max(0.0, min(1.0, float(det.get('ymin_pct', 0.0))))
+                    next_y = float(detections[r_idx]['ymin_pct']) if r_idx < len(detections) else 1.0
+                    next_y = max(0.0, min(1.0, next_y))
 
-                    region_bbox = {'ymin': round(y_start, 3), 'xmin': 0.0, 'ymax': round(y_end, 3), 'xmax': 1.0}
+                    # Ensure y_end is strictly greater than y_start to avoid zero-height regions
+                    if next_y <= y_start + 0.02:
+                        y_end = 1.0 if r_idx >= len(detections) else max(y_start + 0.08, next_y)
+                        y_end = min(1.0, y_end)
+                    else:
+                        y_end = next_y
+
+                    if y_end <= y_start:
+                        y_end = min(1.0, y_start + 0.10) if y_start < 0.90 else 1.0
+                        if y_end <= y_start:
+                            y_start = max(0.0, y_end - 0.10)
+
+                    region_bbox = {'ymin': round(y_start, 4), 'xmin': 0.0, 'ymax': round(y_end, 4), 'xmax': 1.0}
                     q_id = getattr(matched_q, 'id', None) if matched_q else None
                     q_num_str = QuestionAccessor.get_question_number(matched_q) if matched_q else norm_num
 

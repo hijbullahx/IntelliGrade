@@ -759,7 +759,130 @@ class AIFailoverResilienceTestCase(TestCase):
         self.assertEqual(res['questions'][0]['question_number'], 'Q1')
 
 
+class AnswerCropServiceTestCase(TestCase):
+    """Regression test suite for robust answer region image cropping and coordinate normalization."""
 
+    def setUp(self):
+        import numpy as np
+        import cv2
+        import tempfile
+
+        self.temp_dir = tempfile.mkdtemp()
+        self.synth_page = np.full((2000, 1000, 3), 255, dtype=np.uint8)
+        cv2.putText(self.synth_page, 'Top Question 1', (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+        cv2.putText(self.synth_page, 'Student Handwritten Body', (50, 1000), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 180), 2)
+        cv2.putText(self.synth_page, 'Bottom Question 2', (50, 1900), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+
+        self.page_path = os.path.join(self.temp_dir, 'synth_page_1.png')
+        cv2.imwrite(self.page_path, self.synth_page)
+
+        self.synth_page_2 = np.full((2000, 1000, 3), 240, dtype=np.uint8)
+        cv2.putText(self.synth_page_2, 'Continuation Page 2', (50, 500), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 180), 2)
+        self.page_2_path = os.path.join(self.temp_dir, 'synth_page_2.png')
+        cv2.imwrite(self.page_2_path, self.synth_page_2)
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_normal_single_page_answer_crop(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        regions = [{
+            'page_number': 1,
+            'region_id': 'p1_r1',
+            'bbox': {'ymin': 0.10, 'xmin': 0.0, 'ymax': 0.60, 'xmax': 1.0}
+        }]
+        crops = AnswerCropService.extract_answer_region_crops(self.page_path, regions, min_crop_height_px=100)
+        self.assertEqual(len(crops), 1)
+        c = crops[0]
+        self.assertEqual(c['page_number'], 1)
+        self.assertEqual(c['crop_width'], 1000)
+        self.assertEqual(c['crop_height'], 1000)
+        self.assertGreater(len(c['image_bytes']), 1000)
+        self.assertEqual(c['mime_type'], 'image/png')
+
+    def test_zero_height_bbox_recovery(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        regions = [{
+            'page_number': 1,
+            'region_id': 'p1_r_degenerate',
+            'bbox': {'ymin': 0.20, 'xmin': 0.0, 'ymax': 0.20, 'xmax': 1.0}
+        }]
+        crops = AnswerCropService.extract_answer_region_crops(self.page_path, regions, min_crop_height_px=100)
+        self.assertEqual(len(crops), 1)
+        c = crops[0]
+        self.assertGreaterEqual(c['crop_height'], 100)
+        self.assertGreater(len(c['image_bytes']), 500)
+
+    def test_out_of_range_bbox_clamping(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        regions = [{
+            'page_number': 1,
+            'region_id': 'p1_r_out_of_range',
+            'bbox': {'ymin': -0.5, 'xmin': -0.2, 'ymax': 1.8, 'xmax': 1.5}
+        }]
+        crops = AnswerCropService.extract_answer_region_crops(self.page_path, regions, min_crop_height_px=100)
+        self.assertEqual(len(crops), 1)
+        c = crops[0]
+        self.assertEqual(c['crop_width'], 1000)
+        self.assertEqual(c['crop_height'], 2000)
+        self.assertEqual(c['bbox']['ymin'], 0.0)
+        self.assertEqual(c['bbox']['ymax'], 1.0)
+        self.assertEqual(c['bbox']['xmin'], 0.0)
+        self.assertEqual(c['bbox']['xmax'], 1.0)
+
+    def test_multi_page_answer_sequence_preservation(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        from core.models import StudentSubmission, SubmissionPage, QuestionMapping, Question, Examination, Department, Course
+
+        dept = Department.objects.create(name='Test Dept Crop', code='TDC')
+        course = Course.objects.create(code='TDC101', title='Test Course Crop', department=dept)
+        exam = Examination.objects.create(course=course, title='Test Exam Crop', exam_date='2026-01-01', total_marks=100.0)
+        q = Question.objects.create(examination=exam, question_number='1', prompt_text='Test Q', max_marks=20.0)
+        sub = StudentSubmission.objects.create(examination=exam, student_name='Test Student Crop')
+
+        sp1 = SubmissionPage.objects.create(submission=sub, page_number=1, working_image_path=self.page_path)
+        sp2 = SubmissionPage.objects.create(submission=sub, page_number=2, working_image_path=self.page_2_path)
+
+        q_map = QuestionMapping.objects.create(
+            submission=sub,
+            question=q,
+            page_numbers_json=[1, 2],
+            regions_json=[
+                {'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.30, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}},
+                {'page_number': 2, 'region_id': 'p2_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 0.70, 'xmax': 1.0}}
+            ]
+        )
+
+        crops = AnswerCropService.extract_crops_for_question(sub, q_map, min_crop_height_px=100)
+        self.assertEqual(len(crops), 2)
+        self.assertEqual(crops[0]['page_number'], 1)
+        self.assertEqual(crops[0]['crop_height'], 1400)
+        self.assertEqual(crops[1]['page_number'], 2)
+        self.assertEqual(crops[1]['crop_height'], 1400)
+        self.assertGreater(len(crops[0]['image_bytes']), 1000)
+        self.assertGreater(len(crops[1]['image_bytes']), 1000)
+
+    def test_question_heading_at_bottom_of_page(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        regions = [{
+            'page_number': 1,
+            'region_id': 'p1_r_bottom',
+            'bbox': {'ymin': 0.98, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}
+        }]
+        crops = AnswerCropService.extract_answer_region_crops(self.page_path, regions, min_crop_height_px=100)
+        self.assertEqual(len(crops), 1)
+        c = crops[0]
+        self.assertGreaterEqual(c['crop_height'], 100)
+        self.assertGreater(len(c['image_bytes']), 500)
+
+    def test_no_empty_crop_returned_on_missing_or_invalid_regions(self):
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        crops_empty_regions = AnswerCropService.extract_answer_region_crops(self.page_path, [], min_crop_height_px=100)
+        self.assertEqual(len(crops_empty_regions), 1)
+        self.assertEqual(crops_empty_regions[0]['crop_height'], 2000)
+        self.assertGreater(len(crops_empty_regions[0]['image_bytes']), 1000)
 
 
 
