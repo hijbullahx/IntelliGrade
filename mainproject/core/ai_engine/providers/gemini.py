@@ -47,6 +47,19 @@ class GeminiProvider(BaseAIProvider):
                 }
             })
 
+        if extra_files and isinstance(extra_files, list):
+            for ef in extra_files:
+                ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
+                ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
+                if ef_b and len(ef_b) < 4 * 1024 * 1024:
+                    b64_ef = base64.b64encode(ef_b).decode('utf-8')
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": ef_m,
+                            "data": b64_ef
+                        }
+                    })
+
         payload = {"contents": [{"parts": parts}]}
         json_data = json.dumps(payload).encode('utf-8')
 
@@ -113,8 +126,15 @@ class GeminiProvider(BaseAIProvider):
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        return self._call_api(prompt, system_instruction, timeout=timeout)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._call_api(
+            prompt,
+            system_instruction=system_instruction,
+            image_bytes=kwargs.get('image_bytes'),
+            mime_type=kwargs.get('mime_type', 'image/png'),
+            extra_files=kwargs.get('extra_files'),
+            timeout=timeout
+        )
 
     def evaluate_answer(
         self,
@@ -123,7 +143,12 @@ class GeminiProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = "image/png",
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         
         exemplar_text = ""
@@ -150,21 +175,19 @@ Return ONLY a raw JSON object in this exact schema:
   "partial_marking_breakdown": {{"criterion_1": float, "criterion_2": float}}
 }}
 """
-        try:
-            response_text = self._call_api(prompt)
-            cleaned = re.sub(r'```json\s*', '', response_text)
-            cleaned = re.sub(r'```\s*', '', cleaned).strip()
-            parsed = json.loads(cleaned)
-            marks = float(parsed.get('ai_suggested_marks', 0.0))
-            parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
-            return parsed
-        except Exception as e:
-            return {
-                "ai_suggested_marks": round(float(max_marks) * 0.80, 2),
-                "confidence_score": 0.85,
-                "ai_feedback": f"Gemini Evaluation (Quota/API Fallback): Answer satisfies key rubric requirements.",
-                "partial_marking_breakdown": {"content_accuracy": round(float(max_marks) * 0.80, 2)}
-            }
+        response_text = self._call_api(
+            prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            extra_files=extra_files,
+            timeout=timeout
+        )
+        cleaned = re.sub(r'```json\s*', '', response_text)
+        cleaned = re.sub(r'```\s*', '', cleaned).strip()
+        parsed = json.loads(cleaned)
+        marks = float(parsed.get('ai_suggested_marks', 0.0))
+        parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
+        return parsed
 
     def analyze_question_paper(self, paper_text_or_image: Any, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg') -> Dict[str, Any]:
         prompt = f"""

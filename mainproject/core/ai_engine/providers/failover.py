@@ -49,8 +49,7 @@ class FailoverAIProvider(BaseAIProvider):
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
         import time
         import inspect
-        last_error = None
-        has_images = bool(kwargs.get('image_bytes') or (args and isinstance(args[0], bytes)))
+        has_images = bool(kwargs.get('image_bytes') or kwargs.get('extra_files') or (args and any(isinstance(a, bytes) for a in args)))
 
         total_budget = float(getattr(settings, 'AI_TOTAL_TIMEOUT_BUDGET', None) or os.environ.get('AI_TOTAL_TIMEOUT_BUDGET', 16.0))
         overall_start = time.monotonic()
@@ -59,8 +58,8 @@ class FailoverAIProvider(BaseAIProvider):
         # Dynamic Capability-Based Provider Selection
         chain_order = list(self._chain)
         if has_images:
-            # Sort vision-capable providers to the front of the chain
-            chain_order.sort(key=lambda p: 0 if p.get_capabilities().get('supports_images') else 1)
+            # Filter out providers that do not support images (e.g. text-only Ollama)
+            chain_order = [p for p in chain_order if p.get_capabilities().get('supports_images', False)]
 
         print(f"[AI TIMING] Failover Orchestrator START: method={method_name} | budget={total_budget:.1f}s | providers={[p.__class__.__name__ for p in chain_order]}")
 

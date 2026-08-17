@@ -885,5 +885,271 @@ class AnswerCropServiceTestCase(TestCase):
         self.assertGreater(len(crops_empty_regions[0]['image_bytes']), 1000)
 
 
+class MultimodalVisualEvaluationTestCase(TestCase):
+    """Regression test suite for isolated multimodal visual answer evaluation and safe fallbacks."""
 
+    def setUp(self):
+        import numpy as np
+        import cv2
+        import tempfile
+        from core.models import Department, Course, Examination, Question, StudentSubmission, SubmissionPage, SubmissionAnswer, QuestionMapping
 
+        self.temp_dir = tempfile.mkdtemp()
+        self.synth_page = np.full((1200, 800, 3), 255, dtype=np.uint8)
+        cv2.putText(self.synth_page, 'Handwritten Q1 Work', (50, 400), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+        self.page_1_path = os.path.join(self.temp_dir, 'page_1.png')
+        cv2.imwrite(self.page_1_path, self.synth_page)
+
+        self.synth_page_2 = np.full((1200, 800, 3), 245, dtype=np.uint8)
+        cv2.putText(self.synth_page_2, 'Handwritten Q1 Continued', (50, 400), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+        self.page_2_path = os.path.join(self.temp_dir, 'page_2.png')
+        cv2.imwrite(self.page_2_path, self.synth_page_2)
+
+        self.dept = Department.objects.create(name='Computer Science', code='CSE')
+        self.course = Course.objects.create(code='CSE4385', title='Software Testing', department=self.dept)
+        self.exam = Examination.objects.create(course=self.course, title='Midterm Exam', exam_date='2026-08-15', total_marks=100.0)
+        self.question = Question.objects.create(
+            examination=self.exam,
+            question_number='1',
+            prompt_text='Explain Dynamic Programming and state the Bellman Equation.',
+            max_marks=10.0
+        )
+        self.submission = StudentSubmission.objects.create(examination=self.exam, student_name='Alice Student')
+        self.sp1 = SubmissionPage.objects.create(submission=self.submission, page_number=1, working_image_path=self.page_1_path)
+        self.sp2 = SubmissionPage.objects.create(submission=self.submission, page_number=2, working_image_path=self.page_2_path)
+        self.answer = SubmissionAnswer.objects.create(
+            submission=self.submission,
+            question=self.question,
+            extracted_text='Dynamic programming breaks down problems into subproblems.'
+        )
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_single_image_crop_multimodal_evaluation_called(self, mock_get_provider):
+        from core.models import QuestionMapping
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1],
+            regions_json=[{'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.1, 'xmin': 0.0, 'ymax': 0.8, 'xmax': 1.0}}]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GeminiProvider'
+        mock_provider.generate_completion.return_value = json.dumps({
+            "question_id": str(self.question.id),
+            "obtained_marks": 8.5,
+            "maximum_marks": 10.0,
+            "percentage": 85.0,
+            "strengths": ["Clear Bellman equation"],
+            "mistakes": [],
+            "missing_points": [],
+            "expected_points": ["Optimal substructure"],
+            "rubric_breakdown": [{"criteria": "Concept", "allocated": 10.0, "awarded": 8.5, "comments": "Good"}],
+            "feedback": "Well written solution.",
+            "confidence": 0.92,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={'strictness': 'Balanced'})
+        self.assertEqual(res.obtained_marks, 8.5)
+        self.assertEqual(res.maximum_marks, 10.0)
+        self.assertFalse(res.requires_manual_review)
+        self.assertEqual(res.confidence, 0.92)
+
+        # Verify image_bytes was passed
+        mock_provider.generate_completion.assert_called()
+        call_kwargs = mock_provider.generate_completion.call_args[1]
+        self.assertIsNotNone(call_kwargs.get('image_bytes'))
+        self.assertGreater(len(call_kwargs['image_bytes']), 100)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_multi_page_answer_multiple_images_sent(self, mock_get_provider):
+        from core.models import QuestionMapping
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1, 2],
+            regions_json=[
+                {'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.2, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}},
+                {'page_number': 2, 'region_id': 'p2_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 0.5, 'xmax': 1.0}}
+            ]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GeminiProvider'
+        mock_provider.generate_completion.return_value = json.dumps({
+            "question_id": str(self.question.id),
+            "obtained_marks": 9.0,
+            "maximum_marks": 10.0,
+            "feedback": "Complete 2-page answer.",
+            "confidence": 0.95,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 9.0)
+
+        call_kwargs = mock_provider.generate_completion.call_args[1]
+        self.assertIsNotNone(call_kwargs.get('image_bytes'))
+        self.assertIsNotNone(call_kwargs.get('extra_files'))
+        self.assertEqual(len(call_kwargs['extra_files']), 1)
+        self.assertEqual(call_kwargs['extra_files'][0]['page_number'], 2)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_vision_provider_receives_image_payload(self, mock_get_provider):
+        from core.models import QuestionMapping
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1],
+            regions_json=[{'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}}]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GroqProvider'
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 7.0,
+            "feedback": "Correct overview.",
+            "confidence": 0.88,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 7.0)
+        call_kwargs = mock_provider.generate_completion.call_args[1]
+        self.assertIn('image_bytes', call_kwargs)
+        self.assertEqual(call_kwargs.get('mime_type'), 'image/png')
+
+    def test_ollama_is_skipped_for_image_evaluation(self):
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.ollama import OllamaProvider
+
+        gemini_mock = MagicMock(spec=GeminiProvider)
+        gemini_mock.get_capabilities.return_value = {'supports_images': True, 'supports_text': True}
+        gemini_mock.generate_completion.return_value = '{"obtained_marks": 8.0, "feedback": "Valid", "confidence": 0.90}'
+
+        ollama_mock = MagicMock(spec=OllamaProvider)
+        ollama_mock.get_capabilities.return_value = {'supports_images': False, 'supports_text': True}
+
+        failover = FailoverAIProvider(primary_provider=gemini_mock)
+        failover._chain = [ollama_mock, gemini_mock]
+
+        res = failover.generate_completion("Test prompt", image_bytes=b'fake_png_data')
+        # Ollama must not have been called because it lacks supports_images
+        ollama_mock.generate_completion.assert_not_called()
+        gemini_mock.generate_completion.assert_called_once()
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_all_vision_providers_fail_text_fallback(self, mock_get_provider):
+        from core.models import QuestionMapping
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1],
+            regions_json=[{'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}}]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'FailoverAIProvider'
+
+        # First call (vision with image_bytes) fails; second call (text-only) succeeds
+        def side_effect(*args, **kwargs):
+            if kwargs.get('image_bytes'):
+                raise Exception("Vision quota exhausted on all vision providers")
+            return json.dumps({
+                "obtained_marks": 6.0,
+                "feedback": "Evaluated via text-only fallback.",
+                "confidence": 0.75,
+                "requires_manual_review": False
+            })
+
+        mock_provider.generate_completion.side_effect = side_effect
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 6.0)
+        # Because visual grading was unavailable, manual review is flagged
+        self.assertTrue(res.requires_manual_review)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_no_crop_text_fallback_with_manual_review(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        # No QuestionMapping exists for this question
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GroqProvider'
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 7.5,
+            "feedback": "Text-only evaluation.",
+            "confidence": 0.80,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 7.5)
+        # Requires manual review because no image crop was available
+        self.assertTrue(res.requires_manual_review)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_score_is_clamped_to_max_marks(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GeminiProvider'
+        # Return 25.0 marks for a 10.0 max mark question
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 25.0,
+            "feedback": "Overly generous AI.",
+            "confidence": 0.90,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 10.0)  # Clamped strictly to max_marks
+        self.assertEqual(res.percentage, 100.0)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_low_confidence_flags_manual_review(self, mock_get_provider):
+        from core.models import QuestionMapping
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1],
+            regions_json=[{'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}}]
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GeminiProvider'
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 4.0,
+            "feedback": "Handwriting is partially unreadable.",
+            "confidence": 0.45,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 4.0)
+        self.assertEqual(res.confidence, 0.45)
+        self.assertTrue(res.requires_manual_review)  # Low confidence (< 0.70) forces manual review

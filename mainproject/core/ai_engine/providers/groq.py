@@ -17,7 +17,7 @@ class GroqProvider(BaseAIProvider):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', timeout: Optional[float] = None) -> str:
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("Groq API Key is not configured.")
 
@@ -31,13 +31,18 @@ class GroqProvider(BaseAIProvider):
             selected_model = "llama-3.2-11b-vision-preview"
             import base64
             b64 = base64.b64encode(image_bytes).decode('utf-8')
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
-                ]
-            })
+            content_list = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
+            ]
+            if extra_files and isinstance(extra_files, list):
+                for ef in extra_files:
+                    ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
+                    ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
+                    if ef_b:
+                        b64_ef = base64.b64encode(ef_b).decode('utf-8')
+                        content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_m};base64,{b64_ef}"}})
+            messages.append({"role": "user", "content": content_list})
         else:
             messages.append({"role": "user", "content": prompt})
 
@@ -82,8 +87,15 @@ class GroqProvider(BaseAIProvider):
             print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (FAILED: {str(e)[:120]})")
             raise Exception(f"Groq API Request Failed: {str(e)}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        return self._call_api(prompt, system_instruction, timeout=timeout)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._call_api(
+            prompt,
+            system_instruction=system_instruction,
+            image_bytes=kwargs.get('image_bytes'),
+            mime_type=kwargs.get('mime_type', 'image/png'),
+            extra_files=kwargs.get('extra_files'),
+            timeout=timeout
+        )
 
     def evaluate_answer(
         self,
@@ -92,7 +104,12 @@ class GroqProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = "image/png",
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         prompt = f"""
 Evaluate the following student answer for an academic examination question:
@@ -108,18 +125,20 @@ Return ONLY a raw JSON object with keys:
 "ai_feedback": str,
 "partial_marking_breakdown": dict
 """
-        res = self._call_api(prompt, system_instruction="Return ONLY raw JSON.")
-        try:
-            cleaned = re.sub(r'```json\s*', '', res)
-            cleaned = re.sub(r'```\s*', '', cleaned).strip()
-            return json.loads(cleaned)
-        except Exception:
-            return {
-                "ai_suggested_marks": round(max_marks * 0.75, 2),
-                "confidence_score": 0.85,
-                "ai_feedback": "Evaluated by Groq AI.",
-                "partial_marking_breakdown": {"core_concept": round(max_marks * 0.75, 2)}
-            }
+        res = self._call_api(
+            prompt,
+            system_instruction="Return ONLY raw JSON.",
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            extra_files=extra_files,
+            timeout=timeout
+        )
+        cleaned = re.sub(r'```json\s*', '', res)
+        cleaned = re.sub(r'```\s*', '', cleaned).strip()
+        parsed = json.loads(cleaned)
+        marks = float(parsed.get('ai_suggested_marks', 0.0))
+        parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
+        return parsed
 
     def analyze_question_paper(self, paper_text_or_image: Any, **kwargs) -> Dict[str, Any]:
         prompt = f"Extract routine or exam schedule from text:\n{str(paper_text_or_image)}\nReturn JSON with key 'routine_schedule'."
