@@ -10,12 +10,60 @@ from .base import BaseAIProvider
 class GroqProvider(BaseAIProvider):
     """
     Groq AI Provider Implementation using REST API.
-    Supports Llama3, Mixtral, and fast inference models.
+    Supports Llama3, Qwen Vision, and fast inference models.
     """
 
-    def __init__(self, api_key: str, model_name: str = "llama-3.3-70b-versatile"):
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": False
+    }
+
+    def __init__(self, api_key: str, model_name: str = "qwen/qwen3.6-27b"):
         self.api_key = api_key
         self.model_name = model_name
+
+    @staticmethod
+    def sanitize_thinking_output(text: str) -> str:
+        """
+        Sanitizes model outputs containing reasoning/thinking blocks such as:
+        <think>
+        ...
+        </think>
+        Returns clean content with thinking blocks stripped out.
+        Handles malformed tags, missing closing tags, multiple blocks gracefully.
+        """
+        if not text or not isinstance(text, str):
+            return ""
+
+        # First, if there is text after </think>, check if it contains JSON
+        if "</think>" in text:
+            after_think = text.split("</think>")[-1].strip()
+            if after_think and "{" in after_think:
+                m_after = re.search(r'\{.*\}', after_think, re.DOTALL)
+                if m_after:
+                    return m_after.group(0).strip()
+                return after_think
+
+        # Remove complete <think>...</think> blocks (case-insensitive, dotall)
+        cleaned = re.sub(r'(?i)<think>.*?</think>', '', text, flags=re.DOTALL)
+
+        # Handle unclosed <think> tag: if <think> remains without closing </think>
+        if re.search(r'(?i)<think>', cleaned):
+            cleaned = re.sub(r'(?i)<think>.*$', '', cleaned, flags=re.DOTALL)
+
+        # Strip remaining orphan </think> tags if any
+        cleaned = re.sub(r'(?i)</think>', '', cleaned).strip()
+
+        # Fallback: if cleaning stripped everything but raw text contains JSON object
+        if not cleaned and '{' in text and '}' in text:
+            m = re.search(r'\{.*\}', text, re.DOTALL)
+            if m:
+                cleaned = m.group(0).strip()
+
+        return cleaned
 
     def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
@@ -28,7 +76,7 @@ class GroqProvider(BaseAIProvider):
 
         selected_model = self.model_name
         if image_bytes:
-            selected_model = "llama-3.2-11b-vision-preview"
+            selected_model = "qwen/qwen3.6-27b"
             import base64
             b64 = base64.b64encode(image_bytes).decode('utf-8')
             content_list = [
@@ -73,8 +121,10 @@ class GroqProvider(BaseAIProvider):
                 choices = res_data.get('choices', [])
                 elapsed = time.monotonic() - start_t
                 if choices and choices[0].get('message', {}).get('content'):
+                    raw_content = choices[0]['message']['content']
+                    sanitized_content = self.sanitize_thinking_output(raw_content)
                     print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (SUCCESS)")
-                    return choices[0]['message']['content']
+                    return sanitized_content
                 print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (EMPTY CHOICES)")
                 raise ValueError("Groq returned empty response choices.")
         except urllib.error.HTTPError as e:

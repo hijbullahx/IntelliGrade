@@ -13,6 +13,14 @@ class OpenAIProvider(BaseAIProvider):
     Supports GPT-4o and GPT-4o-mini models.
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": True
+    }
+
     def __init__(self, api_key: str, model_name: str = "gpt-4o-mini"):
         self.api_key = api_key
         self.model_name = model_name

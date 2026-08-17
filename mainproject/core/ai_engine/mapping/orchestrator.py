@@ -195,6 +195,28 @@ class QuestionMappingOrchestrator:
                 # Page contains 1 or more explicit answer headings! Sort by vertical ymin_pct position
                 detections.sort(key=lambda d: d.get('ymin_pct', 0.0))
 
+                first_det_ymin = float(detections[0].get('ymin_pct', 0.0))
+                if first_det_ymin > 0.08 and active_q_obj:
+                    # Top region prior to first explicit heading belongs to active_q_obj as continuation
+                    top_bbox = {'ymin': 0.0, 'xmin': 0.0, 'ymax': round(first_det_ymin, 4), 'xmax': 1.0}
+                    active_q_id = getattr(active_q_obj, 'id', None)
+                    top_reg = AnswerRegion(
+                        page_number=p_num,
+                        region_id=f"p{p_num}_r0",
+                        bbox=top_bbox,
+                        question_id=active_q_id,
+                        question_number=QuestionAccessor.get_question_number(active_q_obj),
+                        heading_text=f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)}",
+                        heading_confidence=0.85,
+                        semantic_confidence=0.0,
+                        mapping_method="CONTINUATION",
+                        confidence_level="HIGH",
+                        requires_review=False,
+                        reason=f"Top region continuation of Q{QuestionAccessor.get_question_number(active_q_obj)} prior to explicit heading"
+                    )
+                    page_regions.append(top_reg)
+                    mapped_regions_by_q[active_q_id]['regions'].append(top_reg)
+
                 for r_idx, det in enumerate(detections, 1):
                     norm_num = det['normalized_number'].strip().lower()
                     matched_q = q_map_by_num.get(norm_num)
@@ -246,8 +268,26 @@ class QuestionMappingOrchestrator:
 
             else:
                 # 0 explicit headings detected on this page
-                # Evaluate Continuation vs Missed Heading Suspicion & Semantic Change
-                if active_q_obj:
+                if p_num == 1:
+                    # Page 1 is initial cover/title page - remain UNMAPPED unless explicit heading exists
+                    reg = AnswerRegion(
+                        page_number=1,
+                        region_id="p1_r1",
+                        bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                        question_id=None,
+                        question_number="UNMAPPED",
+                        heading_text="None",
+                        heading_confidence=0.0,
+                        semantic_confidence=0.0,
+                        mapping_method="UNRESOLVED",
+                        confidence_level="UNKNOWN",
+                        requires_review=True,
+                        reason="No explicit question heading found on initial page"
+                    )
+                    page_regions.append(reg)
+                    unassigned_page_numbers.append(1)
+                else:
+                    # Evaluate Continuation vs Missed Heading Suspicion & Semantic Change
                     prev_text = pages[p_num - 2].ocr_raw_text if p_num > 1 else ""
                     cont_eval = ContinuationDetector.evaluate_continuation(
                         prev_page_text=prev_text,
@@ -255,43 +295,40 @@ class QuestionMappingOrchestrator:
                         current_has_new_header=False
                     )
 
-                    # Run Semantic Change Detection across stored questions
-                    sem_change_detected = False
+                    # Run Semantic Matcher
                     sem_best_q = None
                     sem_best_score = 0.0
-                    if ocr_text and len(ocr_text.strip()) > 30:
+                    if ocr_text and len(ocr_text.strip()) > 20:
                         sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
                         sem_best_q = sem_match.get('best_question')
                         sem_best_score = float(sem_match.get('confidence', 0.0))
 
-                        active_q_num = QuestionAccessor.get_question_number(active_q_obj)
-                        sem_best_num = QuestionAccessor.get_question_number(sem_best_q) if sem_best_q else None
+                    active_q_num = QuestionAccessor.get_question_number(active_q_obj) if active_q_obj else None
+                    sem_best_num = QuestionAccessor.get_question_number(sem_best_q) if sem_best_q else None
 
-                        if sem_best_q and sem_best_num != active_q_num and sem_best_score >= 0.70:
-                            sem_change_detected = True
-
-                    if sem_change_detected:
-                        # POSSIBLE MISSED HEADING / SEMANTIC TRANSITION!
-                        active_q_id = getattr(active_q_obj, 'id', None)
+                    if sem_best_q and sem_best_num != active_q_num and sem_best_score >= 0.45:
+                        # Topic transition detected via semantic matcher!
+                        sem_q_id = getattr(sem_best_q, 'id', None)
                         reg = AnswerRegion(
                             page_number=p_num,
                             region_id=f"p{p_num}_r1",
                             bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
-                            question_id=active_q_id,
-                            question_number=QuestionAccessor.get_question_number(active_q_obj),
-                            heading_text=f"Possible Transition to Q{QuestionAccessor.get_question_number(sem_best_q)}",
+                            question_id=sem_q_id,
+                            question_number=QuestionAccessor.get_question_number(sem_best_q),
+                            heading_text=f"Semantic Match: Q{QuestionAccessor.get_question_number(sem_best_q)}",
                             heading_confidence=0.0,
                             semantic_confidence=sem_best_score,
-                            mapping_method="POSSIBLE_MISSED_HEADING",
-                            confidence_level="LOW",
-                            requires_review=True,
+                            mapping_method="SEMANTIC_TOPIC_MATCH",
+                            confidence_level="HIGH" if sem_best_score >= 0.75 else "MEDIUM",
+                            requires_review=(sem_best_score < 0.75),
                             possible_missed_heading=True,
-                            reason=f"Semantic change detected: Content similarity to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%) is higher than active Q{QuestionAccessor.get_question_number(active_q_obj)}"
+                            reason=f"Semantic topic match: Content similarity to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%)"
                         )
                         page_regions.append(reg)
-                        mapped_regions_by_q[active_q_id]['regions'].append(reg)
+                        mapped_regions_by_q[sem_q_id]['regions'].append(reg)
+                        active_q_obj = sem_best_q
 
-                    elif cont_eval['is_continuation']:
+                    elif active_q_obj and cont_eval['is_continuation'] and cont_eval['confidence'] >= 0.70:
                         active_q_id = getattr(active_q_obj, 'id', None)
                         conf_val = cont_eval['confidence']
                         reg = AnswerRegion(
@@ -302,7 +339,7 @@ class QuestionMappingOrchestrator:
                             question_number=QuestionAccessor.get_question_number(active_q_obj),
                             heading_text=f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)}",
                             heading_confidence=conf_val,
-                            semantic_confidence=0.0,
+                            semantic_confidence=sem_best_score if sem_best_num == active_q_num else 0.0,
                             mapping_method="CONTINUATION",
                             confidence_level="HIGH" if conf_val >= 0.85 else "MEDIUM",
                             requires_review=(conf_val < 0.75),
@@ -310,6 +347,28 @@ class QuestionMappingOrchestrator:
                         )
                         page_regions.append(reg)
                         mapped_regions_by_q[active_q_id]['regions'].append(reg)
+
+                    elif sem_best_q and sem_best_score >= 0.45:
+                        sem_q_id = getattr(sem_best_q, 'id', None)
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=sem_q_id,
+                            question_number=QuestionAccessor.get_question_number(sem_best_q),
+                            heading_text=f"Semantic Match: Q{QuestionAccessor.get_question_number(sem_best_q)}",
+                            heading_confidence=0.0,
+                            semantic_confidence=sem_best_score,
+                            mapping_method="SEMANTIC_TOPIC_MATCH",
+                            confidence_level="MEDIUM",
+                            requires_review=True,
+                            possible_missed_heading=True,
+                            reason=f"Semantic match to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%)"
+                        )
+                        page_regions.append(reg)
+                        mapped_regions_by_q[sem_q_id]['regions'].append(reg)
+                        active_q_obj = sem_best_q
+
                     else:
                         reg = AnswerRegion(
                             page_number=p_num,
@@ -323,26 +382,10 @@ class QuestionMappingOrchestrator:
                             mapping_method="UNRESOLVED",
                             confidence_level="UNKNOWN",
                             requires_review=True,
-                            reason="No explicit heading or continuation detected"
+                            reason="No explicit heading, continuation, or semantic topic match"
                         )
                         page_regions.append(reg)
                         unassigned_page_numbers.append(p_num)
-                else:
-                    reg = AnswerRegion(
-                        page_number=p_num,
-                        region_id=f"p{p_num}_r1",
-                        bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
-                        question_id=None,
-                        question_number="UNMAPPED",
-                        heading_text="None",
-                        heading_confidence=0.0,
-                        semantic_confidence=0.0,
-                        mapping_method="UNRESOLVED",
-                        confidence_level="UNKNOWN",
-                        requires_review=True,
-                        reason="No explicit question heading found on initial page"
-                    )
-                    page_regions.append(reg)
                     unassigned_page_numbers.append(p_num)
 
             # Store answer_regions_json on SubmissionPage
@@ -462,6 +505,7 @@ class QuestionMappingOrchestrator:
             'success': True,
             'submission_id': submission.id,
             'mappings': final_mapping_payload,
+            'summary': final_mapping_payload,
             'page_records': page_mapping_records,
             'page_regions_map': {p: [r.to_dict() for r in regs] for p, regs in page_regions_map.items()},
             'unassigned_pages': unassigned_page_numbers,

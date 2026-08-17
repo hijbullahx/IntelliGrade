@@ -10,9 +10,10 @@ from .ollama import OllamaProvider
 class FailoverAIProvider(BaseAIProvider):
     """
     Resilient Multi-Provider Failover Orchestrator for IntelliGrade.
-    Chain Sequence: Gemini (Vision/Text) -> Groq (Llama-3 70B) -> OpenAI (GPT-4o) -> Ollama (Local)
+    Vision Chain: Gemini (Vision) -> Groq (Qwen Vision) -> OpenAI (GPT-4o Vision)
+    Text Chain: Groq (Llama-3.3 70B) -> Gemini (Flash) -> OpenAI (GPT-4o-mini) -> Ollama (Local)
     If any provider hits a rate limit (HTTP 429), quota exhaustion, or network timeout,
-    the failover chain seamlessly routes to the next active provider without data loss.
+    the failover chain seamlessly routes to the next active provider in the applicable chain.
     """
 
     def __init__(self, primary_provider: BaseAIProvider):
@@ -21,30 +22,48 @@ class FailoverAIProvider(BaseAIProvider):
         self._build_chain()
 
     def _build_chain(self):
-        # 1. Add primary provider
-        self._chain.append(self.primary_provider)
-
         gemini_key = getattr(settings, 'GEMINI_API_KEY', '') or os.environ.get('GEMINI_API_KEY', '')
         groq_key = getattr(settings, 'GROQ_API_KEY', '') or os.environ.get('GROQ_API_KEY', '')
         openai_key = getattr(settings, 'OPENAI_API_KEY', '') or os.environ.get('OPENAI_API_KEY', '')
 
-        # 2. Add Groq if not primary
-        if groq_key and not isinstance(self.primary_provider, GroqProvider):
-            self._chain.append(GroqProvider(api_key=groq_key))
+        self._chain = []
+        if self.primary_provider:
+            self._chain.append(self.primary_provider)
 
-        # 3. Add Gemini if not primary
-        if gemini_key and not isinstance(self.primary_provider, GeminiProvider):
+        if gemini_key and not any(isinstance(p, GeminiProvider) for p in self._chain):
             self._chain.append(GeminiProvider(api_key=gemini_key))
 
-        # 4. Add OpenAI if not primary
-        if openai_key and not isinstance(self.primary_provider, OpenAIProvider):
+        if groq_key and not any(isinstance(p, GroqProvider) for p in self._chain):
+            self._chain.append(GroqProvider(api_key=groq_key))
+
+        if openai_key and not any(isinstance(p, OpenAIProvider) for p in self._chain):
             self._chain.append(OpenAIProvider(api_key=openai_key))
 
-        # 5. Add Ollama local fallback
-        if not isinstance(self.primary_provider, OllamaProvider):
+        if not any(isinstance(p, OllamaProvider) for p in self._chain):
             self._chain.append(OllamaProvider())
 
         print(f"[AI PROVIDER STATUS] Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'} | Ollama: CONFIGURED")
+
+    def _get_execution_chain(self, has_images: bool) -> List[BaseAIProvider]:
+        if has_images:
+            order_priority = {
+                GeminiProvider: 1,
+                GroqProvider: 2,
+                OpenAIProvider: 3
+            }
+            available = [p for p in self._chain if p.get_capabilities().get('supports_images', False)]
+            available.sort(key=lambda p: order_priority.get(p.__class__, 99))
+            return available
+        else:
+            order_priority = {
+                GroqProvider: 1,
+                GeminiProvider: 2,
+                OpenAIProvider: 3,
+                OllamaProvider: 4
+            }
+            available = [p for p in self._chain if p.get_capabilities().get('supports_text', False)]
+            available.sort(key=lambda p: order_priority.get(p.__class__, 99))
+            return available
 
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
         import time
@@ -55,11 +74,8 @@ class FailoverAIProvider(BaseAIProvider):
         overall_start = time.monotonic()
         deadline = overall_start + total_budget
 
-        # Dynamic Capability-Based Provider Selection
-        chain_order = list(self._chain)
-        if has_images:
-            # Filter out providers that do not support images (e.g. text-only Ollama)
-            chain_order = [p for p in chain_order if p.get_capabilities().get('supports_images', False)]
+        # Dynamic Capability-Based Provider Chain Selection
+        chain_order = self._get_execution_chain(has_images)
 
         print(f"[AI TIMING] Failover Orchestrator START: method={method_name} | budget={total_budget:.1f}s | providers={[p.__class__.__name__ for p in chain_order]}")
 

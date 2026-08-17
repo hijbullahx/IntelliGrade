@@ -59,6 +59,9 @@ class QuestionDTO:
     co: str = "CO1"
     po: str = "PO1"
     rubric: str = ""
+    ideal_answer: str = ""
+    alternative_answers: str = ""
+    common_mistakes: List[str] = field(default_factory=list)
     figures: List[Any] = field(default_factory=list)
     tables: List[Any] = field(default_factory=list)
     formulas: List[Any] = field(default_factory=list)
@@ -92,6 +95,9 @@ class QuestionDTO:
             'po_mapping': self.po,
             'rubric': self.rubric,
             'rubric_text': self.rubric,
+            'ideal_answer': self.ideal_answer,
+            'alternative_answers': self.alternative_answers,
+            'common_mistakes': self.common_mistakes,
             'figures': self.figures,
             'tables': self.tables,
             'formulas': self.formulas
@@ -148,11 +154,44 @@ class QuestionAccessor:
         """Retrieves rubric criteria text safely."""
         rubric_obj = safe_getattr(question, ['rubric'], default=None)
         if rubric_obj:
-            r_text = safe_getattr(rubric_obj, ['criteria_text', 'rubric_text', 'text', 'content'], default="")
+            r_text = safe_getattr(rubric_obj, ['criteria', 'criteria_text', 'rubric_text', 'text', 'content'], default="")
             if r_text:
                 return str(r_text).strip()
         val = safe_getattr(question, ['rubric_text', 'rubrics', 'rubric_content'], default="Grade based on accuracy and complete steps.")
         return str(val).strip()
+
+    @classmethod
+    def get_ideal_answer(cls, question: Any) -> str:
+        """Retrieves ideal / model answer text safely."""
+        rubric_obj = safe_getattr(question, ['rubric'], default=None)
+        if rubric_obj:
+            ans = safe_getattr(rubric_obj, ['ideal_answer', 'expected_answer'], default="")
+            if ans:
+                return str(ans).strip()
+        val = safe_getattr(question, ['ideal_answer', 'expected_answer', 'model_answer'], default="")
+        return str(val).strip()
+
+    @classmethod
+    def get_alternative_answers(cls, question: Any) -> str:
+        """Retrieves alternative valid answer approaches safely."""
+        rubric_obj = safe_getattr(question, ['rubric'], default=None)
+        if rubric_obj:
+            ans = safe_getattr(rubric_obj, ['alternative_answers'], default="")
+            if ans:
+                return str(ans).strip()
+        val = safe_getattr(question, ['alternative_answers'], default="")
+        return str(val).strip()
+
+    @classmethod
+    def get_common_mistakes(cls, question: Any) -> List[str]:
+        """Retrieves list of common student mistakes/pitfalls safely."""
+        rubric_obj = safe_getattr(question, ['rubric'], default=None)
+        if rubric_obj:
+            mistakes = safe_getattr(rubric_obj, ['common_mistakes'], default=[])
+            if mistakes:
+                return safe_normalize_collection(mistakes)
+        val = safe_getattr(question, ['common_mistakes'], default=[])
+        return safe_normalize_collection(val)
 
     @classmethod
     def get_figures(cls, question: Any) -> List[Any]:
@@ -183,6 +222,9 @@ class QuestionAccessor:
         q_co = cls.get_co(question)
         q_po = cls.get_po(question)
         q_rubric = cls.get_rubric(question)
+        q_ideal = cls.get_ideal_answer(question)
+        q_alt = cls.get_alternative_answers(question)
+        q_mistakes = cls.get_common_mistakes(question)
 
         figs = cls.get_figures(question)
         tbls = cls.get_tables(question)
@@ -197,6 +239,9 @@ class QuestionAccessor:
             co=q_co,
             po=q_po,
             rubric=q_rubric,
+            ideal_answer=q_ideal,
+            alternative_answers=q_alt,
+            common_mistakes=q_mistakes,
             figures=figs,
             tables=tbls,
             formulas=forms

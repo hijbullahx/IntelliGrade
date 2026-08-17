@@ -172,6 +172,9 @@ class AIFailoverResilienceTestCase(TestCase):
     """
 
     def setUp(self):
+        from core.models import AIProviderHealth
+        AIProviderHealth.objects.all().delete()
+
         from core.ai_engine.providers.gemini import GeminiProvider
         from core.ai_engine.providers.groq import GroqProvider
         from core.ai_engine.providers.failover import FailoverAIProvider
@@ -218,7 +221,7 @@ class AIFailoverResilienceTestCase(TestCase):
             groq_resp
         ]
 
-        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Software Design Patterns. [10 marks]")
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Software Design Patterns. [10 marks]", image_bytes=b'fake_png')
         self.assertIn('questions', result)
         self.assertEqual(len(result['questions']), 1)
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
@@ -249,7 +252,7 @@ class AIFailoverResilienceTestCase(TestCase):
             groq_resp
         ]
 
-        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Derive the quadratic formula. [15 marks]")
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Derive the quadratic formula. [15 marks]", image_bytes=b'fake_png')
         self.assertIn('questions', result)
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
 
@@ -279,9 +282,91 @@ class AIFailoverResilienceTestCase(TestCase):
             groq_resp
         ]
 
-        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Database Normalization. [20 marks]")
+        result = self.failover_provider.analyze_academic_exam_paper("Question 1: Explain Database Normalization. [20 marks]", image_bytes=b'fake_png')
         self.assertIn('questions', result)
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+
+    def test_vision_and_text_failover_chain_order(self):
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.openai import OpenAIProvider
+        from core.ai_engine.providers.ollama import OllamaProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+
+        gemini = GeminiProvider(api_key="gemini_key")
+        groq = GroqProvider(api_key="groq_key")
+        openai = OpenAIProvider(api_key="openai_key")
+        ollama = OllamaProvider()
+
+        failover = FailoverAIProvider(primary_provider=gemini)
+
+        # Vision chain order: Gemini -> Groq -> OpenAI (Ollama excluded)
+        vision_chain = failover._get_execution_chain(has_images=True)
+        vision_types = [p.__class__ for p in vision_chain]
+        self.assertEqual(vision_types, [GeminiProvider, GroqProvider, OpenAIProvider])
+
+        # Text chain order: Groq -> Gemini -> OpenAI -> Ollama
+        text_chain = failover._get_execution_chain(has_images=False)
+        text_types = [p.__class__ for p in text_chain]
+        self.assertEqual(text_types, [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider])
+
+    def test_provider_capability_declarations(self):
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.openai import OpenAIProvider
+        from core.ai_engine.providers.ollama import OllamaProvider
+
+        self.assertTrue(GroqProvider(api_key="k").get_capabilities()['supports_images'])
+        self.assertTrue(GeminiProvider(api_key="k").get_capabilities()['supports_images'])
+        self.assertTrue(OpenAIProvider(api_key="k").get_capabilities()['supports_images'])
+        self.assertFalse(OllamaProvider().get_capabilities()['supports_images'])
+
+    def test_groq_vision_and_text_model_selection(self):
+        from core.ai_engine.providers.groq import GroqProvider
+        groq = GroqProvider(api_key="test_key")
+        self.assertEqual(groq.model_name, "qwen/qwen3.6-27b")
+
+        with patch('urllib.request.urlopen') as mock_url:
+            mock_url.return_value = self._mock_http_response({'choices': [{'message': {'content': 'ok'}}]})
+            groq.generate_completion("Text prompt")
+            req = mock_url.call_args[0][0]
+            payload = json.loads(req.data.decode('utf-8'))
+            self.assertEqual(payload['model'], 'qwen/qwen3.6-27b')
+
+        with patch('urllib.request.urlopen') as mock_url:
+            mock_url.return_value = self._mock_http_response({'choices': [{'message': {'content': 'ok'}}]})
+            groq.generate_completion("Vision prompt", image_bytes=b'fake_bytes')
+            req = mock_url.call_args[0][0]
+            payload = json.loads(req.data.decode('utf-8'))
+            self.assertEqual(payload['model'], 'qwen/qwen3.6-27b')
+
+    def test_groq_sanitize_thinking_output(self):
+        import re
+        from core.ai_engine.providers.groq import GroqProvider
+
+        # a. response with <think>...</think>
+        resp_a = "<think>\nThinking process...\n</think>\nINTELLIGRADE_GROQ_QWEN_OK"
+        self.assertEqual(GroqProvider.sanitize_thinking_output(resp_a), "INTELLIGRADE_GROQ_QWEN_OK")
+
+        # b. response without think tags
+        resp_b = "INTELLIGRADE_GROQ_QWEN_OK"
+        self.assertEqual(GroqProvider.sanitize_thinking_output(resp_b), "INTELLIGRADE_GROQ_QWEN_OK")
+
+        # c. malformed/missing closing tag
+        resp_c = "<think>\nUnclosed thinking block without closing tag"
+        self.assertEqual(GroqProvider.sanitize_thinking_output(resp_c), "")
+
+        # d. JSON wrapped after a think block
+        resp_d = "<think>\nAnalyzing JSON...\n</think>\n```json\n{\"status\": \"OK\"}\n```"
+        sanitized_d = GroqProvider.sanitize_thinking_output(resp_d)
+        cleaned_json = re.sub(r'```json\s*', '', sanitized_d)
+        cleaned_json = re.sub(r'```\s*', '', cleaned_json).strip()
+        parsed = json.loads(cleaned_json)
+        self.assertEqual(parsed.get('status'), 'OK')
+
+        # e. empty response after sanitization
+        resp_e = "<think>only thinking process</think>"
+        self.assertEqual(GroqProvider.sanitize_thinking_output(resp_e), "")
 
     @patch('urllib.request.urlopen')
     def test_complete_provider_failure_graceful_fallback(self, mock_urlopen):
@@ -558,9 +643,9 @@ class AIFailoverResilienceTestCase(TestCase):
         failover = FailoverAIProvider(primary_provider=gemini)
         failover._chain = [gemini, openai]
 
-        # Gemini fails with 500, OpenAI succeeds
-        fp = io.BytesIO(b'{"error":{"message":"Internal Server Error"}}')
-        gemini_err = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 500, "Internal Server Error", {}, fp)
+        # Gemini fails on both candidate models with 500, OpenAI succeeds
+        err1 = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 500, "Internal Server Error", {}, io.BytesIO(b'{"error":{"message":"Internal Server Error"}}'))
+        err2 = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 500, "Internal Server Error", {}, io.BytesIO(b'{"error":{"message":"Internal Server Error"}}'))
 
         openai_resp = self._mock_http_response({
             'choices': [{
@@ -583,9 +668,9 @@ class AIFailoverResilienceTestCase(TestCase):
             }]
         })
 
-        mock_urlopen.side_effect = [gemini_err, openai_resp]
+        mock_urlopen.side_effect = [err1, err2, openai_resp]
 
-        result = failover.analyze_academic_exam_paper("Question 1: What is Dynamic Programming? [10 marks]")
+        result = failover.analyze_academic_exam_paper("Question 1: What is Dynamic Programming? [10 marks]", image_bytes=b'fake_png')
         self.assertIn('questions', result)
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
         self.assertEqual(result['questions'][0]['prompt_text'], 'What is Dynamic Programming?')
@@ -1122,6 +1207,20 @@ class MultimodalVisualEvaluationTestCase(TestCase):
             "requires_manual_review": False
         })
         mock_get_provider.return_value = mock_provider
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_score_is_clamped_to_max_marks(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.__class__.__name__ = 'GeminiProvider'
+        # Return 25.0 marks for a 10.0 max mark question
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 25.0,
+            "feedback": "Overly generous AI.",
+            "confidence": 0.90,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
 
         res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
         self.assertEqual(res.obtained_marks, 10.0)  # Clamped strictly to max_marks
@@ -1153,3 +1252,299 @@ class MultimodalVisualEvaluationTestCase(TestCase):
         self.assertEqual(res.obtained_marks, 4.0)
         self.assertEqual(res.confidence, 0.45)
         self.assertTrue(res.requires_manual_review)  # Low confidence (< 0.70) forces manual review
+
+
+class VisualGradingCalibrationTestCase(TestCase):
+    """Unit tests verifying rubric-grounded visual grading calibration across 7 required evaluation scenarios."""
+
+    def setUp(self):
+        import numpy as np
+        import cv2
+        import tempfile
+        from core.models import Department, Course, Examination, Question, StudentSubmission, SubmissionPage, SubmissionAnswer, QuestionMapping, Rubric
+
+        self.temp_dir = tempfile.mkdtemp()
+        self.synth_page = np.full((1200, 800, 3), 255, dtype=np.uint8)
+        cv2.putText(self.synth_page, 'Handwritten Q4 Work', (50, 400), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+        self.page_path = os.path.join(self.temp_dir, 'page_1.png')
+        cv2.imwrite(self.page_path, self.synth_page)
+
+        self.dept = Department.objects.create(name='CS Dept', code='CSD')
+        self.course = Course.objects.create(code='CSE4383', title='Digital Image Processing', department=self.dept)
+        self.exam = Examination.objects.create(course=self.course, title='DIP Final Exam', exam_date='2026-08-15', total_marks=100.0)
+        self.question = Question.objects.create(
+            examination=self.exam,
+            question_number='4',
+            prompt_text='Explain image transformation, scaling, and feature selection steps.',
+            max_marks=25.0
+        )
+        Rubric.objects.create(
+            question=self.question,
+            criteria='1. Image Transformation (10m)\n2. Feature Selection Steps (10m)\n3. Numerical Scaling (5m)',
+            ideal_answer='Correct transformation matrix, 5-step feature selection, and normalized scaling [0,1].',
+            alternative_answers='Valid matrix translation or PCA feature reduction method.',
+            common_mistakes=['Missing scaling normalization step']
+        )
+        self.submission = StudentSubmission.objects.create(examination=self.exam, student_name='Calibrated Student')
+        self.sp1 = SubmissionPage.objects.create(submission=self.submission, page_number=1, working_image_path=self.page_path)
+        self.answer = SubmissionAnswer.objects.create(
+            submission=self.submission,
+            question=self.question,
+            extracted_text='Image transformation and scaling equations.'
+        )
+        QuestionMapping.objects.create(
+            submission=self.submission,
+            question=self.question,
+            page_numbers_json=[1],
+            regions_json=[{'page_number': 1, 'region_id': 'p1_r1', 'bbox': {'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0}}]
+        )
+
+    def tearDown(self):
+        import shutil
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_full_correct_answer_calibration(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 25.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Image Transformation", "allocated": 10.0, "awarded": 10.0, "evidence_found": "Complete transformation matrix shown."},
+                {"criteria": "Feature Selection Steps", "allocated": 10.0, "awarded": 10.0, "evidence_found": "All 5 feature steps listed correctly."},
+                {"criteria": "Numerical Scaling", "allocated": 5.0, "awarded": 5.0, "evidence_found": "Scaling normalized between 0 and 1."}
+            ],
+            "feedback": "Perfect solution.",
+            "confidence": 0.95,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 25.0)
+        self.assertEqual(res.percentage, 100.0)
+        self.assertEqual(res.confidence, 0.95)
+        self.assertFalse(res.requires_manual_review)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_mostly_correct_with_minor_omission(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 22.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Image Transformation", "allocated": 10.0, "awarded": 10.0, "evidence_found": "Complete matrix."},
+                {"criteria": "Feature Selection Steps", "allocated": 10.0, "awarded": 8.0, "evidence_found": "4 of 5 steps shown.", "missing_or_incorrect": "Step 5 omitted."},
+                {"criteria": "Numerical Scaling", "allocated": 5.0, "awarded": 4.0, "evidence_found": "Scaling calculation completed."}
+            ],
+            "feedback": "Mostly correct with minor step omission.",
+            "confidence": 0.90,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 22.0)
+        self.assertEqual(res.percentage, 88.0)
+        self.assertFalse(res.requires_manual_review)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_partially_correct_answer(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 12.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Image Transformation", "allocated": 10.0, "awarded": 6.0, "evidence_found": "Partial matrix derivation."},
+                {"criteria": "Feature Selection Steps", "allocated": 10.0, "awarded": 4.0, "evidence_found": "2 steps listed."},
+                {"criteria": "Numerical Scaling", "allocated": 5.0, "awarded": 2.0, "evidence_found": "Formula stated without calculation."}
+            ],
+            "feedback": "Partial credit awarded for core concepts.",
+            "confidence": 0.85,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 12.0)
+        self.assertEqual(res.percentage, 48.0)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_wrong_answer(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 0.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Image Transformation", "allocated": 10.0, "awarded": 0.0, "missing_or_incorrect": "Irrelevant text."},
+                {"criteria": "Feature Selection Steps", "allocated": 10.0, "awarded": 0.0, "missing_or_incorrect": "Incorrect concepts."},
+                {"criteria": "Numerical Scaling", "allocated": 5.0, "awarded": 0.0, "missing_or_incorrect": "No scaling shown."}
+            ],
+            "feedback": "Answer does not address question.",
+            "confidence": 0.90,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 0.0)
+        self.assertEqual(res.percentage, 0.0)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_correct_alternative_method(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 25.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Alternative Approach", "allocated": 25.0, "awarded": 25.0, "evidence_found": "Valid PCA feature reduction alternative approach."}
+            ],
+            "feedback": "Valid alternative solution.",
+            "confidence": 0.92,
+            "requires_manual_review": False
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertEqual(res.obtained_marks, 25.0)
+        self.assertEqual(res.percentage, 100.0)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_incomplete_image_triggers_manual_review(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 10.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Image Transformation", "allocated": 10.0, "awarded": 10.0, "evidence_found": "Top derivation visible."}
+            ],
+            "feedback": "Lower half of answer crop cut off.",
+            "confidence": 0.50,
+            "requires_manual_review": True
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertTrue(res.requires_manual_review)
+        self.assertEqual(res.confidence, 0.50)
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_low_confidence_case_triggers_manual_review(self, mock_get_provider):
+        from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "obtained_marks": 15.0,
+            "maximum_marks": 25.0,
+            "rubric_breakdown": [
+                {"criteria": "Overall Work", "allocated": 25.0, "awarded": 15.0, "evidence_found": "Partially readable handwriting."}
+            ],
+            "feedback": "Handwriting ambiguous.",
+            "confidence": 0.65,
+            "requires_manual_review": True
+        })
+        mock_get_provider.return_value = mock_provider
+
+        res = AIScriptEvaluator._evaluate_answer_v3(self.answer, options={})
+        self.assertTrue(res.requires_manual_review)
+        self.assertLess(res.confidence, 0.70)
+
+
+class QuestionMappingContinuationTests(TestCase):
+    """Regression tests for question mapping continuation validation and semantic topic transitions."""
+
+    def test_continuation_detector_weak_flow_returns_low_confidence(self):
+        from core.ai_engine.mapping.continuation_detector import ContinuationDetector
+        prev_text = "The final result is shown above."
+        curr_text = "Digital image file formats are stored as pixels."
+
+
+class AcademicEvaluatorFallbackTestCase(TestCase):
+    """Regression tests proving AcademicEvaluator does not fabricate 80%/85% scores on AI failures."""
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_ai_failure_does_not_produce_fabricated_scores(self, mock_get_provider):
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.side_effect = Exception("API connection failure")
+        mock_get_provider.return_value = mock_provider
+
+        evaluator = AcademicEvaluator()
+        result = evaluator.evaluate(
+            question_id=1,
+            question_text="Explain microservice architecture.",
+            rubric_criteria="Definition and benefits",
+            student_answer="Microservice architecture uses decoupled services.",
+            max_marks=10.0
+        )
+
+        self.assertNotEqual(result['ai_suggested_marks'], 8.0)
+        self.assertNotEqual(result['ai_suggested_marks'], 8.5)
+        self.assertEqual(result['ai_suggested_marks'], 0.0)
+        self.assertEqual(result['confidence_score'], 0.0)
+        self.assertTrue(result['requires_manual_review'])
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_ai_malformed_json_returns_zero_and_requires_manual_review(self, mock_get_provider):
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = "Invalid raw text without JSON braces."
+        mock_get_provider.return_value = mock_provider
+
+        evaluator = AcademicEvaluator()
+        result = evaluator.evaluate(
+            question_id=1,
+            question_text="Explain database indexing.",
+            rubric_criteria="Index structures",
+            student_answer="B-trees are used for database indexing.",
+            max_marks=20.0
+        )
+
+        self.assertEqual(result['ai_suggested_marks'], 0.0)
+        self.assertEqual(result['confidence_score'], 0.0)
+        self.assertTrue(result['requires_manual_review'])
+
+    @patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider')
+    def test_successful_ai_response_returns_real_score_unchanged(self, mock_get_provider):
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+
+        mock_provider = MagicMock()
+        mock_provider.generate_completion.return_value = json.dumps({
+            "ai_suggested_marks": 17.5,
+            "confidence_score": 0.92,
+            "reason": "Clear explanation with good technical detail.",
+            "strengths": ["Correct terminology"],
+            "missing_points": ["Minor trade-off detail omitted"],
+            "incorrect_points": [],
+            "ai_feedback": "Good answer overall.",
+            "partial_marking_breakdown": {"concept": 10.0, "details": 7.5}
+        })
+        mock_get_provider.return_value = mock_provider
+
+        evaluator = AcademicEvaluator()
+        result = evaluator.evaluate(
+            question_id=1,
+            question_text="Explain REST API constraints.",
+            rubric_criteria="6 REST constraints",
+            student_answer="Stateless, Cacheable, Client-Server, Layered System, Uniform Interface.",
+            max_marks=20.0
+        )
+
+        self.assertEqual(result['ai_suggested_marks'], 17.5)
+        self.assertEqual(result['confidence_score'], 0.92)
+        self.assertFalse(result.get('requires_manual_review', False))

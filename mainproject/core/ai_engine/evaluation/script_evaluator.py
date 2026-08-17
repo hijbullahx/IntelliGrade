@@ -399,9 +399,10 @@ class AIScriptEvaluator:
         fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
         tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
+        mistakes_str = ", ".join(q_dto.common_mistakes) if q_dto.common_mistakes else "None specified"
 
         return f"""You are an expert academic examiner and multimodal vision evaluator for IntelliGrade.
-Carefully inspect the attached {crops_count} handwritten student answer script image(s) and evaluate the work strictly against the stored question and marking rubrics.
+Carefully inspect the attached {crops_count} handwritten student answer script image(s) and evaluate the work strictly against the stored question, ideal solution, and marking rubrics.
 
 [EXAMINATION QUESTION CONTEXT]
 Question Number: Q{q_dto.number}
@@ -411,6 +412,9 @@ Bloom Level: {q_dto.bloom}
 Course Outcome (CO): {q_dto.co}
 Program Outcome (PO): {q_dto.po}
 Grading Rubric / Criteria: {q_dto.rubric}
+Ideal Model Answer: {q_dto.ideal_answer or 'See prompt text and rubric criteria for solution standard.'}
+Alternative Valid Approaches: {q_dto.alternative_answers or 'Accept any mathematically or logically sound alternative approach.'}
+Common Pitfalls & Deductions: {mistakes_str}
 
 [STORED VISUAL ATTACHMENTS FOR QUESTION]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
@@ -425,18 +429,28 @@ Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awar
 [OPTIONAL OCR TEXT (SECONDARY SUPPORTING CONTEXT)]
 {student_ocr_text or 'No OCR text available.'}
 
-CRITICAL VISUAL GRADING RULES:
-1. Read the student's actual handwritten answer, equations, derivations, and diagrams directly from the attached image(s).
-2. The image(s) are authoritative for all handwriting, mathematical equations, diagrams, and crossings-out.
-3. Do NOT penalize handwriting style, cursive variations, or formatting unless mathematical or technical meaning is ambiguous.
-4. Award fair partial marks for correct reasoning, intermediate formula steps, and valid logic even if the final calculation is incomplete.
-5. Do NOT give a low score merely because OCR text was poor or missing; OCR text is secondary evidence only.
-6. If the handwriting in the image is completely illegible, unreadable, or missing, set "requires_manual_review": true and "confidence": 0.30.
+[RUBRIC-GROUNDED SCORING & VISUAL EVALUATION PROTOCOL]
+1. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
+2. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
+3. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
+4. CRITERION-BY-CRITERION SCORING: Evaluate the answer strictly against each rubric criterion.
+   - For each criterion, state max allocated marks and awarded marks.
+   - Total obtained_marks MUST equal the EXACT sum of all awarded criterion marks.
+   - Award fair partial credit for correct intermediate steps, formulas, and reasoning even if final calculation is incomplete.
+   - Distinguish clearly between:
+     (a) missing: concept/step not presented
+     (b) incorrect: wrong formula/calculation
+     (c) correct but incomplete: partial steps
+     (d) correct alternative approach: valid alternative method
+5. CONFIDENCE CALIBRATION: Confidence must reflect visual evidence quality:
+   - High confidence (0.85 - 1.0): Image clean, handwriting clear, complete mapped region.
+   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting, or missing section.
+6. MANUAL REVIEW FLAGGING: Set "requires_manual_review": true if image is unreadable, crop is incomplete, confidence < 0.70, or evidence is contradictory.
 
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
   "question_id": "{q_dto.id}",
-  "obtained_marks": <float_between_0_and_{q_dto.marks}>,
+  "obtained_marks": <float_sum_of_awarded_criterion_marks>,
   "maximum_marks": {q_dto.marks},
   "percentage": <float_percentage>,
   "strengths": [<list_of_strings>],
@@ -444,9 +458,16 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
   "missing_points": [<list_of_strings>],
   "expected_points": [<list_of_strings>],
   "rubric_breakdown": [
-    {{"criteria": "<name>", "allocated": <max_val>, "awarded": <earned_val>, "comments": "<text>"}}
+    {{
+      "criteria": "<criterion_name>",
+      "allocated": <max_criterion_marks>,
+      "awarded": <awarded_criterion_marks>,
+      "evidence_found": "<exact_visual_evidence_in_image>",
+      "missing_or_incorrect": "<omission_or_error_details_or_none>",
+      "comments": "<justification_text>"
+    }}
   ],
-  "feedback": "<detailed_step_by_step_marking_justification>",
+  "feedback": "<step_by_step_marking_justification>",
   "confidence": <float_between_0.0_and_1.0>,
   "requires_manual_review": <true_or_false>
 }}
@@ -652,6 +673,20 @@ Return ONLY JSON without markdown commentary.
 
         if eval_data:
             raw_m = eval_data.get('obtained_marks', eval_data.get('ai_suggested_marks', 0.0))
+            rubric_breakdown = eval_data.get('rubric_breakdown', [])
+            if rubric_breakdown and isinstance(rubric_breakdown, list):
+                sum_awarded = 0.0
+                has_valid_breakdown = False
+                for r_item in rubric_breakdown:
+                    if isinstance(r_item, dict) and 'awarded' in r_item:
+                        try:
+                            sum_awarded += float(r_item['awarded'])
+                            has_valid_breakdown = True
+                        except (ValueError, TypeError):
+                            pass
+                if has_valid_breakdown:
+                    raw_m = sum_awarded
+
             obtained_m = min(float(q_dto.marks), max(0.0, float(raw_m or 0.0)))
             max_m = float(q_dto.marks)
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)

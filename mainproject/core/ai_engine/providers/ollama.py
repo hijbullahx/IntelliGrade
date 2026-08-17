@@ -13,6 +13,14 @@ class OllamaProvider(BaseAIProvider):
     Auto-detects locally installed models from http://localhost:11434.
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": False,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": False
+    }
+
     def __init__(self, host: str = "http://localhost:11434", model_name: Optional[str] = None):
         self.host = host.rstrip('/')
         self.model_name = model_name or self._auto_detect_model()

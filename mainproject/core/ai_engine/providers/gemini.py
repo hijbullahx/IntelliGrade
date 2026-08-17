@@ -12,10 +12,18 @@ from .base import BaseAIProvider
 class GeminiProvider(BaseAIProvider):
     """
     Google Gemini AI Provider Implementation using native REST API.
-    Supports gemini-flash-latest and multimodal image input.
+    Supports gemini-3.6-flash, gemini-flash-latest, and multimodal image input.
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": True,
+        "supports_json": True,
+        "supports_function_calling": True
+    }
+
+    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
         self.api_key = api_key
         self.model_name = model_name
 
@@ -24,7 +32,8 @@ class GeminiProvider(BaseAIProvider):
             raise ValueError("Gemini API Key is not configured.")
 
         from .registry import ModelRegistryManager
-        candidate_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")
+        registry_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")
+        candidate_models = [self.model_name] + registry_models if self.model_name else registry_models
 
         # Deduplicate preserving order
         unique_models = []
