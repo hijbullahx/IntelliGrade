@@ -12,10 +12,10 @@ from .base import BaseAIProvider
 class GeminiProvider(BaseAIProvider):
     """
     Google Gemini AI Provider Implementation using native REST API.
-    Supports gemini-flash-latest, gemini-2.0-flash, and multimodal image input.
+    Supports gemini-flash-latest and multimodal image input.
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
         self.api_key = api_key
         self.model_name = model_name
 

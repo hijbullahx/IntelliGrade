@@ -108,12 +108,8 @@ class FailoverAIProvider(BaseAIProvider):
 
         raise Exception(f"All AI Providers in the failover chain failed. Last error: {last_error}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        try:
-            return self._execute_with_failover('generate_completion', prompt, system_instruction=system_instruction, timeout=timeout)
-        except Exception as e:
-            print(f"[FAILOVER COMPLETION ERROR] All providers failed: {e}. Returning fallback text.")
-            return "Generated text completion (Offline Failover Fallback)."
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._execute_with_failover('generate_completion', prompt, system_instruction=system_instruction, timeout=timeout, **kwargs)
 
     def evaluate_answer(
         self,
@@ -123,86 +119,41 @@ class FailoverAIProvider(BaseAIProvider):
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
         custom_instructions: Optional[str] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
-        try:
-            return self._execute_with_failover(
-                'evaluate_answer',
-                question_text,
-                rubric_criteria,
-                student_answer,
-                max_marks,
-                exemplars=exemplars,
-                custom_instructions=custom_instructions,
-                timeout=timeout
-            )
-        except Exception as e:
-            print(f"[FAILOVER EVALUATE ERROR] All providers failed: {e}. Returning rubric fallback marks.")
-            return {
-                "ai_suggested_marks": round(float(max_marks) * 0.75, 2),
-                "confidence_score": 0.80,
-                "ai_feedback": "Evaluated via offline deterministic fallback engine.",
-                "partial_marking_breakdown": {"core_concept": round(float(max_marks) * 0.75, 2)}
-            }
+        return self._execute_with_failover(
+            'evaluate_answer',
+            question_text,
+            rubric_criteria,
+            student_answer,
+            max_marks,
+            exemplars=exemplars,
+            custom_instructions=custom_instructions,
+            timeout=timeout,
+            **kwargs
+        )
 
     def analyze_question_paper(self, paper_text_or_image: Any, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
-        try:
-            return self._execute_with_failover('analyze_question_paper', paper_text_or_image, timeout=timeout, **kwargs)
-        except Exception as e:
-            print(f"[FAILOVER ROUTINE ERROR] All providers failed: {e}. Returning routine regex fallback.")
-            return {"routine_schedule": []}
+        return self._execute_with_failover('analyze_question_paper', paper_text_or_image, timeout=timeout, **kwargs)
 
-    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
+    def analyze_academic_exam_paper(self, qp_text_or_bytes: Any, outline_text_or_bytes: Any = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
         try:
-            return self._execute_with_failover('analyze_academic_exam_paper', qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files, timeout=timeout)
+            return self._execute_with_failover('analyze_academic_exam_paper', qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=image_bytes, mime_type=mime_type, extra_files=extra_files, timeout=timeout, **kwargs)
         except Exception as chain_err:
             print(f"[FAILOVER CHAIN COMPLETE] All AI providers failed ({chain_err}). Executing deterministic regex question extraction fallback...")
-            return super().analyze_academic_exam_paper(qp_text_or_bytes, outline_text_or_bytes=outline_text_or_bytes, image_bytes=None, mime_type=mime_type, extra_files=None, timeout=timeout)
+            res = BaseAIProvider.extract_deterministic_regex_questions(str(qp_text_or_bytes))
+            if not res.get("questions"):
+                raise Exception(f"AI Paper Scan Failed and deterministic regex extraction found no questions ({chain_err})")
+            return res
 
-    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '', timeout: Optional[float] = None) -> Dict[str, Any]:
-        try:
-            return self._execute_with_failover('analyze_question_full', question_text, max_marks=max_marks, course_outline_text=course_outline_text, timeout=timeout)
-        except Exception as e:
-            print(f"[FAILOVER QUESTION FULL ERROR] All providers failed: {e}. Returning academic metadata fallback.")
-            return {
-                "question_type": ["Theory", "Explanation"],
-                "command_verbs": ["Explain"],
-                "predicted_bloom": "Understand",
-                "predicted_CO": "CO1",
-                "predicted_PO": ["PO1"],
-                "predicted_KP": ["KP1"],
-                "predicted_CEP": ["CEP1"],
-                "predicted_CEA": ["CEA1"],
-                "difficulty": "Medium",
-                "estimated_time": "15 mins",
-                "expected_answer": f"Expected answer for: {question_text[:60]}...",
-                "rubric_levels": {
-                    "Excellent": {"marks": f"{max_marks*0.9:.1f} - {max_marks:.1f}", "criteria": "Complete mastery & accurate concepts."},
-                    "Good": {"marks": f"{max_marks*0.7:.1f} - {max_marks*0.85:.1f}", "criteria": "Good conceptual understanding."},
-                    "Average": {"marks": f"{max_marks*0.5:.1f} - {max_marks*0.65:.1f}", "criteria": "Basic partial response."},
-                    "Poor": {"marks": f"{max_marks*0.2:.1f} - {max_marks*0.45:.1f}", "criteria": "Major gaps in reasoning."},
-                    "Fail": {"marks": f"0.0 - {max_marks*0.15:.1f}", "criteria": "Incorrect response."}
-                },
-                "keywords": ["Key Concept 1", "Key Concept 2"],
-                "alternative_answers": "Standard analytical alternatives are acceptable.",
-                "common_mistakes": ["Omission of core definitions", "Incomplete steps"]
-            }
+    def analyze_question_full(self, question_text: str, max_marks: float = 10.0, course_outline_text: str = '', timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
+        return self._execute_with_failover('analyze_question_full', question_text, max_marks=max_marks, course_outline_text=course_outline_text, timeout=timeout, **kwargs)
 
-    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
-        try:
-            return self._execute_with_failover('generate_rubric', question_text, max_marks, sample_answer=sample_answer, timeout=timeout)
-        except Exception as e:
-            print(f"[FAILOVER RUBRIC ERROR] All providers failed: {e}. Returning rubric fallback.")
-            return {
-                "criteria": f"1. Concept understanding ({max_marks * 0.5} marks)\n2. Accurate reasoning ({max_marks * 0.5} marks)",
-                "ideal_answer": f"Expected response for: {question_text}",
-                "mark_distribution": {"concept": float(max_marks * 0.5), "accuracy": float(max_marks * 0.5)}
-            }
+    def generate_rubric(self, question_text: str, max_marks: float, sample_answer: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> Dict[str, Any]:
+        return self._execute_with_failover('generate_rubric', question_text, max_marks, sample_answer=sample_answer, timeout=timeout, **kwargs)
 
-    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg", timeout: Optional[float] = None) -> str:
-        try:
-            return self._execute_with_failover('extract_ocr_text', image_bytes, mime_type=mime_type, timeout=timeout)
-        except Exception as e:
-            return ""
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg", timeout: Optional[float] = None, **kwargs) -> str:
+        return self._execute_with_failover('extract_ocr_text', image_bytes, mime_type=mime_type, timeout=timeout, **kwargs)
 
 

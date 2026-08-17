@@ -583,7 +583,7 @@ class AIFailoverResilienceTestCase(TestCase):
             }]
         })
 
-        mock_urlopen.side_effect = [gemini_err, gemini_err, openai_resp]
+        mock_urlopen.side_effect = [gemini_err, openai_resp]
 
         result = failover.analyze_academic_exam_paper("Question 1: What is Dynamic Programming? [10 marks]")
         self.assertIn('questions', result)

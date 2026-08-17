@@ -165,7 +165,14 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                 except Exception:
                     pass
 
-        # Deterministic Regex Question Fallback Extractor if LLM output fails
+        return cls.extract_deterministic_regex_questions(doc_text)
+
+    @classmethod
+    def extract_deterministic_regex_questions(cls, doc_text: str) -> Dict[str, Any]:
+        """
+        Pure deterministic regex question extraction fallback that operates directly on document text
+        without calling external AI network APIs.
+        """
         fallback_questions = []
         pattern = re.compile(
             r'(?i)(?:\b(?:question|ans|answer|sol|solution)\s*(?:no\.?|number|#)?\s*[:.-]?\s*\d+|\bq\s*[-.]?\s*\d+\b|^\s*\d+[\.\)]\s+(?:consider|a\b|digital|explain|calculate|derive|find|what|how|describe|discuss|solve|state|write|analyze|compare|contrast))',
@@ -206,17 +213,4 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                         "ideal_answer": "Model answer covering core concepts."
                     })
 
-        return {"questions": fallback_questions if fallback_questions else [
-            {
-                "question_number": "Q1",
-                "prompt_text": doc_text[:500] if doc_text else "Examination Question 1",
-                "allocated_marks": 25.0,
-                "question_type": ["Theory"],
-                "command_verbs": ["Explain"],
-                "bloom_level": "Understand",
-                "co_mapping": "CO1",
-                "po_mapping": ["PO1"],
-                "criteria": "Key grading criteria",
-                "ideal_answer": "Model answer summary"
-            }
-        ]}
+        return {"questions": fallback_questions}
