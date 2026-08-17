@@ -15,7 +15,7 @@ class GeminiProvider(BaseAIProvider):
     Supports gemini-flash-latest, gemini-2.0-flash, and multimodal image input.
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-2.5-flash"):
         self.api_key = api_key
         self.model_name = model_name
 
