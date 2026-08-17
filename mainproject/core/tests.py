@@ -454,6 +454,143 @@ class AIFailoverResilienceTestCase(TestCase):
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
         self.assertEqual(result['questions'][0]['prompt_text'], 'What is ACID in Databases?')
 
+    def test_digital_pdf_skips_easyocr(self):
+        from core.ai_engine.document_service import DocumentService
+        import fitz
+
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((50, 72), "Question 1: Explain the MVC architecture pattern in detail. [10 marks]\nQuestion 2: What is the purpose of ORM in modern web frameworks? [15 marks]")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with patch('core.ai_engine.document_service.DocumentService.extract_easyocr_text') as mock_easyocr:
+            ocr_res = DocumentService.extract_deterministic_ocr(pdf_bytes, page_renders=[b'dummy_png'], mime_type='application/pdf')
+            self.assertEqual(ocr_res['engine'], 'PyMuPDF Native Extractor')
+            self.assertGreaterEqual(len(ocr_res['text']), 50)
+            mock_easyocr.assert_not_called()
+
+    def test_easyocr_disabled_prevents_easyocr_invocation(self):
+        from config.ocr_config import is_easyocr_enabled, get_ocr_reader
+        from core.ai_engine.document_service import DocumentService
+
+        with patch.dict('os.environ', {'EASYOCR_ENABLED': 'False'}):
+            self.assertFalse(is_easyocr_enabled())
+            self.assertIsNone(get_ocr_reader())
+            res = DocumentService.extract_easyocr_text(b'fake_image_bytes')
+            self.assertEqual(res['engine'], 'EasyOCR Disabled')
+            self.assertEqual(res['text'], '')
+
+    @patch('core.ai_engine.document_service.DocumentService.extract_tesseract_text')
+    def test_scanned_pdf_uses_pytesseract_fallback(self, mock_tesseract):
+        from core.ai_engine.document_service import DocumentService
+        mock_tesseract.return_value = {"text": "Question 1: Explain Dijkstra Shortest Path Algorithm. [15 marks]", "confidence": 0.85, "engine": "PyTesseract"}
+
+        # Create scanned/empty text PDF
+        import fitz
+        doc = fitz.open()
+        doc.new_page() # blank page
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with patch.dict('os.environ', {'EASYOCR_ENABLED': 'False'}):
+            with patch('core.ai_engine.document_service.DocumentService.extract_easyocr_text') as mock_easyocr:
+                ocr_res = DocumentService.extract_deterministic_ocr(pdf_bytes, page_renders=[b'dummy_page_render'], mime_type='application/pdf')
+                self.assertEqual(ocr_res['engine'], 'PyTesseract Engine')
+                self.assertIn('Dijkstra', ocr_res['text'])
+                mock_easyocr.assert_not_called()
+
+    @patch('urllib.request.urlopen')
+    def test_ai_failover_groq_to_gemini(self, mock_urlopen):
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        import urllib.error
+
+        groq = GroqProvider(api_key="test_groq_key")
+        gemini = GeminiProvider(api_key="test_gemini_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, gemini]
+
+        # Groq fails with 429, Gemini succeeds
+        fp = io.BytesIO(b'{"error":{"message":"Rate limit reached"}}')
+        groq_err = urllib.error.HTTPError("https://api.groq.com", 429, "Too Many Requests", {}, fp)
+
+        gemini_resp = self._mock_http_response({
+            'candidates': [{
+                'content': {
+                    'parts': [{
+                        'text': json.dumps({
+                            'questions': [{
+                                'question_number': 'Q1',
+                                'prompt_text': 'Explain Dijkstra Algorithm.',
+                                'allocated_marks': 15.0,
+                                'question_type': ['Theory'],
+                                'command_verbs': ['Explain'],
+                                'bloom_level': 'Understand',
+                                'co_mapping': 'CO1',
+                                'po_mapping': ['PO1'],
+                                'criteria': 'Shortest path explanation.',
+                                'ideal_answer': 'Graph search algorithm finding single-source shortest paths.'
+                            }]
+                        })
+                    }]
+                }
+            }]
+        })
+
+        mock_urlopen.side_effect = [groq_err, gemini_resp]
+
+        result = failover.analyze_academic_exam_paper("Question 1: Explain Dijkstra Algorithm. [15 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+        self.assertEqual(result['questions'][0]['prompt_text'], 'Explain Dijkstra Algorithm.')
+
+    @patch('urllib.request.urlopen')
+    def test_ai_failover_gemini_to_openai(self, mock_urlopen):
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.openai import OpenAIProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        import urllib.error
+
+        gemini = GeminiProvider(api_key="test_gemini_key")
+        openai = OpenAIProvider(api_key="test_openai_key")
+        failover = FailoverAIProvider(primary_provider=gemini)
+        failover._chain = [gemini, openai]
+
+        # Gemini fails with 500, OpenAI succeeds
+        fp = io.BytesIO(b'{"error":{"message":"Internal Server Error"}}')
+        gemini_err = urllib.error.HTTPError("https://generativelanguage.googleapis.com", 500, "Internal Server Error", {}, fp)
+
+        openai_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'What is Dynamic Programming?',
+                            'allocated_marks': 10.0,
+                            'question_type': ['Theory'],
+                            'command_verbs': ['Explain'],
+                            'bloom_level': 'Understand',
+                            'co_mapping': 'CO2',
+                            'po_mapping': ['PO1'],
+                            'criteria': 'Optimal substructure and overlapping subproblems.',
+                            'ideal_answer': 'Algorithmic technique breaking problems into subproblems.'
+                        }]
+                    })
+                }
+            }]
+        })
+
+        mock_urlopen.side_effect = [gemini_err, gemini_err, openai_resp]
+
+        result = failover.analyze_academic_exam_paper("Question 1: What is Dynamic Programming? [10 marks]")
+        self.assertIn('questions', result)
+        self.assertEqual(result['questions'][0]['question_number'], 'Q1')
+        self.assertEqual(result['questions'][0]['prompt_text'], 'What is Dynamic Programming?')
+
+
 
 
 

@@ -15,7 +15,7 @@ def get_rss_mb() -> float:
         return 0.0
 from core.models import AIConfiguration
 from config.paths import get_trace_dir
-from config.ocr_config import get_ocr_reader, prepare_easyocr_image
+from config.ocr_config import get_ocr_reader, prepare_easyocr_image, is_easyocr_enabled
 
 try:
     import fitz
@@ -29,7 +29,7 @@ class DocumentService:
     Deterministic Document Service responsible for:
     1. 300 DPI High-Resolution PDF Page Rendering
     2. Embedded Image Stream Extraction & Bounding Box Cropping
-    3. Multi-Engine OCR Text Extraction (PyMuPDF Native -> EasyOCR -> PyTesseract)
+    3. Multi-Engine OCR Text Extraction (PyMuPDF Native -> PyTesseract -> EasyOCR)
     4. Hierarchical Document Object Model (DOM) Tree Construction
     5. Debug Artifact Persistence
     """
@@ -52,7 +52,7 @@ class DocumentService:
                     if clean_lines:
                         text_pages.append("\n".join(clean_lines))
                 extracted_text = "\n\n".join(text_pages).strip()
-                confidence = 0.98 if len(extracted_text) > 100 else 0.50
+                confidence = 0.98 if len(extracted_text) >= 50 else 0.50
                 return {"text": extracted_text, "confidence": confidence, "engine": "PyMuPDF Native Extractor"}
         except Exception as e:
             print(f"[DOCUMENT SERVICE WARNING] PyMuPDF Native OCR Error: {e}")
@@ -60,7 +60,9 @@ class DocumentService:
 
     @staticmethod
     def extract_easyocr_text(image_bytes: bytes) -> Dict[str, Any]:
-        """Extracts text from image bytes using EasyOCR."""
+        """Extracts text from image bytes using EasyOCR if explicitly enabled."""
+        if not is_easyocr_enabled():
+            return {"text": "", "confidence": 0.0, "engine": "EasyOCR Disabled"}
         try:
             reader = get_ocr_reader()
             if reader is None:
@@ -87,12 +89,13 @@ class DocumentService:
 
     @staticmethod
     def extract_tesseract_text(image_bytes: bytes) -> Dict[str, Any]:
-        """Extracts text from image bytes using PyTesseract."""
+        """Extracts text from image bytes using PyTesseract CPU OCR."""
         try:
             import pytesseract
             img = Image.open(io.BytesIO(image_bytes))
             extracted = pytesseract.image_to_string(img).strip()
-            return {"text": extracted, "confidence": 0.80, "engine": "PyTesseract"}
+            confidence = 0.85 if len(extracted) >= 50 else 0.40
+            return {"text": extracted, "confidence": confidence, "engine": "PyTesseract"}
         except Exception:
             return {"text": "", "confidence": 0.0, "engine": "PyTesseract Unavailable"}
 
@@ -100,7 +103,10 @@ class DocumentService:
     def extract_deterministic_ocr(cls, doc_bytes: bytes, page_renders: List[bytes] = None, mime_type: str = "application/pdf") -> Dict[str, Any]:
         """
         Determines highest quality OCR text extraction across ALL 300 DPI rendered page images.
-        Compares PyMuPDF Native Stream, EasyOCR per page, and PyTesseract per page.
+        Hierarchy:
+        1. PyMuPDF Native Stream Text (fast, accurate for digital PDFs, 0 CPU overhead)
+        2. PyTesseract CPU OCR (safe, deterministic)
+        3. EasyOCR (only if explicitly enabled via EASYOCR_ENABLED=True)
         """
         import sys
         if FITZ_AVAILABLE:
@@ -110,56 +116,68 @@ class DocumentService:
 
         candidates = []
 
-        # 1. PyMuPDF Native Stream Text
+        # 1. PyMuPDF Native Stream Text (for digital PDFs)
         if FITZ_AVAILABLE and doc_bytes.startswith(b'%PDF'):
             native_res = cls.extract_pdf_native_text(doc_bytes)
-            if len(native_res["text"]) > 30:
+            if len(native_res["text"]) >= 50:
                 candidates.append(native_res)
 
         # 2. Perform OCR across rendered page images if native text is not present or insufficient
-        has_high_confidence_native = any(c.get("confidence", 0) >= 0.95 and len(c.get("text", "")) >= 80 for c in candidates)
-        if page_renders and not has_high_confidence_native:
-            easy_text_pages = []
+        has_sufficient_native = any(c.get("confidence", 0) >= 0.50 and len(c.get("text", "")) >= 50 for c in candidates)
+        if page_renders and not has_sufficient_native:
             tess_text_pages = []
             for p_idx, page_png in enumerate(page_renders):
-                e_res = cls.extract_easyocr_text(page_png)
-                if e_res["text"]:
-                    easy_text_pages.append(e_res["text"])
-
                 t_res = cls.extract_tesseract_text(page_png)
                 if t_res["text"]:
                     tess_text_pages.append(t_res["text"])
 
-            if easy_text_pages:
-                full_easy = "\n\n".join(easy_text_pages).strip()
-                if len(full_easy) > 30:
-                    candidates.append({"text": full_easy, "confidence": 0.88, "engine": "EasyOCR Engine"})
-
             if tess_text_pages:
                 full_tess = "\n\n".join(tess_text_pages).strip()
-                if len(full_tess) > 30:
-                    candidates.append({"text": full_tess, "confidence": 0.80, "engine": "PyTesseract Engine"})
+                if len(full_tess) >= 50:
+                    candidates.append({"text": full_tess, "confidence": 0.85, "engine": "PyTesseract Engine"})
 
-        if not candidates:
-            # Fallback to direct EasyOCR / PyTesseract attempt on doc_bytes if image
-            if not doc_bytes.startswith(b'%PDF'):
+            # Only attempt EasyOCR if enabled and PyTesseract was not sufficient
+            if is_easyocr_enabled() and not any(len(c.get("text", "")) >= 50 for c in candidates):
+                easy_text_pages = []
+                for p_idx, page_png in enumerate(page_renders):
+                    e_res = cls.extract_easyocr_text(page_png)
+                    if e_res["text"]:
+                        easy_text_pages.append(e_res["text"])
+
+                if easy_text_pages:
+                    full_easy = "\n\n".join(easy_text_pages).strip()
+                    if len(full_easy) >= 50:
+                        candidates.append({"text": full_easy, "confidence": 0.88, "engine": "EasyOCR Engine"})
+
+        if not candidates and not doc_bytes.startswith(b'%PDF'):
+            # Direct image file upload (.png, .jpg)
+            t_res = cls.extract_tesseract_text(doc_bytes)
+            if len(t_res["text"]) >= 50:
+                candidates.append(t_res)
+            elif is_easyocr_enabled():
                 e_res = cls.extract_easyocr_text(doc_bytes)
-                if e_res["text"]:
+                if len(e_res["text"]) >= 50:
                     candidates.append(e_res)
 
         if not candidates:
             from core.ai_engine.parser.academic_parser import PipelineValidationError
             raise PipelineValidationError(
-                "[STRICT OCR FAILURE] All OCR engines (PyMuPDF, EasyOCR, PyTesseract) returned 0 readable characters. "
-                "The uploaded document appears to be unreadable or blurred. Pipeline halted before LLM execution."
+                "[STRICT OCR FAILURE] All available OCR engines returned insufficient readable characters (< 50). "
+                "The uploaded document appears to be unreadable or empty. Pipeline halted before LLM execution."
             )
 
         best = max(candidates, key=lambda c: (len(c["text"]), c["confidence"]))
         best["char_count"] = len(best["text"])
         print(f"[DOCUMENT SERVICE OCR] Selected Engine: {best['engine']} | Text Length: {best['char_count']} chars | Confidence: {best['confidence']}")
 
+        if best["char_count"] < 50:
+            from core.ai_engine.parser.academic_parser import PipelineValidationError
+            raise PipelineValidationError(
+                f"[STRICT OCR FAILURE] Extracted text length ({best['char_count']} chars) is below the minimum threshold (50 chars)."
+            )
+
         # Add a warning for potentially large payloads that might cause timeouts
-        if best["char_count"] > 30000: # Threshold for a large payload
+        if best["char_count"] > 30000:
             print(f"[DOCUMENT SERVICE WARNING] Large OCR payload detected ({best['char_count']} chars). "
                   "This may increase AI provider processing time and risk a timeout.")
 
@@ -581,45 +599,71 @@ class DocumentService:
             trace_dir = get_trace_dir()
 
             words = []
-            try:
-                reader = get_ocr_reader()
-                working_image, _ocr_meta = prepare_easyocr_image(img_cv)
-                results = reader.readtext(working_image) if reader else []
-                for res in results:
-                    bbox_pts, text_val, conf = res
-                    x_coords = [p[0] for p in bbox_pts]
-                    y_coords = [p[1] for p in bbox_pts]
-                    wx1, wy1, wx2, wy2 = int(min(x_coords)), int(min(y_coords)), int(max(x_coords)), int(max(y_coords))
-                    if text_val.strip():
-                        words.append({
-                            "bbox": [wx1, wy1, wx2, wy2],
-                            "text": text_val.strip(),
-                            "xc": (wx1 + wx2) / 2.0,
-                            "yc": (wy1 + wy2) / 2.0
-                        })
-            except Exception as e_err:
-                print(f"[TEXT MATRIX DETECTOR WARNING] EasyOCR word extraction failed: {e_err}")
-
-            if not words and pdf_bytes:
+            # 1. Prefer PyMuPDF native words for digital PDFs (fast, zero OCR, zero NNPACK overhead)
+            if pdf_bytes and FITZ_AVAILABLE:
                 try:
                     with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf_doc:
-                        page = pdf_doc[page_num - 1]
-                        scale_x = w / float(page.rect.width) if page.rect.width > 0 else 1.0
-                        scale_y = h / float(page.rect.height) if page.rect.height > 0 else 1.0
-                        
-                        for w_tuple in page.get_text("words"):
-                            x0, y0, x1, y1, w_text = w_tuple[0], w_tuple[1], w_tuple[2], w_tuple[3], w_tuple[4]
-                            wx1, wy1 = int(x0 * scale_x), int(y0 * scale_y)
-                            wx2, wy2 = int(x1 * scale_x), int(y1 * scale_y)
-                            if w_text.strip():
+                        if page_num <= len(pdf_doc):
+                            page = pdf_doc[page_num - 1]
+                            scale_x = w / float(page.rect.width) if page.rect.width > 0 else 1.0
+                            scale_y = h / float(page.rect.height) if page.rect.height > 0 else 1.0
+                            
+                            for w_tuple in page.get_text("words"):
+                                x0, y0, x1, y1, w_text = w_tuple[0], w_tuple[1], w_tuple[2], w_tuple[3], w_tuple[4]
+                                if str(w_text).strip():
+                                    wx1, wy1 = int(x0 * scale_x), int(y0 * scale_y)
+                                    wx2, wy2 = int(x1 * scale_x), int(y1 * scale_y)
+                                    words.append({
+                                        "bbox": [wx1, wy1, wx2, wy2],
+                                        "text": str(w_text).strip(),
+                                        "xc": (wx1 + wx2) / 2.0,
+                                        "yc": (wy1 + wy2) / 2.0
+                                    })
+                except Exception as fitz_err:
+                    print(f"[TEXT MATRIX DETECTOR WARNING] PyMuPDF word extraction failed: {fitz_err}")
+
+            # 2. Fallback to PyTesseract if not a digital PDF or no words found
+            if not words:
+                try:
+                    import pytesseract
+                    from PIL import Image as PILImg
+                    pil_img = PILImg.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
+                    data = pytesseract.image_to_data(pil_img, output_type=pytesseract.Output.DICT)
+                    n_boxes = len(data.get('text', []))
+                    for i in range(n_boxes):
+                        t_val = str(data['text'][i]).strip()
+                        if t_val:
+                            bx, by, bw, bh = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
+                            words.append({
+                                "bbox": [bx, by, bx + bw, by + bh],
+                                "text": t_val,
+                                "xc": bx + (bw / 2.0),
+                                "yc": by + (bh / 2.0)
+                            })
+                except Exception:
+                    pass
+
+            # 3. Only attempt EasyOCR if explicitly enabled and still no words
+            if not words and is_easyocr_enabled():
+                try:
+                    reader = get_ocr_reader()
+                    if reader:
+                        working_image, _ocr_meta = prepare_easyocr_image(img_cv)
+                        results = reader.readtext(working_image)
+                        for res in results:
+                            bbox_pts, text_val, conf = res
+                            x_coords = [p[0] for p in bbox_pts]
+                            y_coords = [p[1] for p in bbox_pts]
+                            wx1, wy1, wx2, wy2 = int(min(x_coords)), int(min(y_coords)), int(max(x_coords)), int(max(y_coords))
+                            if text_val.strip():
                                 words.append({
                                     "bbox": [wx1, wy1, wx2, wy2],
-                                    "text": w_text.strip(),
+                                    "text": text_val.strip(),
                                     "xc": (wx1 + wx2) / 2.0,
                                     "yc": (wy1 + wy2) / 2.0
                                 })
-                except Exception as p_err:
-                    print(f"[TEXT MATRIX DETECTOR WARNING] PyMuPDF word extraction failed: {p_err}")
+                except Exception as e_err:
+                    print(f"[TEXT MATRIX DETECTOR WARNING] EasyOCR word extraction failed: {e_err}")
 
             if not words:
                 return []
@@ -903,15 +947,28 @@ class DocumentService:
 
                     # OCR cell slice independently
                     cell_text = ""
+                    # 1. Try PyTesseract first (fast, CPU safe)
                     try:
-                        reader = get_ocr_reader()
-                        working_cell, _cell_meta = prepare_easyocr_image(cell_crop)
-                        res = reader.readtext(working_cell) if reader else []
-                        if res:
-                            cell_text = " ".join([r[1].strip() for r in res])
+                        import pytesseract
+                        from PIL import Image as PILImg
+                        pil_crop = PILImg.fromarray(cv2.cvtColor(cell_crop, cv2.COLOR_BGR2RGB))
+                        cell_text = pytesseract.image_to_string(pil_crop, config='--psm 6').strip()
                     except Exception:
                         pass
 
+                    # 2. Only try EasyOCR if explicitly enabled and PyTesseract was empty
+                    if not cell_text and is_easyocr_enabled():
+                        try:
+                            reader = get_ocr_reader()
+                            if reader:
+                                working_cell, _cell_meta = prepare_easyocr_image(cell_crop)
+                                res = reader.readtext(working_cell)
+                                if res:
+                                    cell_text = " ".join([r[1].strip() for r in res])
+                        except Exception:
+                            pass
+
+                    # 3. PyMuPDF fallback
                     if not cell_text:
                         is_ok, buf = cv2.imencode(".png", cell_crop)
                         if is_ok:

@@ -200,24 +200,7 @@ class OCREngineManager:
             except Exception:
                 pass
 
-        # 1. Try EasyOCR Engine for Image Documents
-        if not mime_type == "application/pdf" and self.engine_choice in [AIConfiguration.OCREngine.AUTO]:
-            try:
-                from config.ocr_config import get_ocr_reader
-                reader = get_ocr_reader()
-                if reader:
-                    working_image, _ocr_meta = prepare_easyocr_image(image_bytes)
-                    result = reader.readtext(working_image)
-                    lines = [res[1] for res in result]
-                    scores = [res[2] for res in result]
-                    extracted = "\n".join(lines)
-                    conf = sum(scores) / len(scores) if scores else 0.85
-                    if extracted.strip():
-                        return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
-            except Exception:
-                pass
-
-        # 2. Try PyTesseract Fallback Engine
+        # 1. Try PyTesseract CPU OCR Engine for Image Documents
         if not mime_type == "application/pdf" and self.engine_choice in [AIConfiguration.OCREngine.TESSERACT, AIConfiguration.OCREngine.AUTO]:
             try:
                 import pytesseract
@@ -225,7 +208,25 @@ class OCREngineManager:
                 img = Image.open(io.BytesIO(image_bytes))
                 extracted = pytesseract.image_to_string(img)
                 if extracted.strip():
-                    return {"text": extracted.strip(), "confidence": 0.80, "engine_used": "PyTesseract"}
+                    return {"text": extracted.strip(), "confidence": 0.85, "engine_used": "PyTesseract"}
+            except Exception:
+                pass
+
+        # 2. Try EasyOCR Engine for Image Documents (only if explicitly enabled)
+        if not mime_type == "application/pdf" and self.engine_choice in [AIConfiguration.OCREngine.AUTO]:
+            try:
+                from config.ocr_config import get_ocr_reader, is_easyocr_enabled
+                if is_easyocr_enabled():
+                    reader = get_ocr_reader()
+                    if reader:
+                        working_image, _ocr_meta = prepare_easyocr_image(image_bytes)
+                        result = reader.readtext(working_image)
+                        lines = [res[1] for res in result]
+                        scores = [res[2] for res in result]
+                        extracted = "\n".join(lines)
+                        conf = sum(scores) / len(scores) if scores else 0.85
+                        if extracted.strip():
+                            return {"text": extracted.strip(), "confidence": round(conf, 4), "engine_used": "EasyOCR"}
             except Exception:
                 pass
 
