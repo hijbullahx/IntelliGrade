@@ -39,7 +39,7 @@ class AIProviderFactory:
             if provider_type == AIConfiguration.Provider.GROQ and groq_key:
                 primary = GroqProvider(api_key=groq_key)
             elif provider_type == AIConfiguration.Provider.GEMINI and gemini_key:
-                primary = GeminiProvider(api_key=gemini_key, model_name=config.gemini_model_name or 'gemini-2.0-flash')
+                primary = GeminiProvider(api_key=gemini_key, model_name=config.gemini_model_name or 'gemini-flash-latest')
             elif provider_type == AIConfiguration.Provider.OPENAI and openai_key:
                 primary = OpenAIProvider(api_key=openai_key, model_name=config.openai_model_name or 'gpt-4o-mini')
 
