@@ -209,8 +209,10 @@ class AcademicParserService:
 
             if target_q_idx is not None and fig_idx not in claimed_fig_indices:
                 claimed_fig_indices.add(fig_idx)
-                fig["owner_question"] = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
+                owner_q_num = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
+                fig["owner_question"] = owner_q_num
                 questions[target_q_idx]['associated_figures'].append(fig)
+                print(f"[FIGURE OWNERSHIP] Figure {fig_idx+1} ({fig.get('caption', f'Figure {fig_idx+1}')}) -> {owner_q_num}")
 
         # 2. Associate Tables
         claimed_tbl_indices = set()
@@ -237,8 +239,10 @@ class AcademicParserService:
 
             if target_q_idx is not None and tbl_idx not in claimed_tbl_indices:
                 claimed_tbl_indices.add(tbl_idx)
-                tbl["owner_question"] = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
+                owner_q_num = questions[target_q_idx].get("question_number", f"Q{target_q_idx+1}")
+                tbl["owner_question"] = owner_q_num
                 questions[target_q_idx]['associated_tables'].append(tbl)
+                print(f"[TABLE OWNERSHIP] Table {tbl_idx+1} ({tbl.get('caption', f'Table {tbl_idx+1}')}) -> {owner_q_num}")
 
         # 3. Associate Formulas
         claimed_form_indices = set()
