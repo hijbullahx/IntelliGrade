@@ -590,6 +590,175 @@ class AIFailoverResilienceTestCase(TestCase):
         self.assertEqual(result['questions'][0]['question_number'], 'Q1')
         self.assertEqual(result['questions'][0]['prompt_text'], 'What is Dynamic Programming?')
 
+    @patch('subprocess.run')
+    def test_easyocr_subprocess_success(self, mock_subproc):
+        from config.ocr_config import run_easyocr_isolated
+        proc_mock = MagicMock()
+        proc_mock.returncode = 0
+        proc_mock.stdout = json.dumps({
+            "success": True,
+            "text": "Question 1: Explain Process Synchronization in Operating Systems. [10 marks]",
+            "confidence": 0.89,
+            "boxes": [{"bbox": [50, 50, 300, 100], "text": "Question 1"}]
+        }).encode('utf-8')
+        mock_subproc.return_value = proc_mock
+
+        res = run_easyocr_isolated(b'fake_image_bytes')
+        self.assertTrue(res['success'])
+        self.assertIn('Process Synchronization', res['text'])
+        self.assertEqual(res['confidence'], 0.89)
+
+    @patch('subprocess.run')
+    def test_easyocr_subprocess_timeout(self, mock_subproc):
+        import subprocess
+        from config.ocr_config import run_easyocr_isolated
+        mock_subproc.side_effect = subprocess.TimeoutExpired(cmd=['python', 'runner.py'], timeout=15.0)
+
+        res = run_easyocr_isolated(b'fake_image_bytes')
+        self.assertFalse(res['success'])
+        self.assertEqual(res['engine'], 'EasyOCR Subprocess Timeout')
+        self.assertEqual(res['text'], '')
+
+    @patch('subprocess.run')
+    def test_easyocr_subprocess_sigill_simulation(self, mock_subproc):
+        from config.ocr_config import run_easyocr_isolated
+        proc_mock = MagicMock()
+        proc_mock.returncode = -4  # SIGILL (Signal 4) - Illegal instruction
+        proc_mock.stdout = b""
+        proc_mock.stderr = b"Illegal instruction (core dumped)"
+        mock_subproc.return_value = proc_mock
+
+        res = run_easyocr_isolated(b'fake_image_bytes')
+        self.assertFalse(res['success'])
+        self.assertIn('code -4', res['engine'])
+        self.assertEqual(res['text'], '')
+
+    def test_multiple_figure_candidates_survive_into_final_figures(self):
+        from core.ai_engine.document_service import DocumentService
+        import numpy as np
+
+        # Create two distinct figures in candidate union
+        candidate_figs = [
+            {
+                "source": "figure",
+                "element_type": "FIGURE",
+                "page_number": 1,
+                "caption": "Figure 1",
+                "bounding_box": [50, 100, 250, 300], # Area 40000
+                "image_path": "exam_figures/fig1.png"
+            },
+            {
+                "source": "figure",
+                "element_type": "FIGURE",
+                "page_number": 1,
+                "caption": "Figure 2",
+                "bounding_box": [50, 400, 250, 600], # Area 40000, non-overlapping
+                "image_path": "exam_figures/fig2.png"
+            }
+        ]
+
+        nms_res = DocumentService.apply_nms_deduplication(candidate_figs, iou_threshold=0.50)
+        self.assertEqual(len(nms_res['accepted']), 2)
+        self.assertEqual(len(nms_res['rejected']), 0)
+
+    def test_figure_question_spatial_mapping(self):
+        from core.ai_engine.parser.academic_parser import AcademicParserService
+
+        questions = [
+            {"question_number": "Q1", "prompt_text": "Describe diagram below", "start_y": 200.0, "page_number": 1},
+            {"question_number": "Q2", "prompt_text": "Explain next concept", "start_y": 800.0, "page_number": 1}
+        ]
+
+        figures = [
+            {"page_number": 1, "bounding_box": [100, 300, 400, 600], "caption": "Figure 1"}
+        ]
+
+        mapped_q = AcademicParserService.associate_figures_with_questions(
+            questions=questions,
+            figures=figures,
+            tables=[],
+            formulas=[],
+            dom_elements=[]
+        )
+
+        self.assertEqual(len(mapped_q[0]['associated_figures']), 1)
+        self.assertEqual(mapped_q[0]['associated_figures'][0]['caption'], 'Figure 1')
+        self.assertEqual(mapped_q[0]['associated_figures'][0]['owner_question'], 'Q1')
+        self.assertEqual(len(mapped_q[1]['associated_figures']), 0)
+
+    @patch('urllib.request.urlopen')
+    def test_groq_vision_and_figure_payload(self, mock_urlopen):
+        from core.ai_engine.providers.groq import GroqProvider
+        groq = GroqProvider(api_key="test_groq_key")
+
+        groq_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'Explain diagram in Figure 1.',
+                            'allocated_marks': 10.0,
+                            'question_type': ['Theory'],
+                            'command_verbs': ['Explain'],
+                            'bloom_level': 'Understand',
+                            'co_mapping': 'CO1',
+                            'po_mapping': ['PO1'],
+                            'criteria': 'Correct diagram analysis.',
+                            'ideal_answer': 'Full analysis.'
+                        }]
+                    })
+                }
+            }]
+        })
+        mock_urlopen.return_value = groq_resp
+
+        extra_figs = [{"caption": "Figure 1 Architecture Diagram", "page_number": 1}]
+        res = groq.analyze_academic_exam_paper(
+            "Question 1: Explain diagram in Figure 1. [10 marks]",
+            image_bytes=b'fake_png_bytes',
+            extra_files=extra_figs
+        )
+        self.assertIn('questions', res)
+        self.assertEqual(res['questions'][0]['question_number'], 'Q1')
+
+    @patch('urllib.request.urlopen')
+    def test_openai_vision_and_figure_payload(self, mock_urlopen):
+        from core.ai_engine.providers.openai import OpenAIProvider
+        openai = OpenAIProvider(api_key="test_openai_key")
+
+        openai_resp = self._mock_http_response({
+            'choices': [{
+                'message': {
+                    'content': json.dumps({
+                        'questions': [{
+                            'question_number': 'Q1',
+                            'prompt_text': 'Explain data flow in Figure 1.',
+                            'allocated_marks': 10.0,
+                            'question_type': ['Theory'],
+                            'command_verbs': ['Explain'],
+                            'bloom_level': 'Understand',
+                            'co_mapping': 'CO1',
+                            'po_mapping': ['PO1'],
+                            'criteria': 'Correct data flow.',
+                            'ideal_answer': 'Full answer.'
+                        }]
+                    })
+                }
+            }]
+        })
+        mock_urlopen.return_value = openai_resp
+
+        extra_figs = [{"caption": "Figure 1 Flowchart", "page_number": 1}]
+        res = openai.analyze_academic_exam_paper(
+            "Question 1: Explain data flow in Figure 1. [10 marks]",
+            image_bytes=b'fake_png_bytes',
+            extra_files=extra_figs
+        )
+        self.assertIn('questions', res)
+        self.assertEqual(res['questions'][0]['question_number'], 'Q1')
+
+
 
 
 
