@@ -129,6 +129,9 @@ class QuestionMappingOrchestrator:
         print(f"Submission #{submission.id} ({len(pages)} pages)")
         print(f"==================================================\n")
 
+        # PASS 1: Evidence Gathering (Global Ownership Evidence Matrix)
+        evidence_matrix = {}
+
         for sp in pages:
             p_num = sp.page_number
             ocr_text = sp.ocr_raw_text or ""
@@ -137,14 +140,12 @@ class QuestionMappingOrchestrator:
             word_boxes = []
             line_boxes = []
             if ocr_res:
-                # Safely load word and line boxes, handling empty or invalid JSON.
                 wb_json = getattr(ocr_res, 'word_boxes_json', None)
                 lb_json = getattr(ocr_res, 'line_boxes_json', None)
                 if wb_json and isinstance(wb_json, list):
                     word_boxes = wb_json
                 if lb_json and isinstance(lb_json, list):
                     line_boxes = lb_json
-
 
             # Step 1: Detect explicit question headings using reconstructed visual lines
             detections = StudentQuestionHeadingDetector.detect_questions_on_page(
@@ -188,11 +189,39 @@ class QuestionMappingOrchestrator:
 
                 all_detected_numbers.append(d['normalized_number'])
 
-            # Step 2: Build AnswerRegion Objects for Page
+            # Calculate evidence scores for the Matrix
+            explicit_heading_score = max([d.get('confidence', 0.0) for d in detections], default=0.0)
+
+            sem_best_q = None
+            semantic_match_score = 0.0
+            if ocr_text and len(ocr_text.strip()) > 20:
+                sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
+                sem_best_q = sem_match.get('best_question')
+                semantic_match_score = float(sem_match.get('confidence', 0.0))
+
+            evidence_matrix[p_num] = {
+                'page': sp,
+                'ocr_text': ocr_text,
+                'detections': detections,
+                'explicit_heading_score': explicit_heading_score,
+                'semantic_match_score': semantic_match_score,
+                'sem_best_q': sem_best_q,
+            }
+
+        # PASS 2: Global Optimization & Answer Region Construction
+        for sp in pages:
+            p_num = sp.page_number
+            ev = evidence_matrix[p_num]
+            detections = ev['detections']
+            explicit_heading_score = ev['explicit_heading_score']
+            semantic_match_score = ev['semantic_match_score']
+            sem_best_q = ev['sem_best_q']
+            ocr_text = ev['ocr_text']
+
             page_regions = []
 
-            if detections:
-                # Page contains 1 or more explicit answer headings! Sort by vertical ymin_pct position
+            if detections and (explicit_heading_score >= 0.80 or len(detections) > 0):
+                # Page contains explicit answer headings! Sort by vertical ymin_pct position
                 detections.sort(key=lambda d: d.get('ymin_pct', 0.0))
 
                 first_det_ymin = float(detections[0].get('ymin_pct', 0.0))
@@ -267,7 +296,7 @@ class QuestionMappingOrchestrator:
                         active_q_obj = matched_q
 
             else:
-                # 0 explicit headings detected on this page
+                # 0 clear explicit headings on this page
                 if p_num == 1:
                     # Page 1 is initial cover/title page - remain UNMAPPED unless explicit heading exists
                     reg = AnswerRegion(
@@ -287,7 +316,7 @@ class QuestionMappingOrchestrator:
                     page_regions.append(reg)
                     unassigned_page_numbers.append(1)
                 else:
-                    # Evaluate Continuation vs Missed Heading Suspicion & Semantic Change
+                    # Global Optimization Check: 1) Continuation flow, 2) Semantic Matcher, 3) Unmapped
                     prev_text = pages[p_num - 2].ocr_raw_text if p_num > 1 else ""
                     cont_eval = ContinuationDetector.evaluate_continuation(
                         prev_page_text=prev_text,
@@ -295,40 +324,11 @@ class QuestionMappingOrchestrator:
                         current_has_new_header=False
                     )
 
-                    # Run Semantic Matcher
-                    sem_best_q = None
-                    sem_best_score = 0.0
-                    if ocr_text and len(ocr_text.strip()) > 20:
-                        sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
-                        sem_best_q = sem_match.get('best_question')
-                        sem_best_score = float(sem_match.get('confidence', 0.0))
-
                     active_q_num = QuestionAccessor.get_question_number(active_q_obj) if active_q_obj else None
                     sem_best_num = QuestionAccessor.get_question_number(sem_best_q) if sem_best_q else None
 
-                    if sem_best_q and sem_best_num != active_q_num and sem_best_score >= 0.45:
-                        # Topic transition detected via semantic matcher!
-                        sem_q_id = getattr(sem_best_q, 'id', None)
-                        reg = AnswerRegion(
-                            page_number=p_num,
-                            region_id=f"p{p_num}_r1",
-                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
-                            question_id=sem_q_id,
-                            question_number=QuestionAccessor.get_question_number(sem_best_q),
-                            heading_text=f"Semantic Match: Q{QuestionAccessor.get_question_number(sem_best_q)}",
-                            heading_confidence=0.0,
-                            semantic_confidence=sem_best_score,
-                            mapping_method="SEMANTIC_TOPIC_MATCH",
-                            confidence_level="HIGH" if sem_best_score >= 0.75 else "MEDIUM",
-                            requires_review=(sem_best_score < 0.75),
-                            possible_missed_heading=True,
-                            reason=f"Semantic topic match: Content similarity to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%)"
-                        )
-                        page_regions.append(reg)
-                        mapped_regions_by_q[sem_q_id]['regions'].append(reg)
-                        active_q_obj = sem_best_q
-
-                    elif active_q_obj and cont_eval['is_continuation'] and cont_eval['confidence'] >= 0.70:
+                    if active_q_obj and cont_eval['is_continuation'] and cont_eval['confidence'] >= 0.70:
+                        # Continuation flow from globally assigned previous question!
                         active_q_id = getattr(active_q_obj, 'id', None)
                         conf_val = cont_eval['confidence']
                         reg = AnswerRegion(
@@ -339,7 +339,7 @@ class QuestionMappingOrchestrator:
                             question_number=QuestionAccessor.get_question_number(active_q_obj),
                             heading_text=f"Continuation of Q{QuestionAccessor.get_question_number(active_q_obj)}",
                             heading_confidence=conf_val,
-                            semantic_confidence=sem_best_score if sem_best_num == active_q_num else 0.0,
+                            semantic_confidence=semantic_match_score if sem_best_num == active_q_num else 0.0,
                             mapping_method="CONTINUATION",
                             confidence_level="HIGH" if conf_val >= 0.85 else "MEDIUM",
                             requires_review=(conf_val < 0.75),
@@ -348,7 +348,8 @@ class QuestionMappingOrchestrator:
                         page_regions.append(reg)
                         mapped_regions_by_q[active_q_id]['regions'].append(reg)
 
-                    elif sem_best_q and sem_best_score >= 0.45:
+                    elif sem_best_q and semantic_match_score >= 0.45:
+                        # Fallback to Semantic Topic Matcher
                         sem_q_id = getattr(sem_best_q, 'id', None)
                         reg = AnswerRegion(
                             page_number=p_num,
@@ -358,12 +359,12 @@ class QuestionMappingOrchestrator:
                             question_number=QuestionAccessor.get_question_number(sem_best_q),
                             heading_text=f"Semantic Match: Q{QuestionAccessor.get_question_number(sem_best_q)}",
                             heading_confidence=0.0,
-                            semantic_confidence=sem_best_score,
+                            semantic_confidence=semantic_match_score,
                             mapping_method="SEMANTIC_TOPIC_MATCH",
-                            confidence_level="MEDIUM",
-                            requires_review=True,
+                            confidence_level="HIGH" if semantic_match_score >= 0.75 else "MEDIUM",
+                            requires_review=(semantic_match_score < 0.75),
                             possible_missed_heading=True,
-                            reason=f"Semantic match to Q{QuestionAccessor.get_question_number(sem_best_q)} ({sem_best_score*100:.0f}%)"
+                            reason=f"Semantic topic match: Content similarity to Q{QuestionAccessor.get_question_number(sem_best_q)} ({semantic_match_score*100:.0f}%)"
                         )
                         page_regions.append(reg)
                         mapped_regions_by_q[sem_q_id]['regions'].append(reg)
@@ -386,7 +387,6 @@ class QuestionMappingOrchestrator:
                         )
                         page_regions.append(reg)
                         unassigned_page_numbers.append(p_num)
-                    unassigned_page_numbers.append(p_num)
 
             # Store answer_regions_json on SubmissionPage
             sp.answer_regions_json = [r.to_dict() for r in page_regions]

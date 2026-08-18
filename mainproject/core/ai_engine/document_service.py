@@ -489,7 +489,7 @@ class DocumentService:
                     roi_edges = edges[cy:cy+ch, cx:cx+cw]
                     edge_density = np.sum(roi_edges > 0) / float(area)
 
-                    if edge_density < 0.02:
+                    if edge_density < 0.005 and not (area > 5000 and cw > 50):
                         all_contours.append({
                             "type": "REJECT_TEXT_LINE",
                             "bbox": [cx, cy, cx + cw, cy + ch],
