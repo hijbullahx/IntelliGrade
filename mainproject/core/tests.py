@@ -1949,8 +1949,8 @@ class TaskBasedRoutingTestCase(TestCase):
         self.assertIn(groq, chain)
         self.assertEqual(chain[0], groq)
 
-    def test_step40_regression_c_4_images_groq_skipped(self):
-        """Step 40 Regression C: 4 images -> Groq skipped."""
+    def test_step40_regression_c_4_images_groq_compacted(self):
+        """Step 40/46 Regression C: 4 images -> Groq routed with compaction capability."""
         from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
         from core.ai_engine.routing.task_types import TaskType
         from core.ai_engine.providers.groq import GroqProvider
@@ -1959,7 +1959,7 @@ class TaskBasedRoutingTestCase(TestCase):
 
         ProviderHealthTracker.clear_cooldowns()
         strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=4)
-        self.assertNotIn(GroqProvider, strategy.execution_chain)
+        self.assertIn(GroqProvider, strategy.execution_chain)
 
         groq = GroqProvider(api_key="test_key")
         openrouter = OpenRouterProvider(api_key="test_key")
@@ -1967,9 +1967,9 @@ class TaskBasedRoutingTestCase(TestCase):
         failover._chain = [groq, openrouter]
 
         chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=4)
-        self.assertNotIn(groq, chain)
+        self.assertIn(groq, chain)
 
-        # Direct call to Groq with 4 images raises ValueError
+        # Direct call to Groq with 4 images without compaction raises ValueError
         with self.assertRaises(ValueError) as ctx:
             groq._call_api(
                 prompt="Test prompt",
@@ -1978,8 +1978,8 @@ class TaskBasedRoutingTestCase(TestCase):
             )
         self.assertIn("Too many images provided", str(ctx.exception))
 
-    def test_step40_regression_d_5_images_groq_skipped(self):
-        """Step 40 Regression D: 5 images -> Groq skipped."""
+    def test_step40_regression_d_5_images_groq_compacted(self):
+        """Step 40/46 Regression D: 5 images -> Groq routed with compaction capability."""
         from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
         from core.ai_engine.routing.task_types import TaskType
         from core.ai_engine.providers.groq import GroqProvider
@@ -1988,7 +1988,7 @@ class TaskBasedRoutingTestCase(TestCase):
 
         ProviderHealthTracker.clear_cooldowns()
         strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=5)
-        self.assertNotIn(GroqProvider, strategy.execution_chain)
+        self.assertIn(GroqProvider, strategy.execution_chain)
 
         groq = GroqProvider(api_key="test_key")
         openrouter = OpenRouterProvider(api_key="test_key")
@@ -1996,9 +1996,9 @@ class TaskBasedRoutingTestCase(TestCase):
         failover._chain = [groq, openrouter]
 
         chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=5)
-        self.assertNotIn(groq, chain)
+        self.assertIn(groq, chain)
 
-        # Direct call to Groq with 5 images raises ValueError
+        # Direct call to Groq with 5 images without compaction raises ValueError
         with self.assertRaises(ValueError) as ctx:
             groq._call_api(
                 prompt="Test prompt",
@@ -2007,34 +2007,27 @@ class TaskBasedRoutingTestCase(TestCase):
             )
         self.assertIn("Too many images provided", str(ctx.exception))
 
-    def test_step40_regression_e_openrouter_selected_after_groq_skipped(self):
-        """Step 40 Regression E: OpenRouter selected after Groq skipped for 4 and 5 images."""
+    def test_step40_regression_e_non_image_provider_skipped_for_visual_task(self):
+        """Step 40/46 Regression E: Non-image capable provider skipped for visual task."""
         from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
         from core.ai_engine.routing.task_types import TaskType
         from core.ai_engine.providers.groq import GroqProvider
         from core.ai_engine.providers.openrouter import OpenRouterProvider
-        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.ollama import OllamaProvider
         from core.ai_engine.providers.failover import FailoverAIProvider
 
         ProviderHealthTracker.clear_cooldowns()
-        # For 4 images:
         strategy_4 = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=4)
-        self.assertNotIn(GroqProvider, strategy_4.execution_chain)
-        self.assertEqual(strategy_4.execution_chain[0], OpenRouterProvider)
-
-        # For 5 images:
-        strategy_5 = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=5)
-        self.assertNotIn(GroqProvider, strategy_5.execution_chain)
-        self.assertEqual(strategy_5.execution_chain[0], OpenRouterProvider)
+        self.assertNotIn(OllamaProvider, strategy_4.execution_chain)
 
         groq = GroqProvider(api_key="test_key")
         openrouter = OpenRouterProvider(api_key="test_key")
-        gemini = GeminiProvider(api_key="test_key")
+        ollama = OllamaProvider()
         failover = FailoverAIProvider(primary_provider=groq)
-        failover._chain = [groq, openrouter, gemini]
+        failover._chain = [ollama, groq, openrouter]
 
-        chain_5 = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=5)
-        self.assertEqual(chain_5[0], openrouter)
+        chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=4)
+        self.assertNotIn(ollama, chain)
 
     def test_step40_regression_f_no_image_is_dropped(self):
         """Step 40 Regression F: No image is dropped when routing to compatible provider."""
@@ -2116,3 +2109,195 @@ class TaskBasedRoutingTestCase(TestCase):
         strategy_feedback = TaskRouter.route(TaskType.FEEDBACK_GENERATION, has_images=False, image_count=0)
         self.assertIn(GroqProvider, strategy_feedback.execution_chain)
         self.assertEqual(strategy_feedback.execution_chain[0], GroqProvider)
+
+
+class Step46CompactionTests(TestCase):
+    """
+    Step 46 Regression & Validation Test Suite for 650px Bounded Vertical Image Compaction.
+    """
+
+    def setUp(self):
+        import cv2
+        import numpy as np
+        # Create small valid PNG byte snippets (values <= 255)
+        self.dummy_imgs = []
+        for i in range(1, 7):
+            canvas = np.full((120, 100, 3), 30 * i, dtype=np.uint8)
+            cv2.putText(canvas, f"P{i}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            _, buf = cv2.imencode('.png', canvas)
+            self.dummy_imgs.append(buf.tobytes())
+
+    def test_test_a_1_to_3_crops_unchanged(self):
+        """Test A: 1-3 crops -> originals unchanged without compaction."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_3 = [
+            {'page_number': 1, 'region_id': 'r1', 'image_bytes': self.dummy_imgs[0]},
+            {'page_number': 2, 'region_id': 'r2', 'image_bytes': self.dummy_imgs[1]},
+            {'page_number': 3, 'region_id': 'r3', 'image_bytes': self.dummy_imgs[2]}
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_3, max_composites=3)
+        self.assertEqual(len(res), 3)
+        self.assertEqual(res[0]['image_bytes'], self.dummy_imgs[0])
+        self.assertEqual(res[1]['image_bytes'], self.dummy_imgs[1])
+        self.assertEqual(res[2]['image_bytes'], self.dummy_imgs[2])
+
+    def test_test_b_4_crops_groq_gets_leq_3_composites(self):
+        """Test B: 4 crops -> compacted into <=3 composites (exactly 2 composites)."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_4 = [
+            {'page_number': 1, 'region_id': 'r1', 'image_bytes': self.dummy_imgs[0]},
+            {'page_number': 2, 'region_id': 'r2', 'image_bytes': self.dummy_imgs[1]},
+            {'page_number': 3, 'region_id': 'r3', 'image_bytes': self.dummy_imgs[2]},
+            {'page_number': 4, 'region_id': 'r4', 'image_bytes': self.dummy_imgs[3]}
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_4, max_composites=3, target_width=650)
+        self.assertTrue(len(res) <= 3)
+        self.assertEqual(len(res), 2)
+        # All composites must have width 650
+        for comp in res:
+            self.assertEqual(comp['crop_width'], 650)
+
+    def test_test_c_5_crops_groq_gets_leq_3_composites(self):
+        """Test C: 5 crops -> compacted into <=3 composites (exactly 3 composites)."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_5 = [
+            {'page_number': 1, 'region_id': 'r1', 'image_bytes': self.dummy_imgs[0]},
+            {'page_number': 2, 'region_id': 'r2', 'image_bytes': self.dummy_imgs[1]},
+            {'page_number': 3, 'region_id': 'r3', 'image_bytes': self.dummy_imgs[2]},
+            {'page_number': 4, 'region_id': 'r4', 'image_bytes': self.dummy_imgs[3]},
+            {'page_number': 5, 'region_id': 'r5', 'image_bytes': self.dummy_imgs[4]}
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_5, max_composites=3, target_width=650)
+        self.assertTrue(len(res) <= 3)
+        self.assertEqual(len(res), 3)
+
+    def test_test_d_page_order_preserved(self):
+        """Test D: Page order is strictly preserved across composites."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_4 = [
+            {'page_number': 4, 'region_id': 'p4', 'image_bytes': self.dummy_imgs[0]},
+            {'page_number': 6, 'region_id': 'p6', 'image_bytes': self.dummy_imgs[1]},
+            {'page_number': 7, 'region_id': 'p7', 'image_bytes': self.dummy_imgs[2]},
+            {'page_number': 8, 'region_id': 'p8', 'image_bytes': self.dummy_imgs[3]}
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_4, max_composites=3, target_width=650)
+        self.assertEqual(res[0]['pages'], [4, 6])
+        self.assertEqual(res[1]['pages'], [7, 8])
+
+    def test_test_e_no_crop_dropped(self):
+        """Test E: All source crops are accounted for with zero crops dropped."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_5 = [
+            {'page_number': i, 'region_id': f'r{i}', 'image_bytes': self.dummy_imgs[i-1]}
+            for i in range(1, 6)
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_5, max_composites=3, target_width=650)
+        all_accounted_pages = []
+        for comp in res:
+            all_accounted_pages.extend(comp['pages'])
+        self.assertEqual(all_accounted_pages, [1, 2, 3, 4, 5])
+
+    def test_test_f_no_duplicate_crops(self):
+        """Test F: No duplicate crops are generated in the output."""
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+
+        crops_5 = [
+            {'page_number': i, 'region_id': f'r{i}', 'image_bytes': self.dummy_imgs[i-1]}
+            for i in range(1, 6)
+        ]
+        res = AnswerCropService.compact_crops_into_composites(crops_list=crops_5, max_composites=3, target_width=650)
+        all_pages = [p for comp in res for p in comp['pages']]
+        self.assertEqual(len(all_pages), len(set(all_pages)))
+
+    def test_test_g_provider_with_high_max_images_no_compaction(self):
+        """Test G: Provider with max_images >= crop_count receives original crops without compaction."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        openrouter = OpenRouterProvider(api_key="sk-test-key")
+        failover = FailoverAIProvider(primary_provider=openrouter)
+        failover._chain = [openrouter]
+
+        with patch.object(openrouter, 'generate_completion', return_value='{"obtained_marks": 18.0}') as mock_gen:
+            primary_crop = self.dummy_imgs[0]
+            extra_crops = [
+                {'bytes': self.dummy_imgs[1], 'mime_type': 'image/png'},
+                {'bytes': self.dummy_imgs[2], 'mime_type': 'image/png'},
+                {'bytes': self.dummy_imgs[3], 'mime_type': 'image/png'}
+            ]
+            res = failover.generate_completion(
+                prompt="Evaluate script",
+                image_bytes=primary_crop,
+                extra_files=extra_crops
+            )
+            self.assertEqual(res, '{"obtained_marks": 18.0}')
+            mock_gen.assert_called_once()
+            call_kwargs = mock_gen.call_args[1]
+            # Must remain uncompacted 4 original images
+            self.assertEqual(call_kwargs['image_bytes'], primary_crop)
+            self.assertEqual(len(call_kwargs['extra_files']), 3)
+
+    def test_test_h_invalid_or_unreadable_image_controlled_fallback(self):
+        """Test H: Invalid/unreadable image triggers safe manual review."""
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+        evaluator = AcademicEvaluator()
+        with patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider') as mock_get:
+            mock_p = MagicMock()
+            mock_p.generate_completion.side_effect = ValueError("Corrupted image format")
+            mock_get.return_value = mock_p
+
+            res = evaluator.evaluate(
+                question_id=1,
+                question_text="Explain Fourier Transform.",
+                rubric_criteria="Full explanation.",
+                student_answer="Attached corrupted images.",
+                max_marks=10.0
+            )
+            self.assertEqual(res['ai_suggested_marks'], 0.0)
+            self.assertTrue(res['requires_manual_review'])
+            self.assertIn("manual teacher review", res['ai_feedback'].lower())
+
+    def test_test_i_score_remains_bounded(self):
+        """Test I: Evaluated scores are strictly bounded 0.0 <= marks <= max_marks."""
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+        evaluator = AcademicEvaluator()
+        with patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider') as mock_get:
+            mock_p = MagicMock()
+            mock_p.generate_completion.return_value = '{"obtained_marks": 999.0, "confidence_score": 1.5}'
+            mock_get.return_value = mock_p
+
+            res = evaluator.evaluate(
+                question_id=1,
+                question_text="Explain DCT.",
+                rubric_criteria="DCT formula.",
+                student_answer="Student answer text",
+                max_marks=10.0
+            )
+            self.assertTrue(0.0 <= res['ai_suggested_marks'] <= 10.0)
+            self.assertTrue(0.0 <= res['confidence_score'] <= 1.0)
+
+    def test_test_j_malformed_provider_json_no_fabricated_score(self):
+        """Test J: Malformed provider JSON does not fabricate scores and triggers manual review."""
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+        evaluator = AcademicEvaluator()
+        with patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider') as mock_get:
+            mock_p = MagicMock()
+            mock_p.generate_completion.return_value = 'INVALID NOT JSON {Broken'
+            mock_get.return_value = mock_p
+
+            res = evaluator.evaluate(
+                question_id=1,
+                question_text="Explain Wavelet.",
+                rubric_criteria="Wavelet basics.",
+                student_answer="Student answer text",
+                max_marks=15.0
+            )
+            self.assertEqual(res['ai_suggested_marks'], 0.0)
+            self.assertEqual(res['confidence_score'], 0.0)
+            self.assertTrue(res['requires_manual_review'])
+            self.assertIn("manual teacher review", res['ai_feedback'].lower())

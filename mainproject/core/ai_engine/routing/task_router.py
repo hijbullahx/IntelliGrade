@@ -122,8 +122,7 @@ class TaskRouter:
                     continue
                 prov_max_images = caps.get('max_images', 1)
                 if effective_image_count > prov_max_images:
-                    print(f"[TASK ROUTER] SKIPPED: image_count exceeds provider max_images ({effective_image_count} > {prov_max_images}) for {p_cls.__name__}")
-                    continue
+                    print(f"[TASK ROUTER] ROUTED WITH COMPACTION: image_count exceeds provider max_images ({effective_image_count} > {prov_max_images}) for {p_cls.__name__}")
 
             if requires_json and not caps.get('supports_json', False):
                 print(f"[TASK ROUTER] Skipping {p_cls.__name__} (Does not support JSON)")

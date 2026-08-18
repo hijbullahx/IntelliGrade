@@ -90,9 +90,6 @@ class FailoverAIProvider(BaseAIProvider):
                         caps = p_inst.get_capabilities()
                         if has_imgs and not caps.get('supports_images', False):
                             continue
-                        if has_imgs and effective_image_count > caps.get('max_images', 1):
-                            print(f"[FAILOVER ROUTING] SKIPPED: image_count exceeds provider max_images ({effective_image_count} > {caps.get('max_images', 1)}) for {p_cls.__name__}")
-                            continue
                         ordered_providers.append(p_inst)
             if ordered_providers:
                 return ordered_providers
@@ -108,7 +105,6 @@ class FailoverAIProvider(BaseAIProvider):
             available = [
                 p for p in self._chain
                 if p.get_capabilities().get('supports_images', False)
-                and (effective_image_count <= 0 or effective_image_count <= p.get_capabilities().get('max_images', 1))
                 and not ProviderHealthTracker.is_on_cooldown(p.__class__)
             ]
             available.sort(key=lambda p: order_priority.get(p.__class__, 99))
@@ -172,16 +168,37 @@ class FailoverAIProvider(BaseAIProvider):
                 print(f"[AI TIMING] Skipping {provider_name} (Active Cooldown)")
                 continue
 
-            # Hard Enforcement Guard: verify image limit before calling provider
+            # Hard Enforcement Guard: verify image limit and compact if necessary
             caps = provider.get_capabilities()
+            call_kwargs = dict(kwargs)
+
             if image_count > 0:
                 if not caps.get('supports_images', False):
                     print(f"[FAILOVER ENFORCEMENT] SKIPPED: {provider_name} does not support images")
                     continue
                 prov_max = caps.get('max_images', 1)
                 if image_count > prov_max:
-                    print(f"[FAILOVER ENFORCEMENT] SKIPPED: image_count exceeds provider max_images ({image_count} > {prov_max}) for {provider_name}")
-                    continue
+                    try:
+                        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+                        composites = AnswerCropService.compact_crops_into_composites(
+                            primary_crop_bytes=call_kwargs.get('image_bytes'),
+                            extra_files=call_kwargs.get('extra_files'),
+                            max_composites=prov_max,
+                            target_width=650
+                        )
+                        if composites and len(composites) <= prov_max:
+                            call_kwargs['image_bytes'] = composites[0]['image_bytes']
+                            call_kwargs['extra_files'] = [
+                                {'bytes': c['image_bytes'], 'mime_type': 'image/png', 'page_number': c.get('page_number', 1)}
+                                for c in composites[1:]
+                            ] if len(composites) > 1 else None
+                            print(f"[FAILOVER COMPACTION] Compacted {image_count} crops into {len(composites)} composites for {provider_name}")
+                        else:
+                            print(f"[FAILOVER ENFORCEMENT] SKIPPED: image_count exceeds provider max_images ({image_count} > {prov_max}) for {provider_name}")
+                            continue
+                    except Exception as e_comp:
+                        print(f"[FAILOVER ENFORCEMENT] Compaction failed ({e_comp}). Skipping {provider_name}")
+                        continue
 
             remaining_budget = deadline - time.monotonic()
             if remaining_budget <= 1.0:
@@ -190,7 +207,6 @@ class FailoverAIProvider(BaseAIProvider):
                 break
 
             provider_timeout = min(float(os.environ.get('AI_REQUEST_TIMEOUT', 6.0)), remaining_budget)
-            call_kwargs = dict(kwargs)
             call_kwargs['timeout'] = provider_timeout
 
             attempt = 0
