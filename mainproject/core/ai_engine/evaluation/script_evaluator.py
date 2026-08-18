@@ -372,27 +372,48 @@ class AIScriptEvaluator:
         return created_answers
 
     @classmethod
-    def _prepare_crop_bytes_safely(cls, img_bytes: bytes, max_dim: int = 1600) -> bytes:
-        """Safely resizes oversized image crops for cPanel memory safety."""
-        if not img_bytes or len(img_bytes) < 1.5 * 1024 * 1024:
+    def _prepare_crop_bytes_safely(cls, img_bytes: bytes, max_dim: int = 1200) -> bytes:
+        """
+        Pre-emptively downsamples ALL visual crop payloads so max dimension (width or height) is 1200px.
+        Uses OpenCV cv2.INTER_AREA for high-quality downsampling while strictly maintaining aspect ratio.
+        If payload remains > 1.5MB after 1200px downsampling, applies aggressive JPEG compression fallback.
+        """
+        if not img_bytes:
             return img_bytes
+
         try:
             import cv2
             import numpy as np
+
             nparr = np.frombuffer(img_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
                 return img_bytes
+
             h, w = img.shape[:2]
+            current_bytes = img_bytes
+
+            # 1. Pre-emptively downsample ALL crops to max dimension 1200px while preserving aspect ratio
             if max(h, w) > max_dim:
                 scale = max_dim / float(max(h, w))
-                new_w, new_h = int(w * scale), int(h * scale)
+                new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
                 resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                _, buf = cv2.imencode('.png', resized)
-                return buf.tobytes()
-        except Exception:
-            pass
-        return img_bytes
+                img = resized
+                is_success, buf = cv2.imencode('.png', img)
+                if is_success:
+                    current_bytes = buf.tobytes()
+
+            # 2. Aggressive compression fallback if payload remains > 1.5MB after 1200px downsampling
+            max_bytes = int(1.5 * 1024 * 1024)
+            if len(current_bytes) > max_bytes:
+                is_success, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+                if is_success:
+                    current_bytes = buf.tobytes()
+
+            return current_bytes
+        except Exception as e:
+            print(f"[CROP SAFETY WARNING] Crop downsampling error: {e}")
+            return img_bytes
 
     @classmethod
     def _build_visual_evaluation_prompt(

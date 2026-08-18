@@ -998,11 +998,32 @@ function runAIQuestionScanFromModal() {
     scanAbortController = new AbortController();
     const signal = scanAbortController.signal;
 
-    // Simulate staged logs as request processes
-    setTimeout(() => { updateScanProgress(25, "Stage 1: High DPI Render & Graphic Stream Extraction..."); appendScanLog("🖼️ Rendering 300 DPI page images & extracting figures/tables...", "stage"); }, 600);
-    setTimeout(() => { updateScanProgress(50, "Stage 2: Candidate Region & Geometric Detector Union..."); appendScanLog("🔍 Running FigureDetector ∪ ContourTableDetector ∪ TextMatrixDetector...", "info"); }, 1800);
-    setTimeout(() => { updateScanProgress(75, "Stage 3: Cell Grid Reconstruction & OCR Analysis..."); appendScanLog("🔢 Extracting cell grid bounding boxes & executing EasyOCR...", "info"); }, 3200);
-    setTimeout(() => { updateScanProgress(90, "Stage 4: AI Provider Academic Schema Validation..."); appendScanLog("🧠 Querying AI Provider & validating question schema...", "stage"); }, 5000);
+    // Real-Time Backend Scan Progress Polling (cPanel Cache AJAX Polling)
+    if (window.qpScanProgressPollInterval) clearInterval(window.qpScanProgressPollInterval);
+    const selectedExamId = "{{ selected_exam.id }}";
+    let lastLoggedMsgIndex = 0;
+
+    if (selectedExamId && selectedExamId !== "" && selectedExamId !== "None") {
+        window.qpScanProgressPollInterval = setInterval(() => {
+            fetch(`/api/scan-progress/${selectedExamId}/`, {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') }
+            })
+            .then(res => res.json())
+            .then(progData => {
+                if (progData && progData.progress !== undefined) {
+                    updateScanProgress(progData.progress, progData.msg || "Processing...");
+                    if (progData.logs && Array.isArray(progData.logs)) {
+                        for (let i = lastLoggedMsgIndex; i < progData.logs.length; i++) {
+                            const entry = progData.logs[i];
+                            appendScanLog(entry.msg, entry.type || 'info');
+                        }
+                        lastLoggedMsgIndex = progData.logs.length;
+                    }
+                }
+            })
+            .catch(err => console.error("[PROGRESS POLL WARNING]", err));
+        }, 1000);
+    }
 
     const formData = new FormData();
     formData.append('examination_id', "{{ selected_exam.id }}");
@@ -1040,6 +1061,7 @@ function runAIQuestionScanFromModal() {
     })
     .then(({ ok, data }) => {
         if (qpScanTimerInterval) clearInterval(qpScanTimerInterval);
+        if (window.qpScanProgressPollInterval) clearInterval(window.qpScanProgressPollInterval);
 
         if (ok && data.success && data.data && data.data.questions && data.data.questions.length > 0) {
             currentStagedScanData = data;
@@ -1076,6 +1098,7 @@ function runAIQuestionScanFromModal() {
     })
     .catch(err => {
         if (qpScanTimerInterval) clearInterval(qpScanTimerInterval);
+        if (window.qpScanProgressPollInterval) clearInterval(window.qpScanProgressPollInterval);
         if (err.name === 'AbortError') {
             appendScanLog(`⏹️ Scan process aborted by user.`, 'warn');
             updateScanProgress(0, "Aborted");

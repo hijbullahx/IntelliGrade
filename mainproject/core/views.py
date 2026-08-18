@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Dict, Any, List
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
@@ -1839,11 +1840,42 @@ def ai_config_view(request):
         config.gemini_model = request.POST.get('gemini_model', config.gemini_model)
         config.save()
         messages.success(request, "AI Engine Configuration updated successfully!")
-        return redirect('ai_config_view')
     return render(request, 'core/ai_config.html', {
         'config': config,
         'health_monitors': health_monitors,
     })
+
+
+def _update_scan_progress_cache(exam_id: int, progress: int, msg: str, status: str = 'processing', log_type: str = 'info'):
+    """Updates question paper scanning progress in Django cache for real-time frontend polling."""
+    if not exam_id:
+        return
+    cache_key = f'scan_progress_{exam_id}'
+    current = cache.get(cache_key) or {'logs': []}
+    logs = current.get('logs', [])
+    if not logs or logs[-1].get('msg') != msg:
+        logs.append({'msg': msg, 'type': log_type})
+    cache.set(cache_key, {
+        'progress': progress,
+        'msg': msg,
+        'status': status,
+        'logs': logs
+    }, timeout=300)
+
+
+def api_get_scan_progress(request, exam_id):
+    """AJAX endpoint returning current real-time scanning progress from Django cache."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    cache_key = f'scan_progress_{exam_id}'
+    progress_data = cache.get(cache_key) or {
+        'progress': 0,
+        'msg': 'Initializing scan...',
+        'status': 'idle',
+        'logs': []
+    }
+    return JsonResponse(progress_data)
 
 
 def api_scan_question_paper(request):
@@ -1996,7 +2028,11 @@ def api_scan_question_paper(request):
         print(f"  PYTHON EXEC: {sys.executable}")
         print("=" * 80)
 
+        exam_db_id = exam.id if exam else 0
+        _update_scan_progress_cache(exam_db_id, 15, "Stage 1: High DPI Render & Graphic Stream Extraction...", 'processing', 'stage')
+
         print("[PIPELINE STAGE 2] DocumentService: Rendering 300 DPI Page Images & Extracting Graphics...")
+        _update_scan_progress_cache(exam_db_id, 35, "Stage 2: Running FigureDetector ∪ ContourTableDetector ∪ TextMatrixDetector...", 'processing', 'info')
         graphics_res = DocumentService.process_graphics_and_figures(qp_bytes, mime_type=mime_type)
         extracted_figures = graphics_res.get('figures', [])
         extracted_tables = graphics_res.get('tables', [])
@@ -2010,6 +2046,7 @@ def api_scan_question_paper(request):
         print(f"  Graphics Figures Detected: {len(extracted_figures)}")
 
         print("[PIPELINE STAGE 3] DocumentService: Executing Deterministic OCR on Rendered Page Images...")
+        _update_scan_progress_cache(exam_db_id, 60, "Stage 3: Cell Grid Reconstruction & Executing EasyOCR...", 'processing', 'info')
         ocr_res = DocumentService.extract_deterministic_ocr(qp_bytes, page_renders=page_renders, mime_type=mime_type)
         doc_text = ocr_res.get('text', '').strip()
 
@@ -2024,6 +2061,7 @@ def api_scan_question_paper(request):
             )
 
         print(f"[PIPELINE STAGE 4] LLMService: Querying Active AI Provider ({provider.__class__.__name__})...")
+        _update_scan_progress_cache(exam_db_id, 80, "Stage 4: Querying AI Provider & validating question schema...", 'processing', 'stage')
         ai_stage_start = time.monotonic()
         payload_image = qp_bytes if (not mime_type.startswith('application/pdf') and len(qp_bytes) < 4 * 1024 * 1024) else None
         res_data = provider.analyze_academic_exam_paper(
@@ -2035,6 +2073,7 @@ def api_scan_question_paper(request):
         print(f"[PIPELINE STAGE 4 COMPLETE] AI Querying completed in {time.monotonic() - ai_stage_start:.2f}s")
 
         print("[PIPELINE STAGE 5] AcademicParserService: Validating Question Schema & Figure Mapping...")
+        _update_scan_progress_cache(exam_db_id, 95, "Stage 5: Validating Question Schema & Figure Mapping...", 'processing', 'info')
         parsed_result = AcademicParserService.validate_and_parse(
             ocr_res,
             graphics_res,
@@ -2136,6 +2175,8 @@ def api_scan_question_paper(request):
 
         print(f"[STAGED SCAN EXTRACTION COMPLETE] Staged {len(parsed_questions)} questions, {len(extracted_figures)} figures, {len(extracted_tables)} tables in session for Exam ID {exam.id if exam else 'N/A'}.")
 
+        _update_scan_progress_cache(exam_db_id, 100, f"🎉 Success! Extracted {len(parsed_questions)} questions.", 'completed', 'success')
+
         return JsonResponse({
             'success': True,
             'staged': True,
@@ -2155,12 +2196,14 @@ def api_scan_question_paper(request):
 
     except PipelineValidationError as pve:
         print(f"[DETERMINISTIC PIPELINE ABORTED] {pve}")
+        _update_scan_progress_cache(request.POST.get('examination_id', 0), 100, f"Scan Failed: {str(pve)}", 'failed', 'error')
         return JsonResponse({'success': False, 'error': str(pve)}, status=400)
     except Exception as e:
         import traceback
         import uuid
         traceback.print_exc()
         print(f"[DETERMINISTIC PIPELINE EXCEPTION] {e}")
+        _update_scan_progress_cache(request.POST.get('examination_id', 0), 100, f"Scan Failed: {str(e)}", 'failed', 'error')
         return JsonResponse({
             'success': False,
             'stage': 'SCAN_EXECUTION_FAILURE',

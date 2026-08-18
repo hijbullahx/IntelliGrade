@@ -181,7 +181,13 @@ class AcademicParserService:
                 q['start_y'] = float(found_y)
                 q['page_number'] = found_page
             elif 'start_y' not in q or q['start_y'] is None:
-                q['start_y'] = float(q.get('y_min', (idx + 1) * 1000.0))
+                if q.get('y_min') is not None:
+                    q['start_y'] = float(q['y_min'])
+                elif idx > 0:
+                    prev_start = questions[idx - 1].get('start_y')
+                    q['start_y'] = float(prev_start if prev_start is not None else 0.0) + 150.0
+                else:
+                    q['start_y'] = 0.0
             print(f"  [Q-OWNERSHIP FINAL] Question {idx+1} ({q.get('question_number')}) -> Page {q.get('page_number', 1)}, start_y={q.get('start_y'):.1f}")
 
         # 1. Associate Figures

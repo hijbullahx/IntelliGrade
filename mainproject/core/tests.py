@@ -2301,3 +2301,35 @@ class Step46CompactionTests(TestCase):
             self.assertEqual(res['confidence_score'], 0.0)
             self.assertTrue(res['requires_manual_review'])
             self.assertIn("manual teacher review", res['ai_feedback'].lower())
+
+
+class ScanProgressPollingTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username='teacher_user', password='password123')
+        self.profile = Profile.objects.create(user=self.user, role=Profile.Role.TEACHER)
+
+    def test_get_scan_progress_unauthenticated(self):
+        response = self.client.get(reverse('api_get_scan_progress', kwargs={'exam_id': 99}))
+        self.assertEqual(response.status_code, 401)
+
+    def test_get_scan_progress_authenticated_idle(self):
+        self.client.login(username='teacher_user', password='password123')
+        response = self.client.get(reverse('api_get_scan_progress', kwargs={'exam_id': 99}))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get('status'), 'idle')
+
+    def test_get_scan_progress_cache_updates(self):
+        from django.core.cache import cache
+        from core.views import _update_scan_progress_cache
+        _update_scan_progress_cache(99, 50, "Extracting text...", "processing", "info")
+        
+        self.client.login(username='teacher_user', password='password123')
+        response = self.client.get(reverse('api_get_scan_progress', kwargs={'exam_id': 99}))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get('progress'), 50)
+        self.assertEqual(data.get('msg'), "Extracting text...")
+        self.assertEqual(data.get('status'), "processing")
+
