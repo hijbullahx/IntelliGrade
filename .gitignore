@@ -29,6 +29,7 @@ media/
 *.swo
 .DS_Store
 Thumbs.db
+OCR and HTR
 
 # Agent metadata
 .gemini/

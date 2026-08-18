@@ -14,7 +14,7 @@ class QuestionPaperParser:
     """
 
     def __init__(self):
-        self.doc_parser = AcademicDocumentParser()
+        self.doc_parser = AcademicParserService()
 
     def parse_and_store_paper(self, examination: Examination, document_text_or_bytes: Any) -> Dict[str, Any]:
         """

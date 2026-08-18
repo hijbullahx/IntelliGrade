@@ -321,7 +321,14 @@ class AIScriptEvaluator:
         created_answers = []
         existing_mappings = safe_normalize_collection(submission.question_mappings.all())
 
-        if not existing_mappings:
+        has_mappings = len(existing_mappings) > 0
+        all_confirmed = has_mappings and all(getattr(m, 'is_confirmed', False) for m in existing_mappings)
+
+        if not all_confirmed:
+            if has_mappings:
+                cls._write_pipeline_log(submission.id, "[MAPPING] Clearing unconfirmed question mappings for fresh re-analysis...")
+                submission.question_mappings.filter(is_confirmed=False).delete()
+
             cls._write_pipeline_log(submission.id, "[MAPPING] Running order-independent question mapping analysis...")
             QuestionMappingOrchestrator.analyze_and_build_mapping(submission.id)
             existing_mappings = safe_normalize_collection(submission.question_mappings.all())
