@@ -20,7 +20,8 @@ class GeminiProvider(BaseAIProvider):
         "supports_images": True,
         "supports_pdf": True,
         "supports_json": True,
-        "supports_function_calling": True
+        "supports_function_calling": True,
+        "max_images": 16
     }
 
     def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
@@ -30,6 +31,11 @@ class GeminiProvider(BaseAIProvider):
     def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
+
+        total_images = (1 if image_bytes else 0) + (len(extra_files) if extra_files and isinstance(extra_files, list) else 0)
+        max_allowed = self.capabilities.get('max_images', 16)
+        if total_images > max_allowed:
+            raise ValueError(f"Too many images provided ({total_images}). Gemini supports up to {max_allowed} images.")
 
         from .registry import ModelRegistryManager
         registry_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")

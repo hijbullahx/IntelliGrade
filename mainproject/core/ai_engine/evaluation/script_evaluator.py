@@ -17,6 +17,7 @@ from core.models import (
 from core.utils.question_accessor import QuestionAccessor, QuestionDTO, safe_getattr, safe_normalize_collection
 from core.ai_engine.preprocessing.image_processor import ImagePreprocessingService
 from core.ai_engine.providers.factory import AIProviderFactory
+from core.ai_engine.routing.task_types import TaskType
 
 class AIScriptEvaluator:
     """
@@ -611,7 +612,8 @@ Return ONLY JSON without markdown commentary.
                         system_instruction="You return strict JSON academic script evaluations based on visual handwritten answer crops.",
                         image_bytes=primary_crop_bytes,
                         mime_type='image/png',
-                        extra_files=extra_crops
+                        extra_files=extra_crops,
+                        task_type=TaskType.ANSWER_VISUAL_READ
                     )
                     close_old_connections()
 
@@ -650,7 +652,8 @@ Return ONLY JSON without markdown commentary.
                     close_old_connections()
                     raw_response = ai_provider.generate_completion(
                         prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
-                        system_instruction="You return strict JSON academic script evaluations."
+                        system_instruction="You return strict JSON academic script evaluations.",
+                        task_type=TaskType.ANSWER_GRADING
                     )
                     close_old_connections()
 

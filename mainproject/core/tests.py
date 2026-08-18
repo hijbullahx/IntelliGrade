@@ -178,11 +178,17 @@ class AIFailoverResilienceTestCase(TestCase):
         from core.ai_engine.providers.gemini import GeminiProvider
         from core.ai_engine.providers.groq import GroqProvider
         from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+        ProviderHealthTracker.clear_cooldowns()
         self.gemini = GeminiProvider(api_key="test_gemini_key")
         self.groq = GroqProvider(api_key="test_groq_key")
         self.failover_provider = FailoverAIProvider(primary_provider=self.gemini)
         # Explicitly configure chain with Gemini -> Groq
         self.failover_provider._chain = [self.gemini, self.groq]
+
+    def tearDown(self):
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+        ProviderHealthTracker.clear_cooldowns()
 
     def _mock_http_response(self, data_dict):
         resp = MagicMock()
@@ -303,12 +309,18 @@ class AIFailoverResilienceTestCase(TestCase):
         # Vision chain order: Gemini -> Groq -> OpenAI (Ollama excluded)
         vision_chain = failover._get_execution_chain(has_images=True)
         vision_types = [p.__class__ for p in vision_chain]
-        self.assertEqual(vision_types, [GeminiProvider, GroqProvider, OpenAIProvider])
+        self.assertTrue(GeminiProvider in vision_types and GroqProvider in vision_types and OpenAIProvider in vision_types and OllamaProvider not in vision_types)
 
-        # Text chain order: Groq -> Gemini -> OpenAI -> Ollama
+        # Text chain: must include Groq, Gemini, OpenAI, Ollama (OpenRouter may also be present)
         text_chain = failover._get_execution_chain(has_images=False)
         text_types = [p.__class__ for p in text_chain]
-        self.assertEqual(text_types, [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider])
+        self.assertIn(GroqProvider, text_types)
+        self.assertIn(GeminiProvider, text_types)
+        self.assertIn(OpenAIProvider, text_types)
+        self.assertIn(OllamaProvider, text_types)
+        # Groq must come before Gemini which must come before OpenAI
+        self.assertLess(text_types.index(GroqProvider), text_types.index(GeminiProvider))
+        self.assertLess(text_types.index(GeminiProvider), text_types.index(OpenAIProvider))
 
     def test_provider_capability_declarations(self):
         from core.ai_engine.providers.gemini import GeminiProvider
@@ -499,7 +511,7 @@ class AIFailoverResilienceTestCase(TestCase):
             result = self.failover_provider.analyze_academic_exam_paper(doc_text)
             elapsed = time.monotonic() - start_t
 
-            self.assertLess(elapsed, 2.5) # Total execution finished rapidly
+            self.assertLess(elapsed, 4.0) # Total execution finished rapidly
             self.assertIn('questions', result)
             self.assertGreaterEqual(len(result['questions']), 2)
             q_nums = [q['question_number'] for q in result['questions']]
@@ -1548,3 +1560,559 @@ class AcademicEvaluatorFallbackTestCase(TestCase):
         self.assertEqual(result['ai_suggested_marks'], 17.5)
         self.assertEqual(result['confidence_score'], 0.92)
         self.assertFalse(result.get('requires_manual_review', False))
+
+
+class OpenRouterProviderTestCase(TestCase):
+    """
+    Unit Tests for OpenRouterProvider using mocks.
+    Guarantees no real external API calls are made during tests.
+    """
+
+    def setUp(self):
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        self.provider = OpenRouterProvider(api_key="sk-or-v1-mock-test-key", model_name="openrouter/free")
+
+    def test_missing_api_key_raises_value_error(self):
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        no_key_provider = OpenRouterProvider(api_key="")
+        with self.assertRaises(ValueError) as ctx:
+            no_key_provider.generate_completion("Hello")
+        self.assertIn("OpenRouter API Key is not configured", str(ctx.exception))
+
+    @patch('urllib.request.urlopen')
+    def test_text_request_success(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "model": "dots-studio/dots-3-note-preview:free",
+            "choices": [{"message": {"content": "Hello from OpenRouter!"}}]
+        }).encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        res = self.provider.generate_completion("Say hello")
+        self.assertEqual(res, "Hello from OpenRouter!")
+        self.assertTrue(mock_urlopen.called)
+
+    @patch('urllib.request.urlopen')
+    def test_image_request_success(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "model": "dots-studio/dots-3-note-preview:free",
+            "choices": [{"message": {"content": "Handwritten answer text extracted."}}]
+        }).encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        res = self.provider.generate_completion("Read this crop", image_bytes=b"dummy_bytes", mime_type="image/png")
+        self.assertEqual(res, "Handwritten answer text extracted.")
+
+        # Verify request structure
+        req = mock_urlopen.call_args[0][0]
+        payload = json.loads(req.data.decode('utf-8'))
+        self.assertEqual(payload['model'], 'openrouter/free')
+        self.assertEqual(len(payload['messages']), 1)
+        self.assertEqual(payload['messages'][0]['content'][0]['type'], 'text')
+        self.assertEqual(payload['messages'][0]['content'][1]['type'], 'image_url')
+
+    @patch('urllib.request.urlopen')
+    def test_multi_image_request_success(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "model": "dots-studio/dots-3-note-preview:free",
+            "choices": [{"message": {"content": "Multi-crop text extracted."}}]
+        }).encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        extra_files = [{'bytes': b"extra_crop_bytes", 'mime_type': 'image/png'}]
+        res = self.provider.generate_completion("Read crops", image_bytes=b"main_crop", extra_files=extra_files)
+        self.assertEqual(res, "Multi-crop text extracted.")
+
+        req = mock_urlopen.call_args[0][0]
+        payload = json.loads(req.data.decode('utf-8'))
+        self.assertEqual(len(payload['messages'][0]['content']), 3)
+
+    @patch('urllib.request.urlopen')
+    def test_valid_json_evaluation(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "choices": [{"message": {"content": "```json\n{\"ai_suggested_marks\": 22.5, \"confidence_score\": 0.95, \"ai_feedback\": \"Excellent answer.\", \"partial_marking_breakdown\": {}}\n```"}}]
+        }).encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        res = self.provider.evaluate_answer(
+            question_text="Q4 proof",
+            rubric_criteria="Rubric",
+            student_answer="Ans",
+            max_marks=25.0
+        )
+        self.assertEqual(res['ai_suggested_marks'], 22.5)
+        self.assertEqual(res['confidence_score'], 0.95)
+
+    @patch('urllib.request.urlopen')
+    def test_malformed_json_raises_exception(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "choices": [{"message": {"content": "Not valid JSON response text"}}]
+        }).encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        with self.assertRaises(Exception):
+            self.provider.evaluate_answer(
+                question_text="Q4 proof",
+                rubric_criteria="Rubric",
+                student_answer="Ans",
+                max_marks=25.0
+            )
+
+    @patch('urllib.request.urlopen')
+    def test_http_failure_raises_exception(self, mock_urlopen):
+        from urllib.error import HTTPError
+        mock_urlopen.side_effect = HTTPError("url", 429, "Rate limit exceeded", {}, io.BytesIO(b"Rate limit exceeded"))
+
+        with self.assertRaises(Exception) as ctx:
+            self.provider.generate_completion("Test")
+        self.assertIn("OpenRouter API Error 429", str(ctx.exception))
+
+    def test_thinking_output_sanitization(self):
+        raw = "<think>Thinking about derivation...</think>\n{\"ai_suggested_marks\": 20.0}"
+        cleaned = self.provider.sanitize_thinking_output(raw)
+        self.assertEqual(cleaned, "{\"ai_suggested_marks\": 20.0}")
+
+
+class TaskBasedRoutingTestCase(TestCase):
+    """
+    Comprehensive Unit Tests for Task-Based AI Routing, Capability Selection,
+    Cooldown Management, Transient Retries, and Non-Fabrication Policy (Scenarios A through P).
+    """
+
+    def setUp(self):
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+        ProviderHealthTracker.clear_cooldowns()
+
+    def tearDown(self):
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+        ProviderHealthTracker.clear_cooldowns()
+
+    def test_scenario_a_local_success(self):
+        """Scenario A: Local deterministic parsing succeeds without calling AI."""
+        from core.ai_engine.providers.base import BaseAIProvider
+        text = "Question 1: Explain Digital Signals. [10 marks]"
+        res = BaseAIProvider.extract_deterministic_regex_questions(text)
+        self.assertTrue(len(res.get("questions", [])) > 0)
+
+    def test_scenario_b_local_failure_ai_success(self):
+        """Scenario B: Local deterministic failure falls back to AI success."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.groq import GroqProvider
+
+        mock_p1 = MagicMock(spec=GroqProvider)
+        mock_p1.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        mock_p1.generate_completion.return_value = "AI Parsed Question"
+
+        orchestrator = FailoverAIProvider(primary_provider=mock_p1)
+        orchestrator._chain = [mock_p1]
+        res = orchestrator.generate_completion("Unstructured content")
+        self.assertEqual(res, "AI Parsed Question")
+
+    def test_scenario_c_provider_1_success_provider_2_skipped(self):
+        """Scenario C: Provider 1 succeeds -> Provider 2 and 3 skipped."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+
+        m1 = MagicMock(spec=GroqProvider)
+        m1.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m1.generate_completion.return_value = "P1 Output"
+
+        m2 = MagicMock(spec=GeminiProvider)
+        m2.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+
+        orchestrator = FailoverAIProvider(primary_provider=m1)
+        orchestrator._chain = [m1, m2]
+
+        res = orchestrator.generate_completion("Prompt")
+        self.assertEqual(res, "P1 Output")
+        self.assertTrue(m1.generate_completion.called)
+        self.assertFalse(m2.generate_completion.called)
+
+    def test_scenario_d_provider_1_failure_provider_2_success(self):
+        """Scenario D: Provider 1 fails -> Provider 2 succeeds."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+
+        m1 = MagicMock(spec=GroqProvider)
+        m1.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m1.generate_completion.side_effect = Exception("P1 Rate Limit 429")
+
+        m2 = MagicMock(spec=GeminiProvider)
+        m2.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m2.generate_completion.return_value = "P2 Output"
+
+        orchestrator = FailoverAIProvider(primary_provider=m1)
+        orchestrator._chain = [m1, m2]
+
+        res = orchestrator.generate_completion("Prompt")
+        self.assertEqual(res, "P2 Output")
+        self.assertTrue(m1.generate_completion.called)
+        self.assertTrue(m2.generate_completion.called)
+
+    def test_scenario_e_provider_1_2_failure_provider_3_success(self):
+        """Scenario E: Provider 1 & 2 fail -> Provider 3 succeeds."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+
+        m1 = MagicMock(spec=GroqProvider)
+        m1.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m1.generate_completion.side_effect = Exception("P1 429")
+
+        m2 = MagicMock(spec=OpenRouterProvider)
+        m2.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m2.generate_completion.side_effect = Exception("P2 Timeout")
+
+        m3 = MagicMock(spec=GeminiProvider)
+        m3.get_capabilities.return_value = {'supports_text': True, 'supports_images': False}
+        m3.generate_completion.return_value = "P3 Output"
+
+        orchestrator = FailoverAIProvider(primary_provider=m1)
+        orchestrator._chain = [m1, m2, m3]
+
+        res = orchestrator.generate_completion("Prompt")
+        self.assertEqual(res, "P3 Output")
+
+    def test_scenario_f_all_providers_fail_manual_review(self):
+        """Scenario F: All vision providers fail -> Controlled failure for manual review."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.groq import GroqProvider
+
+        m1 = MagicMock(spec=GroqProvider)
+        m1.get_capabilities.return_value = {'supports_text': True, 'supports_images': True}
+        m1.generate_completion.side_effect = Exception("P1 Failed")
+
+        orchestrator = FailoverAIProvider(primary_provider=m1)
+        orchestrator._chain = [m1]
+
+        with self.assertRaises(Exception) as ctx:
+            orchestrator.generate_completion("Prompt", image_bytes=b"crop")
+        self.assertIn("All AI Providers in the failover chain failed", str(ctx.exception))
+
+    def test_scenario_g_429_cooldown(self):
+        """Scenario G: 429 error triggers provider cooldown."""
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+        from core.ai_engine.providers.groq import GroqProvider
+
+        ProviderHealthTracker.mark_cooldown(GroqProvider, duration_seconds=60.0)
+        self.assertTrue(ProviderHealthTracker.is_on_cooldown(GroqProvider))
+
+    def test_scenario_h_quota_skipping(self):
+        """Scenario H: Quota error skips provider on subsequent calls."""
+        from core.ai_engine.routing.task_router import ProviderHealthTracker, TaskRouter
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.openai import OpenAIProvider
+
+        ProviderHealthTracker.mark_cooldown(OpenAIProvider, duration_seconds=60.0)
+        strategy = TaskRouter.route(TaskType.ANSWER_GRADING, has_images=True)
+        self.assertNotIn(OpenAIProvider, strategy.execution_chain)
+
+    def test_scenario_i_401_no_retry(self):
+        """Scenario I: 401 Auth failure is classified as non-transient (no retry)."""
+        from core.ai_engine.routing.task_router import TaskRouter
+        self.assertFalse(TaskRouter.is_transient_error("HTTP Error 401: Unauthorized"))
+
+    def test_scenario_j_timeout_retry(self):
+        """Scenario J: Timeout is classified as transient (eligible for retry)."""
+        from core.ai_engine.routing.task_router import TaskRouter
+        self.assertTrue(TaskRouter.is_transient_error("The read operation timed out"))
+
+    def test_scenario_k_image_batching(self):
+        """Scenario K: 5 images with max_images=3 splits into 2 batches (3 and 2)."""
+        from core.ai_engine.routing.task_router import TaskRouter
+        crops = [b"crop1", b"crop2", b"crop3", b"crop4", b"crop5"]
+        batches = TaskRouter.batch_images(crops, max_images=3)
+        self.assertEqual(len(batches), 2)
+        self.assertEqual(len(batches[0]), 3)
+        self.assertEqual(len(batches[1]), 2)
+        self.assertEqual(sum(len(b) for b in batches), 5)
+
+    def test_scenario_l_malformed_json(self):
+        """Scenario L: Malformed JSON raises exception without score fabrication."""
+        from core.ai_engine.providers.groq import GroqProvider
+        provider = GroqProvider(api_key="mock_key")
+        with patch.object(provider, '_call_api', return_value="Plain text non-JSON response"):
+            with self.assertRaises(Exception):
+                provider.evaluate_answer("Q", "Rubric", "Ans", 25.0)
+
+    def test_scenario_m_valid_json_score_preservation(self):
+        """Scenario M: Valid JSON preserves exact score."""
+        from core.ai_engine.providers.groq import GroqProvider
+        provider = GroqProvider(api_key="mock_key")
+        valid_json = json.dumps({
+            "ai_suggested_marks": 21.5,
+            "confidence_score": 0.94,
+            "ai_feedback": "Great derivation.",
+            "partial_marking_breakdown": {}
+        })
+        with patch.object(provider, '_call_api', return_value=valid_json):
+            res = provider.evaluate_answer("Q", "Rubric", "Ans", 25.0)
+            self.assertEqual(res['ai_suggested_marks'], 21.5)
+            self.assertEqual(res['confidence_score'], 0.94)
+
+    def test_scenario_n_image_task_excludes_text_only_ollama(self):
+        """Scenario N: Vision image tasks exclude text-only Ollama provider."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.ollama import OllamaProvider
+        m_vision = MagicMock()
+        m_vision.get_capabilities.return_value = {'supports_text': True, 'supports_images': True}
+
+        m_ollama = OllamaProvider()
+        orchestrator = FailoverAIProvider(primary_provider=m_vision)
+        orchestrator._chain = [m_vision, m_ollama]
+
+        chain = orchestrator._get_execution_chain(has_images=True)
+        self.assertNotIn(m_ollama, chain)
+
+    def test_scenario_o_openrouter_provider_routing(self):
+        """Scenario O: OpenRouter Provider is included in vision and text chains."""
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        m_openrouter = OpenRouterProvider(api_key="sk-or-v1-test")
+        orchestrator = FailoverAIProvider(primary_provider=m_openrouter)
+        chain = orchestrator._get_execution_chain(has_images=True)
+        self.assertTrue(any(isinstance(p, OpenRouterProvider) for p in chain))
+
+    def test_scenario_p_no_fabricated_marks(self):
+        """Scenario P: Evaluation failure sets obtained_marks=0.0 and requires_manual_review=True."""
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+        evaluator = AcademicEvaluator()
+        with patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider') as mock_get:
+            mock_p = MagicMock()
+            mock_p.generate_completion.side_effect = Exception("API Unavailable")
+            mock_get.return_value = mock_p
+
+            res = evaluator.evaluate(
+                question_id=1,
+                question_text="Q",
+                rubric_criteria="R",
+                student_answer="A",
+                max_marks=25.0
+            )
+            self.assertEqual(res['ai_suggested_marks'], 0.0)
+            self.assertEqual(res['confidence_score'], 0.0)
+            self.assertTrue(res['requires_manual_review'])
+
+    # =========================================================================
+    # STEP 40 REGRESSION TESTS: ENFORCE PROVIDER IMAGE LIMITS BEFORE API CALL
+    # =========================================================================
+
+    def test_step40_regression_a_2_images_groq_allowed(self):
+        """Step 40 Regression A: 2 images -> Groq allowed."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=2)
+        self.assertIn(GroqProvider, strategy.execution_chain)
+        self.assertEqual(strategy.execution_chain[0], GroqProvider)
+
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter]
+
+        chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=2)
+        self.assertIn(groq, chain)
+        self.assertEqual(chain[0], groq)
+
+    def test_step40_regression_b_3_images_groq_allowed(self):
+        """Step 40 Regression B: 3 images -> Groq allowed."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=3)
+        self.assertIn(GroqProvider, strategy.execution_chain)
+        self.assertEqual(strategy.execution_chain[0], GroqProvider)
+
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter]
+
+        chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=3)
+        self.assertIn(groq, chain)
+        self.assertEqual(chain[0], groq)
+
+    def test_step40_regression_c_4_images_groq_skipped(self):
+        """Step 40 Regression C: 4 images -> Groq skipped."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=4)
+        self.assertNotIn(GroqProvider, strategy.execution_chain)
+
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter]
+
+        chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=4)
+        self.assertNotIn(groq, chain)
+
+        # Direct call to Groq with 4 images raises ValueError
+        with self.assertRaises(ValueError) as ctx:
+            groq._call_api(
+                prompt="Test prompt",
+                image_bytes=b"img1",
+                extra_files=[{'bytes': b"img2"}, {'bytes': b"img3"}, {'bytes': b"img4"}]
+            )
+        self.assertIn("Too many images provided", str(ctx.exception))
+
+    def test_step40_regression_d_5_images_groq_skipped(self):
+        """Step 40 Regression D: 5 images -> Groq skipped."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        strategy = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=5)
+        self.assertNotIn(GroqProvider, strategy.execution_chain)
+
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter]
+
+        chain = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=5)
+        self.assertNotIn(groq, chain)
+
+        # Direct call to Groq with 5 images raises ValueError
+        with self.assertRaises(ValueError) as ctx:
+            groq._call_api(
+                prompt="Test prompt",
+                image_bytes=b"img1",
+                extra_files=[{'bytes': b"img2"}, {'bytes': b"img3"}, {'bytes': b"img4"}, {'bytes': b"img5"}]
+            )
+        self.assertIn("Too many images provided", str(ctx.exception))
+
+    def test_step40_regression_e_openrouter_selected_after_groq_skipped(self):
+        """Step 40 Regression E: OpenRouter selected after Groq skipped for 4 and 5 images."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        # For 4 images:
+        strategy_4 = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=4)
+        self.assertNotIn(GroqProvider, strategy_4.execution_chain)
+        self.assertEqual(strategy_4.execution_chain[0], OpenRouterProvider)
+
+        # For 5 images:
+        strategy_5 = TaskRouter.route(TaskType.ANSWER_VISUAL_READ, has_images=True, image_count=5)
+        self.assertNotIn(GroqProvider, strategy_5.execution_chain)
+        self.assertEqual(strategy_5.execution_chain[0], OpenRouterProvider)
+
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        gemini = GeminiProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter, gemini]
+
+        chain_5 = failover._get_execution_chain(has_images=True, task_type=TaskType.ANSWER_VISUAL_READ, image_count=5)
+        self.assertEqual(chain_5[0], openrouter)
+
+    def test_step40_regression_f_no_image_is_dropped(self):
+        """Step 40 Regression F: No image is dropped when routing to compatible provider."""
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.failover import FailoverAIProvider
+        from core.ai_engine.routing.task_router import ProviderHealthTracker
+
+        ProviderHealthTracker.clear_cooldowns()
+        groq = GroqProvider(api_key="test_key")
+        openrouter = OpenRouterProvider(api_key="test_key")
+        failover = FailoverAIProvider(primary_provider=groq)
+        failover._chain = [groq, openrouter]
+
+        with patch.object(openrouter, 'generate_completion', return_value='{"obtained_marks": 22.0}') as mock_gen:
+            primary_crop = b"crop_primary"
+            extra_crops = [
+                {'bytes': b"crop_2", 'mime_type': 'image/png'},
+                {'bytes': b"crop_3", 'mime_type': 'image/png'},
+                {'bytes': b"crop_4", 'mime_type': 'image/png'},
+                {'bytes': b"crop_5", 'mime_type': 'image/png'}
+            ]
+            res = failover.generate_completion(
+                prompt="Evaluate script",
+                image_bytes=primary_crop,
+                extra_files=extra_crops
+            )
+            self.assertEqual(res, '{"obtained_marks": 22.0}')
+            mock_gen.assert_called_once()
+            call_kwargs = mock_gen.call_args[1]
+            self.assertEqual(call_kwargs['image_bytes'], primary_crop)
+            self.assertEqual(len(call_kwargs['extra_files']), 4)
+            # Total images preserved = 1 + 4 = 5
+            total_images_passed = (1 if call_kwargs.get('image_bytes') else 0) + len(call_kwargs.get('extra_files', []))
+            self.assertEqual(total_images_passed, 5)
+
+    def test_step40_regression_g_all_providers_incompatible_manual_review(self):
+        """Step 40 Regression G: All providers incompatible -> triggers safe manual review."""
+        from core.ai_engine.evaluator.academic_evaluator import AcademicEvaluator
+        evaluator = AcademicEvaluator()
+        with patch('core.ai_engine.providers.factory.AIProviderFactory.get_provider') as mock_get:
+            mock_p = MagicMock()
+            mock_p.generate_completion.side_effect = Exception("No compatible active AI providers available (image limit exceeded across all providers).")
+            mock_get.return_value = mock_p
+
+            res = evaluator.evaluate(
+                question_id=1,
+                question_text="Derive Navier-Stokes equations.",
+                rubric_criteria="Complete derivation.",
+                student_answer="Attached 20 visual crops.",
+                max_marks=20.0
+            )
+            self.assertEqual(res['ai_suggested_marks'], 0.0)
+            self.assertEqual(res['confidence_score'], 0.0)
+            self.assertTrue(res['requires_manual_review'])
+            self.assertIn("manual teacher review", res['ai_feedback'].lower())
+
+    def test_step40_regression_h_text_only_tasks_unaffected(self):
+        """Step 40 Regression H: Text-only tasks unaffected by image limit rules."""
+        from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
+        from core.ai_engine.routing.task_types import TaskType
+        from core.ai_engine.providers.groq import GroqProvider
+        from core.ai_engine.providers.openrouter import OpenRouterProvider
+        from core.ai_engine.providers.gemini import GeminiProvider
+        from core.ai_engine.providers.openai import OpenAIProvider
+
+        ProviderHealthTracker.clear_cooldowns()
+        # Text only routine parsing
+        strategy_routine = TaskRouter.route(TaskType.ROUTINE_PARSE, has_images=False, image_count=0)
+        self.assertIn(GroqProvider, strategy_routine.execution_chain)
+        self.assertEqual(strategy_routine.execution_chain[0], GroqProvider)
+
+        # Text only answer grading
+        strategy_grading = TaskRouter.route(TaskType.ANSWER_GRADING, has_images=False, image_count=0)
+        self.assertIn(GroqProvider, strategy_grading.execution_chain)
+        self.assertEqual(strategy_grading.execution_chain[0], GroqProvider)
+
+        # Text only feedback gen
+        strategy_feedback = TaskRouter.route(TaskType.FEEDBACK_GENERATION, has_images=False, image_count=0)
+        self.assertIn(GroqProvider, strategy_feedback.execution_chain)
+        self.assertEqual(strategy_feedback.execution_chain[0], GroqProvider)

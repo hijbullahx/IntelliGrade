@@ -9,7 +9,8 @@ MODEL_REGISTRY = {
             "supports_images": True,
             "supports_pdf": True,
             "supports_json": True,
-            "supports_function_calling": True
+            "supports_function_calling": True,
+            "max_images": 16
         }
     },
     "openai": {
@@ -19,7 +20,8 @@ MODEL_REGISTRY = {
             "supports_images": True,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": True
+            "supports_function_calling": True,
+            "max_images": 10
         }
     },
     "groq": {
@@ -29,7 +31,19 @@ MODEL_REGISTRY = {
             "supports_images": True,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": False
+            "supports_function_calling": False,
+            "max_images": 3
+        }
+    },
+    "openrouter": {
+        "models": ["openrouter/free"],
+        "capabilities": {
+            "supports_text": True,
+            "supports_images": True,
+            "supports_pdf": False,
+            "supports_json": True,
+            "supports_function_calling": False,
+            "max_images": 5
         }
     },
     "ollama": {
@@ -39,7 +53,8 @@ MODEL_REGISTRY = {
             "supports_images": False,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": False
+            "supports_function_calling": False,
+            "max_images": 0
         }
     }
 }

@@ -18,7 +18,8 @@ class OllamaProvider(BaseAIProvider):
         "supports_images": False,
         "supports_pdf": False,
         "supports_json": True,
-        "supports_function_calling": False
+        "supports_function_calling": False,
+        "max_images": 0
     }
 
     def __init__(self, host: str = "http://localhost:11434", model_name: Optional[str] = None):
