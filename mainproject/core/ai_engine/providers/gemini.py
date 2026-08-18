@@ -12,10 +12,19 @@ from .base import BaseAIProvider
 class GeminiProvider(BaseAIProvider):
     """
     Google Gemini AI Provider Implementation using native REST API.
-    Supports gemini-flash-latest and multimodal image input.
+    Supports gemini-3.6-flash, gemini-flash-latest, and multimodal image input.
     """
 
-    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": True,
+        "supports_json": True,
+        "supports_function_calling": True,
+        "max_images": 16
+    }
+
+    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
         self.api_key = api_key
         self.model_name = model_name
 
@@ -23,8 +32,14 @@ class GeminiProvider(BaseAIProvider):
         if not self.api_key:
             raise ValueError("Gemini API Key is not configured.")
 
+        total_images = (1 if image_bytes else 0) + (len(extra_files) if extra_files and isinstance(extra_files, list) else 0)
+        max_allowed = self.capabilities.get('max_images', 16)
+        if total_images > max_allowed:
+            raise ValueError(f"Too many images provided ({total_images}). Gemini supports up to {max_allowed} images.")
+
         from .registry import ModelRegistryManager
-        candidate_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")
+        registry_models = ModelRegistryManager.get_models_for_provider("GeminiProvider")
+        candidate_models = [self.model_name] + registry_models if self.model_name else registry_models
 
         # Deduplicate preserving order
         unique_models = []
@@ -46,6 +61,19 @@ class GeminiProvider(BaseAIProvider):
                     "data": b64_data
                 }
             })
+
+        if extra_files and isinstance(extra_files, list):
+            for ef in extra_files:
+                ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
+                ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
+                if ef_b and len(ef_b) < 4 * 1024 * 1024:
+                    b64_ef = base64.b64encode(ef_b).decode('utf-8')
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": ef_m,
+                            "data": b64_ef
+                        }
+                    })
 
         payload = {"contents": [{"parts": parts}]}
         json_data = json.dumps(payload).encode('utf-8')
@@ -113,8 +141,15 @@ class GeminiProvider(BaseAIProvider):
 
         raise Exception(last_error or "Gemini API request failed across all fallback models.")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        return self._call_api(prompt, system_instruction, timeout=timeout)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._call_api(
+            prompt,
+            system_instruction=system_instruction,
+            image_bytes=kwargs.get('image_bytes'),
+            mime_type=kwargs.get('mime_type', 'image/png'),
+            extra_files=kwargs.get('extra_files'),
+            timeout=timeout
+        )
 
     def evaluate_answer(
         self,
@@ -123,7 +158,12 @@ class GeminiProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = "image/png",
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         
         exemplar_text = ""
@@ -150,21 +190,19 @@ Return ONLY a raw JSON object in this exact schema:
   "partial_marking_breakdown": {{"criterion_1": float, "criterion_2": float}}
 }}
 """
-        try:
-            response_text = self._call_api(prompt)
-            cleaned = re.sub(r'```json\s*', '', response_text)
-            cleaned = re.sub(r'```\s*', '', cleaned).strip()
-            parsed = json.loads(cleaned)
-            marks = float(parsed.get('ai_suggested_marks', 0.0))
-            parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
-            return parsed
-        except Exception as e:
-            return {
-                "ai_suggested_marks": round(float(max_marks) * 0.80, 2),
-                "confidence_score": 0.85,
-                "ai_feedback": f"Gemini Evaluation (Quota/API Fallback): Answer satisfies key rubric requirements.",
-                "partial_marking_breakdown": {"content_accuracy": round(float(max_marks) * 0.80, 2)}
-            }
+        response_text = self._call_api(
+            prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            extra_files=extra_files,
+            timeout=timeout
+        )
+        cleaned = re.sub(r'```json\s*', '', response_text)
+        cleaned = re.sub(r'```\s*', '', cleaned).strip()
+        parsed = json.loads(cleaned)
+        marks = float(parsed.get('ai_suggested_marks', 0.0))
+        parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
+        return parsed
 
     def analyze_question_paper(self, paper_text_or_image: Any, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg') -> Dict[str, Any]:
         prompt = f"""

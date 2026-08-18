@@ -13,13 +13,27 @@ class OpenAIProvider(BaseAIProvider):
     Supports GPT-4o and GPT-4o-mini models.
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": True,
+        "max_images": 10
+    }
+
     def __init__(self, api_key: str, model_name: str = "gpt-4o-mini"):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', timeout: Optional[float] = None) -> str:
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("OpenAI API Key is not configured.")
+
+        total_images = (1 if image_bytes else 0) + (len(extra_files) if extra_files and isinstance(extra_files, list) else 0)
+        max_allowed = self.capabilities.get('max_images', 10)
+        if total_images > max_allowed:
+            raise ValueError(f"Too many images provided ({total_images}). OpenAI supports up to {max_allowed} images.")
 
         url = "https://api.openai.com/v1/chat/completions"
         messages = []
@@ -29,13 +43,18 @@ class OpenAIProvider(BaseAIProvider):
         if image_bytes:
             import base64
             b64 = base64.b64encode(image_bytes).decode('utf-8')
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
-                ]
-            })
+            content_list = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
+            ]
+            if extra_files and isinstance(extra_files, list):
+                for ef in extra_files:
+                    ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
+                    ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
+                    if ef_b:
+                        b64_ef = base64.b64encode(ef_b).decode('utf-8')
+                        content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_m};base64,{b64_ef}"}})
+            messages.append({"role": "user", "content": content_list})
         else:
             messages.append({"role": "user", "content": prompt})
 
@@ -81,8 +100,15 @@ class OpenAIProvider(BaseAIProvider):
             print(f"[AI TIMING] OpenAI model {self.model_name} END: {elapsed:.2f}s (FAILED: {str(e)[:120]})")
             raise Exception(f"OpenAI Request Failed: {str(e)}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        return self._call_api(prompt, system_instruction, timeout=timeout)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._call_api(
+            prompt,
+            system_instruction=system_instruction,
+            image_bytes=kwargs.get('image_bytes'),
+            mime_type=kwargs.get('mime_type', 'image/png'),
+            extra_files=kwargs.get('extra_files'),
+            timeout=timeout
+        )
 
     def evaluate_answer(
         self,
@@ -91,33 +117,37 @@ class OpenAIProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = "image/png",
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         
         prompt = f"""
 You are an expert academic examiner. Evaluate the student's answer against the given question and rubric.
 
 Question: {question_text}
-Max Marks: {max_marks}
+Maximum Marks: {max_marks}
 Grading Rubric / Criteria: {rubric_criteria}
 Student Answer: {student_answer}
 
 Return ONLY a raw JSON object with keys: ai_suggested_marks, confidence_score, ai_feedback, partial_marking_breakdown.
 """
-        response_text = self._call_api(prompt)
+        response_text = self._call_api(
+            prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            extra_files=extra_files,
+            timeout=timeout
+        )
         cleaned = re.sub(r'```json\s*', '', response_text)
         cleaned = re.sub(r'```\s*', '', cleaned).strip()
-        try:
-            parsed = json.loads(cleaned)
-            parsed['ai_suggested_marks'] = min(max(0.0, float(parsed.get('ai_suggested_marks', 0.0))), float(max_marks))
-            return parsed
-        except Exception:
-            return {
-                "ai_suggested_marks": round(float(max_marks) * 0.75, 2),
-                "confidence_score": 0.85,
-                "ai_feedback": response_text or "Evaluation completed according to rubric.",
-                "partial_marking_breakdown": {"accuracy": round(float(max_marks) * 0.75, 2)}
-            }
+        parsed = json.loads(cleaned)
+        marks = float(parsed.get('ai_suggested_marks', 0.0))
+        parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
+        return parsed
 
     def analyze_question_paper(self, paper_text_or_image: Any) -> Dict[str, Any]:
         prompt = f"Extract questions and marks from:\n{paper_text_or_image}\nReturn JSON with key 'questions'."

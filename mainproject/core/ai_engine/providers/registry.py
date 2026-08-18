@@ -3,33 +3,47 @@ from typing import Dict, List, Any, Optional
 
 MODEL_REGISTRY = {
     "gemini": {
-        "models": ["gemini-flash-latest"],
+        "models": ["gemini-3.6-flash", "gemini-flash-latest"],
         "capabilities": {
             "supports_text": True,
             "supports_images": True,
             "supports_pdf": True,
             "supports_json": True,
-            "supports_function_calling": True
+            "supports_function_calling": True,
+            "max_images": 16
         }
     },
     "openai": {
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+        "models": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
         "capabilities": {
             "supports_text": True,
             "supports_images": True,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": True
+            "supports_function_calling": True,
+            "max_images": 10
         }
     },
     "groq": {
-        "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+        "models": ["qwen/qwen3.6-27b", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
         "capabilities": {
             "supports_text": True,
-            "supports_images": False,
+            "supports_images": True,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": False
+            "supports_function_calling": False,
+            "max_images": 3
+        }
+    },
+    "openrouter": {
+        "models": ["openrouter/free"],
+        "capabilities": {
+            "supports_text": True,
+            "supports_images": True,
+            "supports_pdf": False,
+            "supports_json": True,
+            "supports_function_calling": False,
+            "max_images": 5
         }
     },
     "ollama": {
@@ -39,7 +53,8 @@ MODEL_REGISTRY = {
             "supports_images": False,
             "supports_pdf": False,
             "supports_json": True,
-            "supports_function_calling": False
+            "supports_function_calling": False,
+            "max_images": 0
         }
     }
 }

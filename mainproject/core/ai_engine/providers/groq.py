@@ -10,16 +10,70 @@ from .base import BaseAIProvider
 class GroqProvider(BaseAIProvider):
     """
     Groq AI Provider Implementation using REST API.
-    Supports Llama3, Mixtral, and fast inference models.
+    Supports Llama3, Qwen Vision, and fast inference models.
     """
 
-    def __init__(self, api_key: str, model_name: str = "llama-3.3-70b-versatile"):
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": False,
+        "max_images": 3  # Groq qwen/qwen3.6-27b: HTTP 400 if >3 images
+    }
+
+    def __init__(self, api_key: str, model_name: str = "qwen/qwen3.6-27b"):
         self.api_key = api_key
         self.model_name = model_name
 
-    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', timeout: Optional[float] = None) -> str:
+    @staticmethod
+    def sanitize_thinking_output(text: str) -> str:
+        """
+        Sanitizes model outputs containing reasoning/thinking blocks such as:
+        <think>
+        ...
+        </think>
+        Returns clean content with thinking blocks stripped out.
+        Handles malformed tags, missing closing tags, multiple blocks gracefully.
+        """
+        if not text or not isinstance(text, str):
+            return ""
+
+        # First, if there is text after </think>, check if it contains JSON
+        if "</think>" in text:
+            after_think = text.split("</think>")[-1].strip()
+            if after_think and "{" in after_think:
+                m_after = re.search(r'\{.*\}', after_think, re.DOTALL)
+                if m_after:
+                    return m_after.group(0).strip()
+                return after_think
+
+        # Remove complete <think>...</think> blocks (case-insensitive, dotall)
+        cleaned = re.sub(r'(?i)<think>.*?</think>', '', text, flags=re.DOTALL)
+
+        # Handle unclosed <think> tag: if <think> remains without closing </think>
+        if re.search(r'(?i)<think>', cleaned):
+            cleaned = re.sub(r'(?i)<think>.*$', '', cleaned, flags=re.DOTALL)
+
+        # Strip remaining orphan </think> tags if any
+        cleaned = re.sub(r'(?i)</think>', '', cleaned).strip()
+
+        # Fallback: if cleaning stripped everything but raw text contains JSON object
+        if not cleaned and '{' in text and '}' in text:
+            m = re.search(r'\{.*\}', text, re.DOTALL)
+            if m:
+                cleaned = m.group(0).strip()
+
+        return cleaned
+
+    def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("Groq API Key is not configured.")
+
+        total_images = (1 if image_bytes else 0) + (len(extra_files) if extra_files and isinstance(extra_files, list) else 0)
+        max_allowed = self.capabilities.get('max_images', 3)
+        if total_images > max_allowed:
+            raise ValueError(f"Too many images provided ({total_images}). Groq {self.model_name} supports up to {max_allowed} images.")
 
         url = "https://api.groq.com/openai/v1/chat/completions"
         messages = []
@@ -28,16 +82,21 @@ class GroqProvider(BaseAIProvider):
 
         selected_model = self.model_name
         if image_bytes:
-            selected_model = "llama-3.2-11b-vision-preview"
+            selected_model = "qwen/qwen3.6-27b"
             import base64
             b64 = base64.b64encode(image_bytes).decode('utf-8')
-            messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
-                ]
-            })
+            content_list = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
+            ]
+            if extra_files and isinstance(extra_files, list):
+                for ef in extra_files:
+                    ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
+                    ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
+                    if ef_b:
+                        b64_ef = base64.b64encode(ef_b).decode('utf-8')
+                        content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_m};base64,{b64_ef}"}})
+            messages.append({"role": "user", "content": content_list})
         else:
             messages.append({"role": "user", "content": prompt})
 
@@ -68,8 +127,10 @@ class GroqProvider(BaseAIProvider):
                 choices = res_data.get('choices', [])
                 elapsed = time.monotonic() - start_t
                 if choices and choices[0].get('message', {}).get('content'):
+                    raw_content = choices[0]['message']['content']
+                    sanitized_content = self.sanitize_thinking_output(raw_content)
                     print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (SUCCESS)")
-                    return choices[0]['message']['content']
+                    return sanitized_content
                 print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (EMPTY CHOICES)")
                 raise ValueError("Groq returned empty response choices.")
         except urllib.error.HTTPError as e:
@@ -82,8 +143,15 @@ class GroqProvider(BaseAIProvider):
             print(f"[AI TIMING] Groq model {selected_model} END: {elapsed:.2f}s (FAILED: {str(e)[:120]})")
             raise Exception(f"Groq API Request Failed: {str(e)}")
 
-    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None) -> str:
-        return self._call_api(prompt, system_instruction, timeout=timeout)
+    def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
+        return self._call_api(
+            prompt,
+            system_instruction=system_instruction,
+            image_bytes=kwargs.get('image_bytes'),
+            mime_type=kwargs.get('mime_type', 'image/png'),
+            extra_files=kwargs.get('extra_files'),
+            timeout=timeout
+        )
 
     def evaluate_answer(
         self,
@@ -92,7 +160,12 @@ class GroqProvider(BaseAIProvider):
         student_answer: str,
         max_marks: float,
         exemplars: Optional[List[Dict[str, Any]]] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        image_bytes: Optional[bytes] = None,
+        mime_type: str = "image/png",
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        timeout: Optional[float] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         prompt = f"""
 Evaluate the following student answer for an academic examination question:
@@ -108,18 +181,20 @@ Return ONLY a raw JSON object with keys:
 "ai_feedback": str,
 "partial_marking_breakdown": dict
 """
-        res = self._call_api(prompt, system_instruction="Return ONLY raw JSON.")
-        try:
-            cleaned = re.sub(r'```json\s*', '', res)
-            cleaned = re.sub(r'```\s*', '', cleaned).strip()
-            return json.loads(cleaned)
-        except Exception:
-            return {
-                "ai_suggested_marks": round(max_marks * 0.75, 2),
-                "confidence_score": 0.85,
-                "ai_feedback": "Evaluated by Groq AI.",
-                "partial_marking_breakdown": {"core_concept": round(max_marks * 0.75, 2)}
-            }
+        res = self._call_api(
+            prompt,
+            system_instruction="Return ONLY raw JSON.",
+            image_bytes=image_bytes,
+            mime_type=mime_type,
+            extra_files=extra_files,
+            timeout=timeout
+        )
+        cleaned = re.sub(r'```json\s*', '', res)
+        cleaned = re.sub(r'```\s*', '', cleaned).strip()
+        parsed = json.loads(cleaned)
+        marks = float(parsed.get('ai_suggested_marks', 0.0))
+        parsed['ai_suggested_marks'] = min(max(0.0, marks), float(max_marks))
+        return parsed
 
     def analyze_question_paper(self, paper_text_or_image: Any, **kwargs) -> Dict[str, Any]:
         prompt = f"Extract routine or exam schedule from text:\n{str(paper_text_or_image)}\nReturn JSON with key 'routine_schedule'."

@@ -6,6 +6,15 @@ class MockProvider(BaseAIProvider):
     Mock AI Provider Implementation for offline testing, local demo, and zero-credential environments.
     """
 
+    capabilities = {
+        "supports_text": True,
+        "supports_images": True,
+        "supports_pdf": False,
+        "supports_json": True,
+        "supports_function_calling": False,
+        "max_images": 10
+    }
+
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None) -> str:
         return "Mock Completion Response for testing."
 

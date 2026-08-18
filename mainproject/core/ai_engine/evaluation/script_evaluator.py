@@ -17,6 +17,7 @@ from core.models import (
 from core.utils.question_accessor import QuestionAccessor, QuestionDTO, safe_getattr, safe_normalize_collection
 from core.ai_engine.preprocessing.image_processor import ImagePreprocessingService
 from core.ai_engine.providers.factory import AIProviderFactory
+from core.ai_engine.routing.task_types import TaskType
 
 class AIScriptEvaluator:
     """
@@ -364,33 +365,130 @@ class AIScriptEvaluator:
         return created_answers
 
     @classmethod
-    def _evaluate_answer_v3(
+    def _prepare_crop_bytes_safely(cls, img_bytes: bytes, max_dim: int = 1600) -> bytes:
+        """Safely resizes oversized image crops for cPanel memory safety."""
+        if not img_bytes or len(img_bytes) < 1.5 * 1024 * 1024:
+            return img_bytes
+        try:
+            import cv2
+            import numpy as np
+            nparr = np.frombuffer(img_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is None:
+                return img_bytes
+            h, w = img.shape[:2]
+            if max(h, w) > max_dim:
+                scale = max_dim / float(max(h, w))
+                new_w, new_h = int(w * scale), int(h * scale)
+                resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                _, buf = cv2.imencode('.png', resized)
+                return buf.tobytes()
+        except Exception:
+            pass
+        return img_bytes
+
+    @classmethod
+    def _build_visual_evaluation_prompt(
         cls,
-        answer: SubmissionAnswer,
-        options: Dict[str, Any],
-        user=None,
-        trace_dir: Optional[str] = None,
-        is_reevaluation: bool = False
-    ) -> EvaluationResult:
-        """
-        Evaluates student answer using QuestionDTO via QuestionAccessor.
-        Logs raw LLM responses to request_trace/llm_raw_response.txt, auto-retries on JSON parse error, and falls back gracefully.
-        """
-        start_t = time.time()
-        question = answer.question
+        q_dto,
+        student_ocr_text: str,
+        eval_mode: str,
+        strictness: str,
+        custom_prompt: str,
+        crops_count: int = 1
+    ) -> str:
+        fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
+        tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
+        form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
+        mistakes_str = ", ".join(q_dto.common_mistakes) if q_dto.common_mistakes else "None specified"
 
-        # Construct canonical QuestionDTO via QuestionAccessor
-        q_dto = QuestionAccessor.to_dto(question)
+        return f"""You are an expert academic examiner and multimodal vision evaluator for IntelliGrade.
+Carefully inspect the attached {crops_count} handwritten student answer script image(s) and evaluate the work strictly against the stored question, ideal solution, and marking rubrics.
 
-        custom_prompt = options.get('custom_prompt', '').strip()
-        strictness = options.get('strictness', 'Balanced')
-        eval_mode = options.get('eval_mode', 'Rubric-based')
+[EXAMINATION QUESTION CONTEXT]
+Question Number: Q{q_dto.number}
+Prompt Text: {q_dto.text}
+Maximum Marks: {q_dto.marks}
+Bloom Level: {q_dto.bloom}
+Course Outcome (CO): {q_dto.co}
+Program Outcome (PO): {q_dto.po}
+Grading Rubric / Criteria: {q_dto.rubric}
+Ideal Model Answer: {q_dto.ideal_answer or 'See prompt text and rubric criteria for solution standard.'}
+Alternative Valid Approaches: {q_dto.alternative_answers or 'Accept any mathematically or logically sound alternative approach.'}
+Common Pitfalls & Deductions: {mistakes_str}
 
+[STORED VISUAL ATTACHMENTS FOR QUESTION]
+Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
+Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
+Formulas: {"; ".join(form_summaries) if form_summaries else "None"}
+
+[EVALUATION SETTINGS]
+Mode: {eval_mode}
+Strictness Level: {strictness}
+Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awarding partial marks for valid intermediate derivation steps and reasoning.'}
+
+[OPTIONAL OCR TEXT (SECONDARY SUPPORTING CONTEXT)]
+{student_ocr_text or 'No OCR text available.'}
+
+[RUBRIC-GROUNDED SCORING & VISUAL EVALUATION PROTOCOL]
+1. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
+2. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
+3. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
+4. CRITERION-BY-CRITERION SCORING: Evaluate the answer strictly against each rubric criterion.
+   - For each criterion, state max allocated marks and awarded marks.
+   - Total obtained_marks MUST equal the EXACT sum of all awarded criterion marks.
+   - Award fair partial credit for correct intermediate steps, formulas, and reasoning even if final calculation is incomplete.
+   - Distinguish clearly between:
+     (a) missing: concept/step not presented
+     (b) incorrect: wrong formula/calculation
+     (c) correct but incomplete: partial steps
+     (d) correct alternative approach: valid alternative method
+5. CONFIDENCE CALIBRATION: Confidence must reflect visual evidence quality:
+   - High confidence (0.85 - 1.0): Image clean, handwriting clear, complete mapped region.
+   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting, or missing section.
+6. MANUAL REVIEW FLAGGING: Set "requires_manual_review": true if image is unreadable, crop is incomplete, confidence < 0.70, or evidence is contradictory.
+
+Provide your evaluation strictly as a valid JSON object matching this schema:
+{{
+  "question_id": "{q_dto.id}",
+  "obtained_marks": <float_sum_of_awarded_criterion_marks>,
+  "maximum_marks": {q_dto.marks},
+  "percentage": <float_percentage>,
+  "strengths": [<list_of_strings>],
+  "mistakes": [<list_of_strings>],
+  "missing_points": [<list_of_strings>],
+  "expected_points": [<list_of_strings>],
+  "rubric_breakdown": [
+    {{
+      "criteria": "<criterion_name>",
+      "allocated": <max_criterion_marks>,
+      "awarded": <awarded_criterion_marks>,
+      "evidence_found": "<exact_visual_evidence_in_image>",
+      "missing_or_incorrect": "<omission_or_error_details_or_none>",
+      "comments": "<justification_text>"
+    }}
+  ],
+  "feedback": "<step_by_step_marking_justification>",
+  "confidence": <float_between_0.0_and_1.0>,
+  "requires_manual_review": <true_or_false>
+}}
+Return ONLY raw JSON without markdown commentary.
+"""
+
+    @classmethod
+    def _build_text_evaluation_prompt(
+        cls,
+        q_dto,
+        student_ocr_text: str,
+        eval_mode: str,
+        strictness: str,
+        custom_prompt: str
+    ) -> str:
         fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
         tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
 
-        system_prompt = f"""You are an expert academic examiner for IntelliGrade.
+        return f"""You are an expert academic examiner for IntelliGrade.
 Evaluate the student's answer strictly against the stored question, figures, tables, formulas, and rubrics.
 
 [EVALUATION SETTINGS]
@@ -413,7 +511,7 @@ Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
 Formulas: {"; ".join(form_summaries) if form_summaries else "None"}
 
 [STUDENT ANSWER (OCR EXTRACTED)]
-{answer.extracted_text}
+{student_ocr_text}
 
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
@@ -435,54 +533,168 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
 Return ONLY JSON without markdown commentary.
 """
 
+    @classmethod
+    def _evaluate_answer_v3(
+        cls,
+        answer: SubmissionAnswer,
+        options: Dict[str, Any],
+        user=None,
+        trace_dir: Optional[str] = None,
+        is_reevaluation: bool = False
+    ) -> EvaluationResult:
+        """
+        Evaluates student answer using visual-first multimodal AI inspection with text-only fallback.
+        Logs raw LLM responses to request_trace/llm_raw_response.txt, auto-retries on JSON parse error, and falls back gracefully.
+        """
+        start_t = time.time()
+        question = answer.question
+
+        # Construct canonical QuestionDTO via QuestionAccessor
+        q_dto = QuestionAccessor.to_dto(question)
+
+        custom_prompt = options.get('custom_prompt', '').strip()
+        strictness = options.get('strictness', 'Balanced')
+        eval_mode = options.get('eval_mode', 'Rubric-based')
+
         ai_provider = AIProviderFactory.get_provider()
         max_retries = 2
         eval_data = None
+        used_visual_mode = False
         raw_response = ""
 
         from django.db import close_old_connections
+        from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
+        from core.models import QuestionMapping
+
+        # Step 1: Extract visual answer region crops
+        q_map = QuestionMapping.objects.filter(
+            submission=answer.submission,
+            question=answer.question
+        ).first()
+
+        crops = AnswerCropService.extract_crops_for_question(
+            submission=answer.submission,
+            question_mapping=q_map,
+            min_crop_height_px=100
+        ) if q_map else []
 
         print("----------------------------------------")
         print("LLM")
-        print(f"No DB transaction open during LLM API call for Q{q_dto.number}")
+        print(f"No DB transaction open during LLM API call for Q{q_dto.number} (Visual Crops: {len(crops)})")
         print("----------------------------------------")
 
-        for attempt in range(1, max_retries + 2):
-            try:
-                close_old_connections()
-                raw_response = ai_provider.generate_completion(
-                    prompt=system_prompt if attempt == 1 else f"{system_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
-                    system_instruction="You return strict JSON academic script evaluations."
-                )
-                close_old_connections()
+        # Step 2: Attempt Visual-First Multimodal Evaluation if crops exist
+        if crops:
+            primary_crop_bytes = cls._prepare_crop_bytes_safely(crops[0]['image_bytes'])
+            extra_crops = [
+                {
+                    'bytes': cls._prepare_crop_bytes_safely(c['image_bytes']),
+                    'mime_type': c.get('mime_type', 'image/png'),
+                    'page_number': c.get('page_number', 1)
+                }
+                for c in crops[1:]
+            ] if len(crops) > 1 else None
 
-                # Log raw response to request_trace/llm_raw_response.txt
-                cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+            visual_prompt = cls._build_visual_evaluation_prompt(
+                q_dto=q_dto,
+                student_ocr_text=answer.extracted_text,
+                eval_mode=eval_mode,
+                strictness=strictness,
+                custom_prompt=custom_prompt,
+                crops_count=len(crops)
+            )
 
-                clean_json = raw_response.strip()
-                if "```json" in clean_json:
-                    clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-                elif "```" in clean_json:
-                    clean_json = clean_json.split("```")[1].split("```")[0].strip()
+            for attempt in range(1, max_retries + 2):
+                try:
+                    close_old_connections()
+                    raw_response = ai_provider.generate_completion(
+                        prompt=visual_prompt if attempt == 1 else f"{visual_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
+                        system_instruction="You return strict JSON academic script evaluations based on visual handwritten answer crops.",
+                        image_bytes=primary_crop_bytes,
+                        mime_type='image/png',
+                        extra_files=extra_crops,
+                        task_type=TaskType.ANSWER_VISUAL_READ
+                    )
+                    close_old_connections()
 
-                eval_data = json.loads(clean_json)
-                # Validation of required JSON keys
-                if 'obtained_marks' in eval_data and 'feedback' in eval_data:
-                    break
-            except Exception as e_json:
-                cls._write_pipeline_log(answer.submission.id, f"[JSON PARSE ERROR] Attempt {attempt} for Q{q_dto.number}: {e_json}")
-                if attempt > max_retries:
-                    eval_data = None
+                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+                    clean_json = raw_response.strip()
+                    if "```json" in clean_json:
+                        clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+                    elif "```" in clean_json:
+                        clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+                    parsed = json.loads(clean_json)
+                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                        eval_data = parsed
+                        used_visual_mode = True
+                        break
+                except Exception as e_vis:
+                    cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_vis}")
+
+        # Step 3: Fall back to text-only evaluation if visual evaluation was unavailable or failed
+        if not eval_data:
+            if crops:
+                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL FALLBACK] Multimodal evaluation failed for Q{q_dto.number}. Executing text-only fallback.")
+            else:
+                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL UNAVAILABLE] No image crops found for Q{q_dto.number}. Executing text-only evaluation.")
+
+            text_prompt = cls._build_text_evaluation_prompt(
+                q_dto=q_dto,
+                student_ocr_text=answer.extracted_text,
+                eval_mode=eval_mode,
+                strictness=strictness,
+                custom_prompt=custom_prompt
+            )
+
+            for attempt in range(1, max_retries + 2):
+                try:
+                    close_old_connections()
+                    raw_response = ai_provider.generate_completion(
+                        prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
+                        system_instruction="You return strict JSON academic script evaluations.",
+                        task_type=TaskType.ANSWER_GRADING
+                    )
+                    close_old_connections()
+
+                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+                    clean_json = raw_response.strip()
+                    if "```json" in clean_json:
+                        clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+                    elif "```" in clean_json:
+                        clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+                    parsed = json.loads(clean_json)
+                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                        eval_data = parsed
+                        break
+                except Exception as e_txt:
+                    cls._write_pipeline_log(answer.submission.id, f"[TEXT EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_txt}")
 
         elapsed_ms = round((time.time() - start_t) * 1000, 2)
-        cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (Success={eval_data is not None}).")
+        cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (VisualMode={used_visual_mode}, Success={eval_data is not None}).")
 
         if eval_data:
-            obtained_m = min(float(q_dto.marks), max(0.0, float(eval_data.get('obtained_marks', 0.0))))
+            raw_m = eval_data.get('obtained_marks', eval_data.get('ai_suggested_marks', 0.0))
+            rubric_breakdown = eval_data.get('rubric_breakdown', [])
+            if rubric_breakdown and isinstance(rubric_breakdown, list):
+                sum_awarded = 0.0
+                has_valid_breakdown = False
+                for r_item in rubric_breakdown:
+                    if isinstance(r_item, dict) and 'awarded' in r_item:
+                        try:
+                            sum_awarded += float(r_item['awarded'])
+                            has_valid_breakdown = True
+                        except (ValueError, TypeError):
+                            pass
+                if has_valid_breakdown:
+                    raw_m = sum_awarded
+
+            obtained_m = min(float(q_dto.marks), max(0.0, float(raw_m or 0.0)))
             max_m = float(q_dto.marks)
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)
-            conf = float(eval_data.get('confidence', 0.90))
-            req_review = bool(eval_data.get('requires_manual_review', False)) or answer.requires_manual_review or (conf < 0.70)
+            conf = min(1.0, max(0.0, float(eval_data.get('confidence', eval_data.get('confidence_score', 0.85)))))
+            req_review = bool(eval_data.get('requires_manual_review', False)) or (not used_visual_mode) or (conf < 0.70) or answer.requires_manual_review
 
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
@@ -494,7 +706,7 @@ Return ONLY JSON without markdown commentary.
                     'mistakes_json': eval_data.get('mistakes', []),
                     'missing_points_json': eval_data.get('missing_points', []),
                     'rubric_breakdown_json': eval_data.get('rubric_breakdown', []),
-                    'feedback_text': eval_data.get('feedback', 'AI evaluation completed.'),
+                    'feedback_text': eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.')),
                     'confidence': conf,
                     'requires_manual_review': req_review
                 }
@@ -516,7 +728,7 @@ Return ONLY JSON without markdown commentary.
             eval_res.mistakes_json = eval_data.get('mistakes', [])
             eval_res.missing_points_json = eval_data.get('missing_points', [])
             eval_res.rubric_breakdown_json = eval_data.get('rubric_breakdown', [])
-            eval_res.feedback_text = eval_data.get('feedback', 'AI evaluation completed.')
+            eval_res.feedback_text = eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.'))
             eval_res.confidence = conf
             eval_res.requires_manual_review = req_review
             eval_res.save()
@@ -542,24 +754,31 @@ Return ONLY JSON without markdown commentary.
             return eval_res
 
         else:
-            # Graceful Fallback
-            cls._write_pipeline_log(answer.submission.id, f"[GRACEFUL FALLBACK] Triggered fallback evaluation for Q{q_dto.number}.")
-            obtained_m = round(float(q_dto.marks) * 0.75, 2)
+            # Total Provider Failure Fallback (Non-fabricated safe fallback)
+            cls._write_pipeline_log(answer.submission.id, f"[TOTAL EVAL FAILURE] All evaluation pathways failed for Q{q_dto.number}.")
+            max_m = float(q_dto.marks)
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
                 defaults={
-                    'obtained_marks': obtained_m,
-                    'maximum_marks': float(q_dto.marks),
-                    'percentage': 75.0,
-                    'strengths_json': ["Step-by-step attempt verified."],
-                    'mistakes_json': ["Review required due to LLM response format."],
+                    'obtained_marks': 0.0,
+                    'maximum_marks': max_m,
+                    'percentage': 0.0,
+                    'strengths_json': [],
+                    'mistakes_json': ["AI evaluation was unavailable across all providers."],
                     'missing_points_json': [],
                     'rubric_breakdown_json': [],
-                    'feedback_text': "Evaluated via safe fallback engine.",
-                    'confidence': 0.70,
+                    'feedback_text': "AI evaluation unavailable across all providers; manual teacher review required.",
+                    'confidence': 0.0,
                     'requires_manual_review': True
                 }
             )
+            eval_res.obtained_marks = 0.0
+            eval_res.maximum_marks = max_m
+            eval_res.percentage = 0.0
+            eval_res.feedback_text = "AI evaluation unavailable across all providers; manual teacher review required."
+            eval_res.confidence = 0.0
+            eval_res.requires_manual_review = True
+            eval_res.save()
             return eval_res
 
     @classmethod

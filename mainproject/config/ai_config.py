@@ -9,8 +9,8 @@ class AIConfig:
     """Centralized AI Engine Configuration."""
 
     DEFAULT_MODELS = {
-        "GEMINI": ["gemini-2.0-flash", "gemini-2.0-flash-lite"],
-        "GROQ": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+        "GEMINI": ["gemini-3.6-flash", "gemini-flash-latest"],
+        "GROQ": ["qwen/qwen3.6-27b", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
         "OPENAI": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
         "OLLAMA": ["llama3", "mistral"],
     }

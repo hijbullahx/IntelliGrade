@@ -15,13 +15,14 @@ class BaseAIProvider(ABC):
         "supports_pdf": True,
         "supports_json": True,
         "supports_function_calling": False,
-        "supports_streaming": False
+        "supports_streaming": False,
+        "max_images": 5
     }
 
-    def get_capabilities(self) -> Dict[str, bool]:
+    def get_capabilities(self) -> Dict[str, Any]:
         """Returns declared capability matrix for provider routing."""
         return getattr(self, 'capabilities', {
-            "supports_text": True, "supports_images": False, "supports_pdf": False, "supports_json": True
+            "supports_text": True, "supports_images": False, "supports_pdf": False, "supports_json": True, "max_images": 0
         })
 
     @staticmethod

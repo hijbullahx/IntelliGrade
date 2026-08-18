@@ -74,25 +74,18 @@ Return ONLY a raw, valid JSON object matching this exact schema:
         except Exception:
             pass
 
-        # Fallback structured JSON evaluation
-        s_lower = student_answer.lower()
-        score_ratio = 0.8
-        if len(student_answer.strip()) < 10:
-            score_ratio = 0.2
-        elif any(kw in s_lower for kw in ['correct', 'microservice', 'rest', 'database']):
-            score_ratio = 0.85
-
-        suggested_marks = round(max_marks * score_ratio, 2)
-        conf_details = ConfidenceEngine.categorize_confidence(0.85)
+        # Fallback structured JSON evaluation when AI provider fails or returns unparseable JSON
+        conf_details = ConfidenceEngine.categorize_confidence(0.0)
 
         return {
-            "ai_suggested_marks": suggested_marks,
-            "confidence_score": 0.85,
-            "reason": f"Evaluated student answer script against rubric criteria ({suggested_marks}/{max_marks} marks).",
-            "strengths": ["Addressed core question requirements."],
-            "missing_points": ["Could include further elaboration."],
+            "ai_suggested_marks": 0.0,
+            "confidence_score": 0.0,
+            "reason": "AI evaluation unavailable or returned unparseable JSON; manual teacher review required.",
+            "strengths": [],
+            "missing_points": ["AI evaluation unavailable/unparseable."],
             "incorrect_points": [],
-            "ai_feedback": f"Demonstrates good understanding ({suggested_marks}/{max_marks} marks).",
-            "partial_marking_breakdown": {"core_concept": suggested_marks},
+            "ai_feedback": "AI evaluation unavailable; manual teacher review required.",
+            "partial_marking_breakdown": {},
+            "requires_manual_review": True,
             "confidence_details": conf_details
         }
