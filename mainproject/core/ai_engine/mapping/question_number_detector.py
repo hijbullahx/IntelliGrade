@@ -187,6 +187,31 @@ class StudentQuestionHeadingDetector:
         r'^\s*(?:Step|Part|Point|Section|Item)\s*[0-9]{1,2}\b', re.IGNORECASE
     )
 
+    # Subcontinental / Bangladeshi verbose student question heading patterns
+    SUBCONTINENTAL_HEADING_PATTERNS = [
+        # Recommended flexible pattern covering verbose heading variations:
+        # "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)", "Question No. 1"
+        re.compile(
+            r'(?i)(?:ans(?:wer)?\s*\.?\s*)?(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
+            re.IGNORECASE
+        ),
+        # Explicit Ans/Answer prefix: "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)"
+        re.compile(
+            r'^\s*(?:ans(?:wer)?\s*\.?\s*)(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
+            re.IGNORECASE
+        ),
+        # Explicit Q/Question prefix: "Q. No. 1", "Question 2", "Q1(a)"
+        re.compile(
+            r'^\s*(?:q(?:uestion)?\s*\.?\s*)(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
+            re.IGNORECASE
+        ),
+        # Bengali explicit heading pattern: "উত্তর/প্রশ্ন (নং) ১"
+        re.compile(
+            r'(?:উত্তর|প্রশ্ন)\s*(?:নং)?\s*[\.\:\-]?\s*([১-৯]+|[0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
+            re.IGNORECASE
+        ),
+    ]
+
     ANSWER_TOKENS = [
         'answer', 'ans', 'ans.', 'ang', 'angto', 'ansto', 'answe', 'ansr', 'solution', 'soln', 'sol', 'উত্তর'
     ]
@@ -224,14 +249,22 @@ class StudentQuestionHeadingDetector:
     @classmethod
     def extract_question_number_candidates(cls, text: str) -> List[Tuple[str, str]]:
         """Extracts candidate question numbers from text string, returning (raw_num, normalized_num)."""
-        raw_matches = re.findall(r'\b0*([1-9][0-9]?)\b|[১-৯]{1,2}|\b[IVX]{1,4}\b', text, re.IGNORECASE)
         results = []
+        for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
+            m = pat.search(text)
+            if m and m.group(1):
+                raw = m.group(1).strip()
+                norm = cls.normalize_question_number(raw)
+                if norm and (raw, norm) not in results:
+                    results.append((raw, norm))
+
+        raw_matches = re.findall(r'\b0*([1-9][0-9]?)\b|[১-৯]{1,2}|\b[IVX]{1,4}\b', text, re.IGNORECASE)
         for m in raw_matches:
             tok = m[0] if isinstance(m, tuple) and m[0] else (m if isinstance(m, str) else "")
             if not tok:
                 continue
             norm = cls.normalize_question_number(tok)
-            if norm and norm.isdigit():
+            if norm and (tok, norm) not in results:
                 results.append((tok, norm))
         return results
 
@@ -452,12 +485,60 @@ class StudentQuestionHeadingDetector:
 
         valid_nums_clean = [cls.normalize_question_number(n) for n in stored_question_numbers] if stored_question_numbers else []
 
+        # 3. High Priority Subcontinental / Verbose Heading Pattern Detection
+        for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
+            m = pat.search(line_str)
+            if m and m.group(1):
+                raw_num = m.group(1).strip()
+                norm_num = cls.normalize_question_number(raw_num)
+
+                is_valid = True
+                if valid_nums_clean:
+                    base_norm = re.sub(r'\D', '', norm_num)
+                    is_valid = (
+                        (norm_num in valid_nums_clean) or
+                        (norm_num.lower() in [v.lower() for v in valid_nums_clean]) or
+                        (base_norm and any(re.sub(r'\D', '', v) == base_norm for v in valid_nums_clean if v))
+                    )
+
+                if is_valid:
+                    boosted_score = 90
+                    if has_ans_ctx and has_q_ctx:
+                        boosted_score += 5
+                    if ymin_pct <= 0.25:
+                        boosted_score += 4
+
+                    conf = min(0.99, round(boosted_score / 100.0, 2))
+                    return {
+                        'is_question_heading': True,
+                        'question_number': norm_num,
+                        'heading_text': line_str,
+                        'confidence': conf,
+                        'score': boosted_score,
+                        'heading_type': 'EXPLICIT_SUBCONTINENTAL_HEADING',
+                        'raw_text': text,
+                        'ans_token': ans_token if has_ans_ctx else 'NO',
+                        'q_token': q_token if has_q_ctx else 'NO',
+                        'raw_num': raw_num,
+                        'norm_num': norm_num,
+                        'reason': 'VERBOSE_SUBCONTINENTAL_PATTERN_MATCH'
+                    }
+
         best_cand = None
         best_score = 0
 
         for raw_num, norm_num in num_candidates:
             # Validate question number against exam questions
-            if valid_nums_clean and norm_num not in valid_nums_clean:
+            base_norm = re.sub(r'\D', '', norm_num)
+            is_cand_valid = True
+            if valid_nums_clean:
+                is_cand_valid = (
+                    (norm_num in valid_nums_clean) or
+                    (norm_num.lower() in [v.lower() for v in valid_nums_clean]) or
+                    (base_norm and any(re.sub(r'\D', '', v) == base_norm for v in valid_nums_clean if v))
+                )
+
+            if not is_cand_valid:
                 continue
 
             # Multi-Factor Score Calculation:
