@@ -282,29 +282,15 @@ if __name__ == '__main__':
     # Register default fallback Dummy Adapter for verification
     active_adapters["DummyHTRAdapter"] = DummyHTRAdapter(device=args.device)
 
-    # =========================================================================
-    # SKELETON: Model Adapters Registration
-    # Once SimpleHTR & CRNN_LSTM adapters are created, uncomment the lines below:
-    # =========================================================================
-    #
-    # try:
-    #     from core.ai_engine.ocr.adapters.simple_htr_adapter import SimpleHTRAdapter
-    #     active_adapters["SimpleHTR"] = SimpleHTRAdapter(
-    #         model_path="models/simple_htr.onnx",
-    #         device=args.device
-    #     )
-    # except ImportError:
-    #     print("[INFO] SimpleHTRAdapter not installed yet.")
-    #
-    # try:
-    #     from core.ai_engine.ocr.adapters.crnn_lstm_adapter import CRNNLSTMAdapter
-    #     active_adapters["CRNN_LSTM"] = CRNNLSTMAdapter(
-    #         model_path="models/crnn_lstm.pth",
-    #         device=args.device
-    #     )
-    # except ImportError:
-    #     print("[INFO] CRNNLSTMAdapter not installed yet.")
-    # =========================================================================
+    try:
+        from core.ai_engine.ocr.adapters import CRNNLSTMAdapter
+        active_adapters["CRNN_LSTM"] = CRNNLSTMAdapter(
+            model_path="models/crnn_lstm.h5",
+            device=args.device
+        )
+    except Exception as e:
+        print(f"[INFO] CRNNLSTMAdapter load info: {e}")
+
 
     run_benchmark(
         manifest_path=args.manifest,
