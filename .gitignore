@@ -37,3 +37,5 @@ OCR and HTR
 # Debug artifacts & traces
 request_trace/
 **/request_trace/
+htr_benchmark_report.json
+htr_manifest.json
