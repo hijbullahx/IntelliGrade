@@ -1865,7 +1865,31 @@ def api_publish_exam(request):
             'exam_id': exam.id,
             'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
         })
-    return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
+def start_exam_evaluation(request, exam_id):
+    """Smart entry point for Faculty Examination Evaluation.
+    If Questions & Rubric are NOT created yet for this exam, automatically directs to Paper Builder (Questions & Rubric page).
+    If Questions & Rubric already exist, directly opens the Answer Script Evaluation list/workbench.
+    """
+    if not request.user.is_authenticated:
+        messages.warning(request, "Please sign in to access the Faculty Workspace.")
+        return redirect('teacher_login')
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    # Security Enforcement: Ensure user is authorized to evaluate this exam
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Access Denied: You are not assigned as the examiner for this examination.")
+        return redirect('teacher_dashboard')
+
+    question_count = exam.questions.count()
+    if question_count == 0:
+        messages.info(request, f"Please set up the Question Paper & Rubric for '{exam.title}' before evaluating answer scripts.")
+        return redirect('question_rubric_manage', exam_id=exam.id)
+
+    return redirect('evaluate_answer_scripts_list', exam_id=exam.id)
 
 
 def question_rubric_manage(request, exam_id=None):
