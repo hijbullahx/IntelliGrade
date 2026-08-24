@@ -291,6 +291,15 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"[INFO] CRNNLSTMAdapter load info: {e}")
 
+    try:
+        from core.ai_engine.ocr.adapters import SimpleHTRAdapter
+        active_adapters["SimpleHTR"] = SimpleHTRAdapter(
+            device=args.device
+        )
+    except Exception as e:
+        print(f"[INFO] SimpleHTRAdapter load info: {e}")
+
+
 
     run_benchmark(
         manifest_path=args.manifest,
