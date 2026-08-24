@@ -30,6 +30,9 @@ media/
 .DS_Store
 Thumbs.db
 OCR and HTR
+Materials
+
+
 
 # Agent metadata
 .gemini/
@@ -38,4 +41,4 @@ OCR and HTR
 request_trace/
 **/request_trace/
 htr_benchmark_report.json
-htr_manifest.json
+htr_manifest.json

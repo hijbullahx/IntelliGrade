@@ -3,7 +3,9 @@ import sys
 import io
 import time
 import math
+import glob
 from collections import namedtuple
+
 from typing import Dict, Any, List, Optional, Union, Tuple
 import numpy as np
 import cv2
@@ -31,8 +33,8 @@ def _find_simple_htr_paths() -> Tuple[Optional[str], Optional[str]]:
         os.path.join(workspace_root, 'SimpleHTR-master', 'src'),
     ]
     charlist_candidates = [
-        os.path.join(workspace_root, 'OCR and HTR', 'SimpleHTR-master', 'SimpleHTR-master', 'model', 'wordCharList.txt'),
         os.path.join(workspace_root, 'OCR and HTR', 'SimpleHTR-master', 'SimpleHTR-master', 'model', 'charList.txt'),
+        os.path.join(workspace_root, 'OCR and HTR', 'SimpleHTR-master', 'SimpleHTR-master', 'model', 'wordCharList.txt'),
         os.path.join(workspace_root, 'OCR and HTR', 'SimpleHTR-master', 'model', 'charList.txt'),
     ]
 
@@ -40,6 +42,7 @@ def _find_simple_htr_paths() -> Tuple[Optional[str], Optional[str]]:
     charlist_path = next((p for p in charlist_candidates if os.path.exists(p)), None)
 
     return src_path, charlist_path
+
 
 
 class SimpleHTRAdapter(BaseHandwritingRecognizer):
@@ -69,21 +72,18 @@ class SimpleHTRAdapter(BaseHandwritingRecognizer):
     def initialize(self) -> bool:
         """
         Dynamically imports SimpleHTR src modules and instantiates the TensorFlow Model.
-        Injects TF_USE_LEGACY_KERAS=1 for Keras 3 / TF 2.16+ legacy layer compatibility.
         """
         if self._init_attempted:
             return self.is_initialized
         self._init_attempted = True
 
         try:
-            # Force TensorFlow to use Legacy Keras for TF1 v1.layers compatibility
-            os.environ['TF_USE_LEGACY_KERAS'] = '1'
-
             src_path, found_charlist = _find_simple_htr_paths()
 
             if src_path and src_path not in sys.path:
                 print(f"[SimpleHTRAdapter] Injecting SimpleHTR source path to sys.path: '{src_path}'")
                 sys.path.insert(0, src_path)
+
 
 
             # Load character list
@@ -102,22 +102,41 @@ class SimpleHTRAdapter(BaseHandwritingRecognizer):
                 from model import Model, DecoderType
                 print("[SimpleHTRAdapter] Successfully imported SimpleHTR Model & DecoderType.")
 
-                # Instantiate SimpleHTR Model
-                must_restore = bool(self.model_path and os.path.exists(self.model_path))
-                self.model_instance = Model(
-                    char_list=self.char_list,
-                    decoder_type=DecoderType.BestPath,
-                    must_restore=must_restore,
-                    dump=False
+                # Check if checkpoint files actually exist in model directory before setting must_restore=True
+                chk_path = self.model_path or ""
+                has_snapshot = (
+                    os.path.exists(os.path.join(chk_path, "checkpoint")) or
+                    os.path.exists(os.path.join(chk_path, "snapshot.meta")) or
+                    os.path.exists(os.path.join(chk_path, "snapshot")) or
+                    bool(glob.glob(os.path.join(chk_path, "snapshot*.meta"))) or
+                    (os.path.isfile(chk_path) and not chk_path.endswith('.txt'))
                 )
-                print(f"[SimpleHTRAdapter] SimpleHTR Model instance created (must_restore={must_restore}).")
+                must_restore = bool(has_snapshot)
+
+
+                original_cwd = os.getcwd()
+                try:
+                    if src_path:
+                        os.chdir(src_path)
+                    self.model_instance = Model(
+                        char_list=self.char_list,
+                        decoder_type=DecoderType.BestPath,
+                        must_restore=must_restore,
+                        dump=False
+                    )
+                finally:
+                    os.chdir(original_cwd)
+
+                print(f"[SimpleHTRAdapter] SimpleHTR Model instance created successfully (must_restore={must_restore}).")
                 self.is_initialized = True
                 return True
+
             except Exception as import_err:
                 print(f"[SimpleHTRAdapter WARNING] SimpleHTR Model instantiation error: {import_err}. Initialized in fallback mode.")
                 self.model_instance = None
                 self.is_initialized = True
                 return True
+
 
         except Exception as exc:
             print(f"[SimpleHTRAdapter INITIALIZATION ERROR] {exc}")
@@ -202,8 +221,18 @@ class SimpleHTRAdapter(BaseHandwritingRecognizer):
             preprocessed_img = self._preprocess(image_input)
             batch = Batch(imgs=[preprocessed_img], gt_texts=[''], batch_size=1)
 
-            texts, probs = self.model_instance.infer_batch(batch, calc_probability=True)
+            # Change working directory to src_path for infer_batch execution
+            original_cwd = os.getcwd()
+            src_path, _ = _find_simple_htr_paths()
+            try:
+                if src_path:
+                    os.chdir(src_path)
+                texts, probs = self.model_instance.infer_batch(batch, calc_probability=False)
+            finally:
+                os.chdir(original_cwd)
+
             latency = time.monotonic() - start_time
+
 
             pred_text = texts[0] if texts else ""
             confidence = float(probs[0]) if (probs is not None and len(probs) > 0) else 0.85

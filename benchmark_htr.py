@@ -278,24 +278,37 @@ if __name__ == '__main__':
 
     base_dir = os.path.abspath(os.path.dirname(__file__))
 
-    # Dynamic model path resolution for CRNN_LSTM model weights
-    crnn_candidates = [
-        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "C_LSTM_best.hdf5"),
-        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "crnn_model.h5"),
-        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "model.hdf5"),
-        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "model.h5"),
-        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main"),
-        os.path.join(base_dir, "models", "crnn_lstm.h5"),
-    ]
-    crnn_model_path = next((p for p in crnn_candidates if os.path.exists(p)), crnn_candidates[0])
+    # Dynamic deep model path resolution for CRNN_LSTM model weights via os.walk
+    crnn_search_dir = os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main")
+    crnn_model_path = None
 
-    # Dynamic fallback logic: If resolved path is a directory, scan for .hdf5 / .h5 weight files
-    if os.path.isdir(crnn_model_path):
-        sub_files = [f for f in os.listdir(crnn_model_path) if f.lower().endswith(('.hdf5', '.h5'))]
-        if sub_files:
-            crnn_model_path = os.path.join(crnn_model_path, sub_files[0])
+    if os.path.exists(crnn_search_dir):
+        for root, dirs, files in os.walk(crnn_search_dir):
+            for f in files:
+                if f.lower().endswith(('.hdf5', '.h5')):
+                    crnn_model_path = os.path.abspath(os.path.join(root, f))
+                    break
+            if crnn_model_path:
+                break
+
+    # Fallback: wider os.walk search across the entire "OCR and HTR" folder
+    if not crnn_model_path:
+        wide_ocr_dir = os.path.join(base_dir, "OCR and HTR")
+        if os.path.exists(wide_ocr_dir):
+            for root, dirs, files in os.walk(wide_ocr_dir):
+                for f in files:
+                    if f.lower().endswith(('.hdf5', '.h5')):
+                        crnn_model_path = os.path.abspath(os.path.join(root, f))
+                        break
+                if crnn_model_path:
+                    break
+
+    # Default fallback path if weight file is not yet downloaded
+    if not crnn_model_path:
+        crnn_model_path = os.path.join(base_dir, "models", "crnn_lstm.h5")
 
     print(f"[DEBUG] Final CRNN Model Path: {crnn_model_path}")
+
 
 
     # Dynamic model path resolution for SimpleHTR repo/model directory
