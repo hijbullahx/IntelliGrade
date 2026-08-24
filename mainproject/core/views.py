@@ -2755,9 +2755,15 @@ def upload_student_submission(request, exam_id):
     exam = get_object_or_404(Examination, id=exam_id)
 
     if request.method == 'POST':
-        student_name = request.POST.get('student_name', 'Student').strip()
+        student_name = request.POST.get('student_name', '').strip()
         roll_no = request.POST.get('roll_no', '').strip()
         script_file = request.FILES.get('script_file')
+
+        if not student_name or student_name.lower() == 'student':
+            if roll_no:
+                student_name = f"Student ({roll_no})"
+            else:
+                student_name = "Pending OCR Extraction"
 
         if not script_file:
             return JsonResponse({'success': False, 'error': 'No script file provided.'}, status=400)
@@ -2972,9 +2978,15 @@ def api_upload_raw_images(request, exam_id):
     exam = get_object_or_404(Examination, id=exam_id)
 
     if request.method == 'POST':
-        student_name = request.POST.get('student_name', 'Student').strip()
+        student_name = request.POST.get('student_name', '').strip()
         roll_no = request.POST.get('roll_no', '').strip()
         existing_sub_id = request.POST.get('submission_id')
+
+        if not student_name or student_name.lower() == 'student':
+            if roll_no:
+                student_name = f"Student ({roll_no})"
+            else:
+                student_name = "Pending OCR Extraction"
 
         image_files = request.FILES.getlist('images') or request.FILES.getlist('images[]')
 

@@ -270,6 +270,30 @@ class AIScriptEvaluator:
                 )
                 extracted_pages.append(sp)
 
+        # Cover page OCR header extraction for Student ID & Name (if not manually entered)
+        if pages:
+            p1_text = pages[0].ocr_raw_text or ""
+            import re
+            roll_match = re.search(r'(?:Roll|ID|Student\s*ID|Reg|Registration|Id\s*No)[\s:]*([A-Za-z0-9\-_]+)', p1_text, re.IGNORECASE)
+            name_match = re.search(r'(?:Name|Student\s*Name)[\s:]*([A-Za-z\s.]{3,40})', p1_text, re.IGNORECASE)
+
+            need_save = False
+            if roll_match and not submission.student_roll_no:
+                submission.student_roll_no = roll_match.group(1).strip()
+                need_save = True
+            
+            if name_match and (not submission.student_name or submission.student_name in ["Pending OCR Extraction", "Student"]):
+                extracted_name = name_match.group(1).strip()
+                if len(extracted_name) >= 3 and not extracted_name.lower().startswith('course'):
+                    submission.student_name = extracted_name
+                    need_save = True
+            elif submission.student_roll_no and submission.student_name in ["Pending OCR Extraction", "Student"]:
+                submission.student_name = f"Student ({submission.student_roll_no})"
+                need_save = True
+
+            if need_save:
+                submission.save()
+
         from core.ai_engine.services.workflow import SubmissionWorkflow
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE)
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED)

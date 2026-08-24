@@ -134,12 +134,12 @@
         <form id="uploadForm" class="space-y-4">
             {% csrf_token %}
             <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Student Name</label>
-                <input type="text" name="student_name" required placeholder="e.g. John Doe" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
+                <label class="block text-xs font-bold theme-text-muted mb-1">Student Name (Optional - Auto-Extracted via OCR)</label>
+                <input type="text" name="student_name" autocomplete="off" placeholder="Enter student name or leave blank for OCR auto-extract" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
             </div>
             <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
-                <input type="text" name="roll_no" placeholder="e.g. CSE-2026-042" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
+                <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID (Optional - Auto-Extracted via OCR)</label>
+                <input type="text" name="roll_no" autocomplete="off" placeholder="Enter Roll / ID (e.g. 21103001) or leave blank for OCR auto-extract" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
             </div>
             <div>
                 <label class="block text-xs font-bold theme-text-muted mb-1">Answer Script File (PDF / ZIP / Image)</label>
