@@ -774,9 +774,9 @@ def dept_head_dashboard(request):
             pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
         
         # Real AI Approval Rate calculation
-        all_evaluations = EvaluationResult.objects.filter(submission__examination__in=dept_exams)
+        all_evaluations = EvaluationResult.objects.filter(submission_answer__submission__examination__in=dept_exams)
         if all_evaluations.exists():
-            approved_count = all_evaluations.filter(review_status=EvaluationResult.ReviewStatus.APPROVED).count()
+            approved_count = all_evaluations.filter(reviews__action='APPROVE').count()
             ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
         else:
             script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
