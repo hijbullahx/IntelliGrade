@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}IntelliGrade - Complete University Examination & OBE Assessment Platform{% endblock %}
+
 {% block content %}
 <div class="relative overflow-x-hidden">
     <!-- Background Gradient -->
@@ -15,20 +17,20 @@
                 <!-- Left Content -->
                 <div class="text-center lg:text-left">
                     <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 dark:text-white leading-tight mb-6">
-                        AI-Assisted Examination Evaluation,
+                        Complete University Examination & Evaluation Platform,
                         <span class="bg-gradient-to-r from-blue-600 to-sky-500 dark:from-brand-400 dark:to-cyan-400 text-transparent bg-clip-text">
                             Built for Modern Education.
                         </span>
                     </h1>
                     <p class="text-lg md:text-xl text-slate-600 dark:text-slate-300 max-w-xl mx-auto lg:mx-0 mb-8">
-                        IntelliGrade empowers educators by automating the tedious parts of grading, ensuring consistency and providing deep insights, all while keeping teachers in complete control.
+                        IntelliGrade streamlines the entire academic evaluation lifecycle — from university structure setup and IUBAT question rubric design to handwritten script OCR, AI-assisted grading, student result publishing, and OBE outcome analytics.
                     </p>
                     <div class="flex justify-center lg:justify-start gap-4">
-                        <a href="{% url 'teacher_login' %}" class="px-6 py-3 bg-blue-600 dark:bg-brand-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105">
-                            Get Started
-                        </a>
+                        <button type="button" onclick="openRoleSelectionModal()" class="px-6 py-3 bg-blue-600 dark:bg-brand-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 flex items-center gap-2 cursor-pointer">
+                            <i data-lucide="layers" class="w-5 h-5"></i> Get Started
+                        </button>
                         <a href="#how-it-works" class="px-6 py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all duration-300 transform hover:scale-105">
-                            View Demo
+                            View System Flow
                         </a>
                     </div>
                 </div>
@@ -64,7 +66,7 @@
                                 <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">OCR</span>
+                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">OCR / HTR</span>
                             </div>
                             <!-- Rubric Matching -->
                             <div class="absolute bottom-1/4 right-0 translate-x-3/4 translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(135deg) translateX(12rem) rotate(-135deg);">
@@ -107,20 +109,20 @@
             <div class="container mx-auto px-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">95%</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-medium">Reduction in Evaluation Time</p>
+                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">4 Roles</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-medium">Controller, Dept Head, Teacher, Student</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">99%</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-medium">Evaluation Consistency</p>
+                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">OBE Compliant</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-medium">Bloom's Taxonomy & CO/PO Attainment</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">100%</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-medium">Teacher Control</p>
+                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">Multi-HTR</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-medium">CRNN-LSTM, SimpleHTR & EasyOCR</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">24/7</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-medium">System Availability</p>
+                        <h3 class="text-4xl md:text-5xl font-bold text-blue-600 dark:text-brand-400 mb-2">100% Control</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-medium">Instructor-in-the-Loop Verification</p>
                     </div>
                 </div>
             </div>
@@ -132,57 +134,57 @@
         <section id="features" class="py-24">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Powerful Features, Seamless Workflow</h2>
-                    <p class="text-lg text-slate-600 dark:text-slate-300">IntelliGrade is packed with features designed to streamline every step of the examination evaluation process.</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Complete Academic Evaluation System</h2>
+                    <p class="text-lg text-slate-600 dark:text-slate-300">IntelliGrade integrates administrative structure management, question paper authoring, optical character recognition, rubric evaluation, and recheck workflow into one platform.</p>
                 </div>
                 <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <!-- Feature Card -->
+                    <!-- Feature Card 1 -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
                         <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5m0 0h4m-4 0V11m0 0H8m4 0h4m-4-4H8m4 0h4" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Advanced OCR Processing</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Automatically extract handwritten or typed text from scanned answer scripts with high accuracy.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">University Structure & User Control</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Chief Exam Controllers manage Colleges, Schools, Departments, Course Catalogs, and approve Teacher and Student registrations.</p>
                     </div>
-                    <!-- Feature Card -->
+                    <!-- Feature Card 2 -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
                         <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Dynamic Rubric Management</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Create, manage, and reuse detailed grading rubrics for any question, ensuring consistent evaluation criteria.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">IUBAT Format & Rubric Management</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Create detailed question papers with Bloom's Taxonomy, CO/PO mapping, Knowledge Profiles, expected criteria, matrices, and step marks.</p>
                     </div>
-                    <!-- Feature Card -->
+                    <!-- Feature Card 3 -->
+                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>
+                        </div>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Handwritten Script OCR & Dilation</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Upload PDF or image answer scripts. OpenCV morphological line cropping and CRNN-LSTM / SimpleHTR models extract handwritten text.</p>
+                    </div>
+                    <!-- Feature Card 4 -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
                         <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">AI Evaluation Engine</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Our core engine analyzes answers against rubrics to provide score suggestions, feedback, and explanations.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">AI Evaluation & Multi-LLM Engine</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Evaluates extracted student answers against question rubrics using Gemini 2.0/1.5, Groq, and GPT-4o with automatic failover.</p>
                     </div>
-                    <!-- Feature Card -->
+                    <!-- Feature Card 5 -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
                         <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Instructor-in-the-Loop Review</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Review, modify, and approve every AI-suggested grade. You have the final say, always.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Grading Workbench & Recheck Requests</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Teachers review AI suggestions and finalize marks. Students can inspect their evaluated papers and submit recheck requests.</p>
                     </div>
-                    <!-- Feature Card -->
+                    <!-- Feature Card 6 -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
                         <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Insightful Analytics</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Visualize class performance, question difficulty, and grading trends with a comprehensive dashboard.</p>
-                    </div>
-                    <!-- Feature Card -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-blue-100 dark:bg-brand-900/40 text-blue-600 dark:text-brand-400 rounded-lg flex items-center justify-center mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                        </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Secure & Auditable Reports</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Generate and export secure, detailed reports for academic records, with a full audit trail of all grading actions.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">OBE Attainment & Dept Head Analytics</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Department Heads track course outcome (CO) attainment, program outcome (PO) metrics, and overall student performance.</p>
                     </div>
                 </div>
             </div>
@@ -194,45 +196,45 @@
         <section id="how-it-works" class="py-24 bg-white dark:bg-slate-900/60 border-y border-slate-200/60 dark:border-slate-800/80">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">The IntelliGrade Process</h2>
-                    <p class="text-lg text-slate-600 dark:text-slate-300">From script upload to final grade, our transparent AI pipeline is designed for accuracy and instructor oversight.</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">The End-to-End Evaluation Workflow</h2>
+                    <p class="text-lg text-slate-600 dark:text-slate-300">From exam setup by teachers to final result inspection by students and recheck management.</p>
                 </div>
 
                 <div class="relative max-w-2xl mx-auto">
                     <!-- The vertical line -->
                     <div class="absolute left-4 top-0 h-full w-0.5 bg-slate-200 dark:bg-slate-700"></div>
 
-                    <!-- Timeline Item -->
+                    <!-- Timeline Item 1 -->
                     <div class="relative pl-12 pb-12">
                         <div class="absolute left-0 top-0 w-8 h-8 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold">1</div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Upload & OCR</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Teacher uploads scanned answer scripts. Our system performs OCR to digitize the text.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Exam Creation & Rubric Definition</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Teacher creates an examination, attaches question prompts, assigns marks, Bloom's levels, CO/PO mappings, and rubric criteria.</p>
                     </div>
-                    <!-- Timeline Item -->
+                    <!-- Timeline Item 2 -->
                     <div class="relative pl-12 pb-12">
                         <div class="absolute left-0 top-0 w-8 h-8 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold">2</div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Answer Parsing & Rubric Matching</h3>
-                        <p class="text-slate-500 dark:text-slate-400">The system intelligently segments answers and matches them to the corresponding question rubric.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Answer Script Upload & OCR Segmentation</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Scanned student answer scripts are uploaded. OpenCV contour line cropping and CRNN/SimpleHTR extract handwritten text per question segment.</p>
                     </div>
-                    <!-- Timeline Item -->
+                    <!-- Timeline Item 3 -->
                     <div class="relative pl-12 pb-12">
                         <div class="absolute left-0 top-0 w-8 h-8 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold">3</div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">AI Evaluation via Gemini</h3>
-                        <p class="text-slate-500 dark:text-slate-400">A structured prompt is sent to the LLM, which returns a suggested score, explanation, and feedback in a consistent format.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">AI Rubric Evaluation & Confidence Score</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Extracted answers are compared against model solutions using Gemini AI. The engine suggests marks, confidence ratings, and feedback.</p>
                     </div>
-                    <!-- Timeline Item -->
+                    <!-- Timeline Item 4 -->
                     <div class="relative pl-12 pb-12">
                         <div class="absolute left-0 top-0 w-8 h-8 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold">4</div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Confidence Score & Validation</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Each evaluation is assigned a confidence score. Low-confidence results are flagged for mandatory review.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Teacher Review & Grade Publication</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Teacher verifies every AI suggestion in the Evaluation Workbench, modifies marks if needed, and publishes finalized results.</p>
                     </div>
-                    <!-- Timeline Item -->
+                    <!-- Timeline Item 5 -->
                     <div class="relative pl-12">
                         <div class="absolute left-0 top-0 w-8 h-8 bg-green-500 dark:bg-emerald-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                         </div>
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Final Teacher Review & Approval</h3>
-                        <p class="text-slate-500 dark:text-slate-400">The teacher reviews all suggestions, makes any necessary adjustments, and gives the final approval before results are published.</p>
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Student Inspection & Recheck Requests</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Students log into their portal to view evaluated scripts and feedback. They can submit recheck requests which teachers review directly.</p>
                     </div>
                 </div>
             </div>
@@ -244,29 +246,29 @@
         <section id="benefits" class="py-24">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">The Modern Approach to Evaluation</h2>
-                    <p class="text-lg text-slate-600 dark:text-slate-300">See how IntelliGrade transforms the traditional grading process into a modern, efficient, and transparent workflow.</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">The Modern Approach to Academic Evaluation</h2>
+                    <p class="text-lg text-slate-600 dark:text-slate-300">See how IntelliGrade transforms traditional manual paper grading into an outcome-based digital workflow.</p>
                 </div>
                 <div class="grid lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
                     <!-- Traditional Method -->
                     <div class="bg-white dark:bg-slate-800/70 p-8 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-sm">
-                        <h3 class="text-2xl font-bold text-slate-500 dark:text-slate-400 mb-6 text-center">Traditional Grading</h3>
+                        <h3 class="text-2xl font-bold text-slate-500 dark:text-slate-400 mb-6 text-center">Traditional Paper Grading</h3>
                         <ul class="space-y-4">
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Time-Consuming:</strong> Manual reading and marking is slow and laborious.</span>
+                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Time-Consuming:</strong> Physical sorting, manual reading, and paper mark tallying.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Inconsistent:</strong> Prone to subjectivity and examiner fatigue.</span>
+                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">No OBE Insights:</strong> Manual calculation of Bloom's levels and CO/PO attainment is tedious.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Limited Feedback:</strong> Generic or no feedback due to time constraints.</span>
+                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Limited Feedback:</strong> Minimal written feedback provided to students on script papers.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">No Analytics:</strong> Difficult to get insights into class performance.</span>
+                                <span class="text-slate-600 dark:text-slate-300"><strong class="text-slate-700 dark:text-slate-200">Paper Recheck Hassle:</strong> Students must physically request script reviews with manual re-evaluations.</span>
                             </li>
                         </ul>
                     </div>
@@ -276,19 +278,19 @@
                         <ul class="space-y-4">
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sky-300 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                <span><strong class="text-white">Efficient:</strong> AI assistance dramatically reduces grading time.</span>
+                                <span><strong class="text-white">Efficient OCR & AI:</strong> Auto-segmentation and HTR pipeline speed up grading.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sky-300 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                <span><strong class="text-white">Consistent & Fair:</strong> Rubric-based AI ensures every script is graded by the same standard.</span>
+                                <span><strong class="text-white">OBE & Bloom's Analytics:</strong> Automated CO/PO attainment reports for Department Heads.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sky-300 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                <span><strong class="text-white">Rich Feedback:</strong> AI generates detailed, rubric-aligned feedback for students.</span>
+                                <span><strong class="text-white">Rich Feedback & Criteria:</strong> Students view question-level marks and detailed AI comments.</span>
                             </li>
                             <li class="flex items-start">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-sky-300 mr-3 mt-1 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                <span><strong class="text-white">Actionable Analytics:</strong> Instantly access performance data and grading insights.</span>
+                                <span><strong class="text-white">Digital Recheck Workflow:</strong> Students submit online recheck requests; teachers re-evaluate in workbench.</span>
                             </li>
                         </ul>
                     </div>
@@ -308,53 +310,49 @@
                 <div class="flex flex-wrap justify-center items-center gap-8 md:gap-12">
                     <div class="flex items-center gap-3 text-slate-600 dark:text-slate-300 font-medium">
                         <img src="https://www.djangoproject.com/m/img/logos/django-logo-positive.svg" alt="Django" class="h-8">
-                        <span>Django</span>
+                        <span>Django Framework</span>
                     </div>
                     <div class="flex items-center gap-3 text-slate-600 dark:text-slate-300 font-medium">
                         <img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" alt="PostgreSQL" class="h-8">
-                        <span>PostgreSQL</span>
+                        <span>PostgreSQL / SQLite</span>
                     </div>
                     <div class="flex items-center gap-3 text-slate-600 dark:text-slate-300 font-medium">
                         <img src="https://upload.wikimedia.org/wikipedia/commons/d/d5/Tailwind_CSS_Logo.svg" alt="Tailwind CSS" class="h-6">
                         <span>Tailwind CSS</span>
                     </div>
                     <div class="flex items-center gap-3 text-slate-600 dark:text-slate-300 font-medium">
-                        <img src="https://www.docker.com/images/logos/docker-symbol-blue.svg" alt="Docker" class="h-8">
-                        <span>Docker</span>
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/2/2d/Tensorflow_logo.svg" alt="TensorFlow" class="h-8">
+                        <span>TensorFlow / SimpleHTR</span>
                     </div>
                     <div class="flex items-center gap-3 text-slate-600 dark:text-slate-300 font-medium">
                         <img src="https://developers.google.com/static/ml-kit/images/logo-google-ai.svg" alt="Gemini API" class="h-8">
-                        <span>Gemini API</span>
+                        <span>Gemini 2.0 Flash</span>
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- ============================================ -->
-        <!-- 8. Security Section                          -->
+        <!-- 8. Security & Academic Integrity             -->
         <!-- ============================================ -->
         <section id="about" class="py-24">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Security and Trust at the Core</h2>
-                    <p class="text-lg text-slate-600 dark:text-slate-300">Your data privacy and academic integrity are our top priorities. IntelliGrade is built with enterprise-grade security features.</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Security & Academic Integrity</h2>
+                    <p class="text-lg text-slate-600 dark:text-slate-300">Your institution's academic data, exam papers, and student evaluations are protected with role-based permissions.</p>
                 </div>
                 <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                     <div class="text-center p-6">
                         <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">100% Teacher Approval</h3>
-                        <p class="text-slate-500 dark:text-slate-400">No grade is ever finalized or published without explicit review and approval from a qualified instructor.</p>
-                    </div>
-                    <div class="text-center p-6">
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Data Privacy & Compliance</h3>
-                        <p class="text-slate-500 dark:text-slate-400">We adhere to strict data privacy standards to protect student and institutional information.</p>
+                        <p class="text-slate-500 dark:text-slate-400">No grade is ever finalized without explicit review and approval from a qualified faculty instructor.</p>
                     </div>
                     <div class="text-center p-6">
                         <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Role-Based Access Control</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Fine-grained permissions ensure users can only access the data and features relevant to their role.</p>
+                        <p class="text-slate-500 dark:text-slate-400">Controllers, Department Heads, Teachers, and Students each have isolated, permission-scoped portals.</p>
                     </div>
-                    <div class="text-center p-6 md:col-span-2 lg:col-span-1 lg:col-start-2">
-                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Complete Audit Logs</h3>
-                        <p class="text-slate-500 dark:text-slate-400">Every action, from AI suggestion to teacher modification, is logged for full transparency and accountability.</p>
+                    <div class="text-center p-6">
+                        <h3 class="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-2">Multi-LLM Failover</h3>
+                        <p class="text-slate-500 dark:text-slate-400">Automatic provider switching ensures evaluations complete cleanly even if an API provider experiences rate limits.</p>
                     </div>
                 </div>
             </div>
@@ -365,49 +363,164 @@
         <!-- ============================================ -->
         <section class="py-24 bg-white dark:bg-slate-900/60 border-t border-slate-200/60 dark:border-slate-800/80">
             <div class="container mx-auto px-4 text-center">
-                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Ready to Modernize Your Examination Evaluation?</h2>
-                <p class="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto mb-8">Join the growing number of institutions embracing AI to enhance academic excellence and reduce administrative burden.</p>
-                <a href="{% url 'teacher_login' %}" class="px-8 py-4 bg-blue-600 dark:bg-brand-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105">
-                    Request a Demo
-                </a>
+                <h2 class="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">Ready to Enter Your IntelliGrade Portal?</h2>
+                <p class="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto mb-8">Access your assigned role workspace to manage examinations, grade scripts, or view OBE results.</p>
+                <button type="button" onclick="openRoleSelectionModal()" class="px-8 py-4 bg-blue-600 dark:bg-brand-600 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 inline-flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="shield-check" class="w-5 h-5"></i> Select Portal Role
+                </button>
             </div>
         </section>
     </main>
 </div>
 
+<!-- ============================================ -->
+<!-- Role Selection Modal                         -->
+<!-- ============================================ -->
+<div id="roleSelectionModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative transform transition-all">
+        
+        <!-- Close Button -->
+        <button type="button" onclick="closeRoleSelectionModal()" class="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" aria-label="Close Modal">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+
+        <!-- Header -->
+        <div class="text-center space-y-2 pt-2">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-400 text-white shadow-lg shadow-brand-500/20 mb-2">
+                <i data-lucide="layers" class="w-7 h-7"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                Select Your Portal Role
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Choose your designated role to enter the appropriate IntelliGrade workspace.
+            </p>
+        </div>
+
+        <!-- Role Options Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            
+            <!-- 1. Faculty / Examiner -->
+            <a href="{% url 'teacher_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <i data-lucide="award" class="w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">Examiner</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                        Faculty / Teacher
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Upload answer scripts, define rubrics, and run AI evaluation.
+                    </p>
+                </div>
+            </a>
+
+            <!-- 2. Student Portal -->
+            <a href="{% url 'student_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <i data-lucide="user-check" class="w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">Student</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                        Student Portal
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        View evaluated scripts, question feedback, and CO/PO breakdown.
+                    </p>
+                </div>
+            </a>
+
+            <!-- 3. Department Head -->
+            <a href="{% url 'dept_head_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">Dept Head</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                        Department Head
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        Monitor department metrics, faculty performance, and OBE attainment.
+                    </p>
+                </div>
+            </a>
+
+            <!-- 4. Chief Exam Controller -->
+            <a href="{% url 'exam_controller_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                        <i data-lucide="shield-check" class="w-5 h-5"></i>
+                    </div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">Controller</span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                        Chief Exam Controller
+                    </h3>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        System-wide administration, course structures, and university reports.
+                    </p>
+                </div>
+            </a>
+
+        </div>
+    </div>
+</div>
+
 <script>
-    // Simple scroll-reveal animation for sections
+    function openRoleSelectionModal() {
+        const modal = document.getElementById('roleSelectionModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        }
+    }
+
+    function closeRoleSelectionModal() {
+        const modal = document.getElementById('roleSelectionModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    // Modal & Lucide icon handlers
     document.addEventListener('DOMContentLoaded', () => {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('fade-in-up');
+        if (window.lucide) {
+            window.lucide.createIcons();
+        }
+
+        // Close modal on backdrop click or ESC key
+        const roleModal = document.getElementById('roleSelectionModal');
+        if (roleModal) {
+            roleModal.addEventListener('click', (e) => {
+                if (e.target === roleModal) {
+                    closeRoleSelectionModal();
                 }
             });
-        }, { threshold: 0.1 });
-
-        document.querySelectorAll('section').forEach(section => {
-            section.classList.add('opacity-0');
-            observer.observe(section);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeRoleSelectionModal();
+            }
         });
     });
 
-    // Add a style tag for the animation
+    // Add a style tag for the spinning circle animation
     const style = document.createElement('style');
     style.innerHTML = `
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        .fade-in-up {
-            animation: fadeInUp 0.8s ease-out forwards;
-        }
         @keyframes spin-slow {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
