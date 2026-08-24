@@ -481,7 +481,8 @@
 
 <!-- Section 23: Live IUBAT Examination Paper Preview Modal -->
 <div id="iubatPreviewModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-white text-slate-900 w-full max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl space-y-6">
+    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl space-y-6">
+
         
         <!-- Action Header -->
         <div class="flex items-center justify-between border-b pb-4">
@@ -561,7 +562,8 @@
                             {{ tbl.caption|default:"Data Table" }}
                         </p>
                         {% if tbl.cell_json %}
-                        <table class="w-full text-[11px] border-collapse border border-slate-300 my-1 bg-white font-mono">
+                        <table class="w-full text-[11px] border-collapse border border-slate-300 dark:border-slate-700 my-1 bg-white dark:bg-slate-950 dark:text-slate-200 font-mono">
+
                             {% for row in tbl.cell_json %}
                             <tr>
                                 {% for cell in row %}
