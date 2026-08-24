@@ -737,7 +737,7 @@ def dept_head_login(request):
 
 
 def dept_head_dashboard(request):
-    """Dashboard view for Department Heads."""
+    """Dashboard view for Department Heads with real database metrics."""
     if not request.user.is_authenticated:
         messages.warning(request, "Please sign in to access the Department Head Portal.")
         return redirect('dept_head_login')
@@ -747,16 +747,99 @@ def dept_head_dashboard(request):
         messages.error(request, "Access Denied: The Department Head Portal is restricted to assigned Department Heads.")
         return redirect('landing_page')
 
-    dept_name = profile.department.name if (profile and profile.department) else "Academic Faculty Department"
+    dept = profile.department
+    dept_name = dept.name if dept else "Academic Faculty Department"
+
+    faculty_count = Profile.objects.filter(role=Profile.Role.TEACHER, department=dept).count() if dept else 0
+    active_courses_count = Course.objects.filter(department=dept).count() if dept else 0
+
+    # Calculate real Department Pass Rate & AI Approval Rate
+    pass_rate = 'N/A'
+    ai_approval_rate = 'N/A'
+
+    if dept:
+        dept_exams = Examination.objects.filter(course__department=dept)
+        
+        # Real Pass Rate calculation (obtained marks >= 40% of total marks)
+        all_evaluated_submissions = StudentSubmission.objects.filter(
+            examination__in=dept_exams,
+            status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+        )
+        if all_evaluated_submissions.exists():
+            passed_count = sum(
+                1 for sub in all_evaluated_submissions 
+                if sub.total_score is not None and sub.examination.total_marks 
+                and (sub.total_score >= (sub.examination.total_marks * 0.4))
+            )
+            pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
+        
+        # Real AI Approval Rate calculation
+        all_evaluations = EvaluationResult.objects.filter(submission__examination__in=dept_exams)
+        if all_evaluations.exists():
+            approved_count = all_evaluations.filter(review_status=EvaluationResult.ReviewStatus.APPROVED).count()
+            ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
+        else:
+            script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
+            if script_evals.exists():
+                approved_count = script_evals.filter(review_status=Evaluation.ReviewStatus.APPROVED).count()
+                ai_approval_rate = f"{round((approved_count / script_evals.count()) * 100, 1)}%"
+
+    # Calculate real evaluation progress per course
+    course_list = Course.objects.filter(department=dept) if dept else Course.objects.all()
+    course_progress_data = []
+
+    for crs in course_list:
+        crs_exams = Examination.objects.filter(course=crs)
+        if not crs_exams.exists():
+            progress_pct = 0
+            status_text = "No Exams Scheduled"
+            total_scripts = 0
+            evaluated_scripts = 0
+        else:
+            # Check AnswerScripts or StudentSubmissions
+            total_scripts = AnswerScript.objects.filter(examination__in=crs_exams).count()
+            if total_scripts == 0:
+                total_scripts = StudentSubmission.objects.filter(examination__in=crs_exams).count()
+                evaluated_scripts = StudentSubmission.objects.filter(
+                    examination__in=crs_exams,
+                    status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+                ).count()
+            else:
+                evaluated_scripts = AnswerScript.objects.filter(
+                    examination__in=crs_exams,
+                    status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+                ).count()
+
+            if total_scripts > 0:
+                progress_pct = int(round((evaluated_scripts / total_scripts) * 100))
+                status_text = f"{progress_pct}% Evaluated ({evaluated_scripts}/{total_scripts} Scripts)"
+            else:
+                progress_pct = 0
+                status_text = "Ready (0 Scripts Uploaded)"
+
+        course_progress_data.append({
+            'course': crs,
+            'code': crs.code,
+            'title': crs.title,
+            'progress_percent': progress_pct,
+            'status_text': status_text,
+            'evaluated_scripts': evaluated_scripts,
+            'total_scripts': total_scripts,
+        })
+
     stats = {
         'dept_name': dept_name,
-        'faculty_count': Profile.objects.filter(role=Profile.Role.TEACHER, department=profile.department).count() if (profile and profile.department) else 0,
-        'active_courses': Course.objects.filter(department=profile.department).count() if (profile and profile.department) else 0,
-        'pass_rate': 'N/A',
-        'ai_approval_rate': 'N/A',
+        'faculty_count': faculty_count,
+        'active_courses': active_courses_count,
+        'pass_rate': pass_rate,
+        'ai_approval_rate': ai_approval_rate,
     }
-    courses = Course.objects.filter(department=profile.department)[:5] if (profile and profile.department) else Course.objects.all()[:5]
-    return render(request, 'core/dashboard_dept_head.html', {'stats': stats, 'courses': courses, 'head_name': request.user.get_full_name() or request.user.username})
+
+    return render(request, 'core/dashboard_dept_head.html', {
+        'stats': stats,
+        'course_progress_list': course_progress_data,
+        'head_name': request.user.get_full_name() or request.user.username
+    })
 
 
 

@@ -53,29 +53,34 @@
 
     <!-- Department Performance Overview -->
     <div class="glass-card p-6 rounded-2xl space-y-4">
-        <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
-            <i data-lucide="pie-chart" class="w-5 h-5 text-cyan-500"></i> Course Evaluation Progress
-        </h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div class="flex items-center justify-between text-xs font-bold">
-                    <span class="theme-text-primary">CSE 411: Software Engineering</span>
-                    <span class="text-emerald-600 dark:text-emerald-400">85% Evaluated</span>
-                </div>
-                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div class="bg-emerald-500 h-full w-[85%]"></div>
-                </div>
-            </div>
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="pie-chart" class="w-5 h-5 text-cyan-500"></i> Course Evaluation Progress
+            </h2>
+            <span class="text-xs theme-text-muted font-medium">Real-time script evaluation metrics</span>
+        </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            {% for item in course_progress_list %}
             <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
                 <div class="flex items-center justify-between text-xs font-bold">
-                    <span class="theme-text-primary">CSE 312: Database Systems</span>
-                    <span class="text-brand-600 dark:text-brand-400">100% Evaluated</span>
+                    <span class="theme-text-primary flex items-center gap-1.5">
+                        <i data-lucide="book-open" class="w-3.5 h-3.5 text-brand-500"></i>
+                        <span>{{ item.code }}: {{ item.title }}</span>
+                    </span>
+                    <span class="{% if item.progress_percent == 100 %}text-emerald-600 dark:text-emerald-400{% elif item.progress_percent > 0 %}text-brand-600 dark:text-brand-400{% else %}theme-text-muted{% endif %} font-mono">
+                        {{ item.status_text }}
+                    </span>
                 </div>
-                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div class="bg-brand-500 h-full w-[100%]"></div>
+                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                    <div class="{% if item.progress_percent == 100 %}bg-emerald-500{% elif item.progress_percent > 0 %}bg-brand-500{% else %}bg-slate-400/40{% endif %} h-full transition-all duration-500" style="width: {{ item.progress_percent }}%;"></div>
                 </div>
             </div>
+            {% empty %}
+            <div class="col-span-2 p-8 text-center theme-text-muted italic">
+                No active courses found for this department.
+            </div>
+            {% endfor %}
         </div>
     </div>
 
