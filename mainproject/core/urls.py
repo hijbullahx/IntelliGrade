@@ -58,6 +58,7 @@ urlpatterns = [
     path('api/generate-ai-rubric/', views.api_generate_ai_rubric, name='api_generate_ai_rubric'),
     path('api/scan-question-paper/', views.api_scan_question_paper, name='api_scan_question_paper'),
     path('api/scan-progress/<int:exam_id>/', views.api_get_scan_progress, name='api_get_scan_progress'),
+    path('api/finalize-scanned-paper/', views.api_finalize_scanned_paper, name='api_finalize_scanned_paper'),
     path('teacher/exam/<int:exam_id>/start-evaluation/', views.start_exam_evaluation, name='start_exam_evaluation'),
     path('teacher/exam/<int:exam_id>/evaluate-scripts/', views.evaluate_answer_scripts_list, name='evaluate_answer_scripts_list'),
     path('teacher/exam/<int:exam_id>/evaluation-wizard/', views.evaluation_wizard, name='evaluation_wizard'),
