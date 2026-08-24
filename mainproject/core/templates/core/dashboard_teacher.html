@@ -24,11 +24,11 @@
         </div>
     </div>
 
-    <!-- Stat Metrics Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group">
+    <!-- Stat Metrics Grid (3 Cards) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border-l-4 border-l-brand-500">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-medium theme-text-muted">Assigned Exams</span>
+                <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Assigned Exams</span>
                 <div class="p-2.5 rounded-xl bg-brand-500/10 text-brand-500">
                     <i data-lucide="book-open" class="w-5 h-5"></i>
                 </div>
@@ -39,9 +39,9 @@
             </div>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group">
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border-l-4 border-l-amber-500">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-medium theme-text-muted">Pending AI Reviews</span>
+                <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Pending AI Reviews</span>
                 <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
                     <i data-lucide="clock" class="w-5 h-5"></i>
                 </div>
@@ -52,29 +52,16 @@
             </div>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group">
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border-l-4 border-l-emerald-500">
             <div class="flex items-center justify-between">
-                <span class="text-xs font-medium theme-text-muted">Answer Scripts Evaluated</span>
+                <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Answer Scripts Evaluated</span>
                 <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
                     <i data-lucide="file-check-2" class="w-5 h-5"></i>
                 </div>
             </div>
             <div class="mt-4">
                 <span class="text-3xl font-extrabold theme-text-primary tracking-tight">{{ stats.total_scripts }}</span>
-                <span class="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1 font-medium">98.4% processed</span>
-            </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-medium theme-text-muted">AI Confidence Rating</span>
-                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500">
-                    <i data-lucide="zap" class="w-5 h-5"></i>
-                </div>
-            </div>
-            <div class="mt-4">
-                <span class="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-tight">{{ stats.avg_confidence }}</span>
-                <span class="text-xs theme-text-muted flex items-center gap-1 mt-1 font-medium">High reliability</span>
+                <span class="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1 font-medium">Processed answer scripts</span>
             </div>
         </div>
     </div>
