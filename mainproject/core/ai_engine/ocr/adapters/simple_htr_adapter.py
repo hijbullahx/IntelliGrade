@@ -69,17 +69,22 @@ class SimpleHTRAdapter(BaseHandwritingRecognizer):
     def initialize(self) -> bool:
         """
         Dynamically imports SimpleHTR src modules and instantiates the TensorFlow Model.
+        Injects TF_USE_LEGACY_KERAS=1 for Keras 3 / TF 2.16+ legacy layer compatibility.
         """
         if self._init_attempted:
             return self.is_initialized
         self._init_attempted = True
 
         try:
+            # Force TensorFlow to use Legacy Keras for TF1 v1.layers compatibility
+            os.environ['TF_USE_LEGACY_KERAS'] = '1'
+
             src_path, found_charlist = _find_simple_htr_paths()
 
             if src_path and src_path not in sys.path:
                 print(f"[SimpleHTRAdapter] Injecting SimpleHTR source path to sys.path: '{src_path}'")
                 sys.path.insert(0, src_path)
+
 
             # Load character list
             target_charlist = self.char_list_path or found_charlist
