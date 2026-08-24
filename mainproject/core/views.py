@@ -289,40 +289,93 @@ def exam_controller_dashboard(request):
 
 
 def add_structure(request):
-    """Interface for Exam Controller to add Colleges, Schools, and Departments."""
+    """Interface for Exam Controller to add Colleges, Schools, and Departments with guided wizard flow and strict duplicate prevention."""
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         entity_type = request.POST.get('entity_type')
         name = request.POST.get('name', '').strip()
         code = request.POST.get('code', '').strip().upper()
         description = request.POST.get('description', '').strip()
 
         if entity_type == 'COLLEGE':
-            college, created = College.objects.get_or_create(code=code, defaults={'name': name, 'description': description})
-            if created:
-                messages.success(request, f"College '{name} ({code})' created successfully!")
+            existing_college = College.objects.filter(code__iexact=code).first() or College.objects.filter(name__iexact=name).first()
+            if existing_college:
+                msg = f"College with name '{existing_college.name}' or code '{existing_college.code}' already exists."
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'created': False,
+                        'message': msg,
+                        'college': {'id': existing_college.id, 'name': existing_college.name, 'code': existing_college.code}
+                    })
+                messages.warning(request, msg)
             else:
-                messages.warning(request, f"College with code '{code}' already exists.")
+                college = College.objects.create(name=name, code=code, description=description)
+                msg = f"College '{name} ({code})' created successfully!"
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'created': True,
+                        'message': msg,
+                        'college': {'id': college.id, 'name': college.name, 'code': college.code}
+                    })
+                messages.success(request, msg)
 
         elif entity_type == 'SCHOOL':
             college_id = request.POST.get('college')
             college = College.objects.filter(id=college_id).first() if college_id else None
-            school, created = School.objects.get_or_create(code=code, defaults={'name': name, 'college': college})
-            if created:
-                messages.success(request, f"School '{name} ({code})' created successfully!")
+
+            existing_school = School.objects.filter(code__iexact=code).first() or School.objects.filter(name__iexact=name).first()
+            if existing_school:
+                msg = f"School with name '{existing_school.name}' or code '{existing_school.code}' already exists."
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'created': False,
+                        'message': msg,
+                        'school': {'id': existing_school.id, 'name': existing_school.name, 'code': existing_school.code}
+                    })
+                messages.warning(request, msg)
             else:
-                messages.warning(request, f"School with code '{code}' already exists.")
+                school = School.objects.create(name=name, code=code, college=college)
+                msg = f"School '{name} ({code})' created successfully!"
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'created': True,
+                        'message': msg,
+                        'school': {'id': school.id, 'name': school.name, 'code': school.code}
+                    })
+                messages.success(request, msg)
 
         elif entity_type == 'DEPARTMENT':
             school_id = request.POST.get('school')
             college_id = request.POST.get('college')
             school = School.objects.filter(id=school_id).first() if school_id else None
             college = College.objects.filter(id=college_id).first() if college_id else (school.college if school else None)
-            
-            dept, created = Department.objects.get_or_create(code=code, defaults={'name': name, 'school': school, 'college': college})
-            if created:
-                messages.success(request, f"Department '{name} ({code})' created successfully!")
+
+            existing_dept = Department.objects.filter(code__iexact=code).first() or Department.objects.filter(name__iexact=name).first()
+            if existing_dept:
+                msg = f"Department with name '{existing_dept.name}' or code '{existing_dept.code}' already exists."
+                if is_ajax:
+                    return JsonResponse({
+                        'success': False,
+                        'created': False,
+                        'message': msg,
+                        'department': {'id': existing_dept.id, 'name': existing_dept.name, 'code': existing_dept.code}
+                    })
+                messages.warning(request, msg)
             else:
-                messages.warning(request, f"Department with code '{code}' already exists.")
+                dept = Department.objects.create(name=name, code=code, school=school, college=college, is_active=True)
+                msg = f"Department '{name} ({code})' created successfully!"
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'created': True,
+                        'message': msg,
+                        'department': {'id': dept.id, 'name': dept.name, 'code': dept.code}
+                    })
+                messages.success(request, msg)
 
         return redirect('exam_controller_dashboard')
 

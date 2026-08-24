@@ -1,61 +1,113 @@
 {% extends 'base.html' %}
 
-{% block title %}Add Academic Structure | IntelliGrade{% endblock %}
+{% block title %}Guided Academic Setup | IntelliGrade{% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-8">
     
-    <!-- Title -->
+    <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-bold theme-text-primary tracking-tight flex items-center gap-2.5">
-                <i data-lucide="building-2" class="w-6 h-6 text-amber-500"></i> Add Academic Entity (College / School / Department)
+                <i data-lucide="building-2" class="w-6 h-6 text-amber-500"></i> Guided Academic Structure Setup
             </h1>
-            <p class="theme-text-muted text-sm mt-1">Add colleges, schools, or departments without boundaries. Parents links are optional.</p>
+            <p class="theme-text-muted text-sm mt-1">Set up your College, School, and Department in a single smooth guided flow with Skip & Next options.</p>
         </div>
         <a href="{% url 'exam_controller_dashboard' %}" class="text-xs theme-text-muted hover:text-amber-500 flex items-center gap-1 transition-colors">
             &larr; Back to Controller Portal
         </a>
     </div>
 
-    <!-- Entity Creation Card -->
-    <div class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
-        
-        <!-- Entity Type Selector Tabs -->
-        <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-4">
-            <button type="button" onclick="selectEntityType('COLLEGE')" id="tab-COLLEGE" class="px-4 py-2 text-xs font-bold rounded-xl bg-amber-500 text-white shadow-sm transition-all">
-                1. Add College
-            </button>
-            <button type="button" onclick="selectEntityType('SCHOOL')" id="tab-SCHOOL" class="px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 dark:bg-slate-800 theme-text-secondary hover:bg-slate-300 dark:hover:bg-slate-700 transition-all">
-                2. Add School
-            </button>
-            <button type="button" onclick="selectEntityType('DEPARTMENT')" id="tab-DEPARTMENT" class="px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 dark:bg-slate-800 theme-text-secondary hover:bg-slate-300 dark:hover:bg-slate-700 transition-all">
-                3. Add Department
-            </button>
+    <!-- Stepper Navigation Header -->
+    <div class="glass-card p-4 rounded-2xl">
+        <div class="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+            
+            <div id="step-badge-1" onclick="goToStep(1)" class="p-3 rounded-xl cursor-pointer bg-amber-500 text-white shadow-md transition-all flex items-center justify-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-white/20 text-white flex items-center justify-center text-[11px]">1</span>
+                <span>1. College <span class="text-[10px] opacity-80 uppercase font-normal">(Optional)</span></span>
+            </div>
+
+            <div id="step-badge-2" onclick="goToStep(2)" class="p-3 rounded-xl cursor-pointer bg-slate-200 dark:bg-slate-800/60 theme-text-muted transition-all flex items-center justify-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-slate-400/20 theme-text-muted flex items-center justify-center text-[11px]">2</span>
+                <span>2. School <span class="text-[10px] opacity-80 uppercase font-normal">(Optional)</span></span>
+            </div>
+
+            <div id="step-badge-3" onclick="goToStep(3)" class="p-3 rounded-xl cursor-pointer bg-slate-200 dark:bg-slate-800/60 theme-text-muted transition-all flex items-center justify-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-slate-400/20 theme-text-muted flex items-center justify-center text-[11px]">3</span>
+                <span>3. Department <span class="text-[10px] font-bold text-amber-500 uppercase">(Mandatory)</span></span>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Status Alert Banner -->
+    <div id="wizardAlert" class="hidden p-4 rounded-xl text-xs font-semibold flex items-center justify-between">
+        <span id="wizardAlertText"></span>
+        <button type="button" onclick="document.getElementById('wizardAlert').classList.add('hidden')" class="text-xs underline opacity-80 hover:opacity-100">Dismiss</button>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- STEP 1: ADD COLLEGE (OPTIONAL)                      -->
+    <!-- ==================================================== -->
+    <div id="step-container-1" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-amber-500">Step 1 of 3</span>
+                <h2 class="text-xl font-bold theme-text-primary mt-0.5">Add College <span class="text-xs font-normal theme-text-muted">(Optional)</span></h2>
+                <p class="theme-text-muted text-xs mt-1">If this department belongs to a College (e.g., College of Engineering), create it now. Otherwise, click Skip.</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-bold theme-text-secondary">Optional Step</span>
         </div>
 
-        <form method="POST" class="space-y-6">
-            {% csrf_token %}
-            <input type="hidden" name="entity_type" id="entity_type_input" value="COLLEGE">
-
+        <div class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">College Name</label>
+                    <input type="text" id="c_name" autocomplete="off" placeholder="e.g. College of Engineering" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">College Code</label>
+                    <input type="text" id="c_code" autocomplete="off" placeholder="e.g. COE" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase">
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Description (Optional)</label>
+                    <textarea id="c_desc" rows="2" placeholder="College details..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+                </div>
+            </div>
+
+            <div class="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(2)" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl flex items-center gap-1.5">
+                    Skip College Step &rarr;
+                </button>
                 
-                <!-- Entity Name -->
-                <div>
-                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5" id="label-name">College Name</label>
-                    <input type="text" name="name" id="input-name" placeholder="e.g. College of Engineering" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none" required>
-                </div>
+                <button type="button" onclick="saveCollegeAndNext()" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2">
+                    Save College & Next &rarr;
+                </button>
+            </div>
+        </div>
+    </div>
 
-                <!-- Entity Code -->
-                <div>
-                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5" id="label-code">College Code</label>
-                    <input type="text" name="code" id="input-code" placeholder="e.g. COE" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase" required>
-                </div>
 
-                <!-- Optional Parent College -->
-                <div id="field-college-select" class="hidden">
+    <!-- ==================================================== -->
+    <!-- STEP 2: ADD SCHOOL (OPTIONAL)                        -->
+    <!-- ==================================================== -->
+    <div id="step-container-2" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl hidden">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-amber-500">Step 2 of 3</span>
+                <h2 class="text-xl font-bold theme-text-primary mt-0.5">Add School <span class="text-xs font-normal theme-text-muted">(Optional)</span></h2>
+                <p class="theme-text-muted text-xs mt-1">If this department belongs to a School (e.g., School of Computer Science & Engineering), create it now or skip.</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-bold theme-text-secondary">Optional Step</span>
+        </div>
+
+        <div class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
                     <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Parent College (Optional)</label>
-                    <select name="college" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
+                    <select id="s_college" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
                         <option value="">-- No Parent College (Standalone) --</option>
                         {% for c in colleges %}
                         <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
@@ -63,88 +115,270 @@
                     </select>
                 </div>
 
-                <!-- Optional Parent School -->
-                <div id="field-school-select" class="hidden">
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">School Name</label>
+                    <input type="text" id="s_name" autocomplete="off" placeholder="e.g. School of Computer Science & Engineering" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">School Code</label>
+                    <input type="text" id="s_code" autocomplete="off" placeholder="e.g. SCSE" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase">
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Description (Optional)</label>
+                    <textarea id="s_desc" rows="2" placeholder="School details..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+                </div>
+            </div>
+
+            <div class="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(1)" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl flex items-center gap-1.5">
+                    &larr; Back to Step 1
+                </button>
+
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="goToStep(3)" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl">
+                        Skip School Step &rarr;
+                    </button>
+                    
+                    <button type="button" onclick="saveSchoolAndNext()" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2">
+                        Save School & Next &rarr;
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ==================================================== -->
+    <!-- STEP 3: ADD DEPARTMENT (MANDATORY FINISH)            -->
+    <!-- ==================================================== -->
+    <div id="step-container-3" class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl hidden">
+        <div class="border-b border-slate-200 dark:border-slate-800 pb-4 flex items-center justify-between">
+            <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-amber-500">Step 3 of 3 (Final)</span>
+                <h2 class="text-xl font-bold theme-text-primary mt-0.5">Add Department <span class="text-xs font-bold text-amber-500">(Mandatory)</span></h2>
+                <p class="theme-text-muted text-xs mt-1">Enter your final Department details. Any College or School created in previous steps is linked automatically.</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-bold">Mandatory Step</span>
+        </div>
+
+        <form method="POST" action="{% url 'add_structure' %}" class="space-y-4" onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+            {% csrf_token %}
+            <input type="hidden" name="entity_type" value="DEPARTMENT">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                <!-- Parent College Selection -->
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Parent College (Optional)</label>
+                    <select name="college" id="d_college" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
+                        <option value="">-- No Parent College --</option>
+                        {% for c in colleges %}
+                        <option value="{{ c.id }}">{{ c.name }} ({{ c.code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Parent School Selection -->
+                <div>
                     <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Parent School (Optional)</label>
-                    <select name="school" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
-                        <option value="">-- No Parent School (Standalone) --</option>
+                    <select name="school" id="d_school" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none">
+                        <option value="">-- No Parent School --</option>
                         {% for s in schools %}
                         <option value="{{ s.id }}">{{ s.name }} ({{ s.code }})</option>
                         {% endfor %}
                     </select>
                 </div>
 
-                <!-- Description / Notes -->
-                <div class="md:col-span-2">
-                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Description / Notes (Optional)</label>
-                    <textarea name="description" rows="2" placeholder="Academic domain details or notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+                <!-- Department Name -->
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Department Name <span class="text-rose-500">*</span></label>
+                    <input type="text" name="name" id="d_name" autocomplete="off" placeholder="e.g. Department of Computer Science & Engineering" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none" required>
                 </div>
 
+                <!-- Department Code -->
+                <div>
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Department Code <span class="text-rose-500">*</span></label>
+                    <input type="text" name="code" id="d_code" autocomplete="off" placeholder="e.g. CSE" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none font-mono uppercase" required>
+                </div>
+
+                <!-- Description -->
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold theme-text-secondary mb-1.5">Description / Notes (Optional)</label>
+                    <textarea name="description" rows="2" placeholder="Department notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+                </div>
             </div>
 
-            <!-- Visual Hierarchy Example -->
-            <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs theme-text-secondary space-y-1 font-mono">
-                <span class="block font-bold text-amber-600 dark:text-amber-400">Hierarchy Structure Supported:</span>
-                <span class="block">College of Engineering</span>
-                <span class="block pl-4">├── School of Computer Science & Engineering</span>
-                <span class="block pl-8">└── Department of CSE</span>
-            </div>
+            <div class="pt-4 flex items-center justify-between border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(2)" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl flex items-center gap-1.5">
+                    &larr; Back to Step 2
+                </button>
 
-            <div class="pt-2 flex items-center justify-end gap-3">
-                <a href="{% url 'exam_controller_dashboard' %}" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary text-xs font-semibold rounded-xl">Cancel</a>
-                <button type="submit" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2">
-                    <i data-lucide="check" class="w-4 h-4"></i> Save Academic Entity
+                <button type="submit" class="px-8 py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-500/25 transition-all flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i> Finish & Save Department
                 </button>
             </div>
         </form>
-
     </div>
 
 </div>
 
 <script>
-    function selectEntityType(type) {
-        document.getElementById('entity_type_input').value = type;
+let currentStep = 1;
+let lastCreatedCollegeId = null;
+let lastCreatedSchoolId = null;
+
+function showAlert(message, type = 'success') {
+    const alertBox = document.getElementById('wizardAlert');
+    const alertText = document.getElementById('wizardAlertText');
+    alertBox.className = `p-4 rounded-xl text-xs font-semibold flex items-center justify-between ${
+        type === 'success' 
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+    }`;
+    alertText.textContent = message;
+    alertBox.classList.remove('hidden');
+}
+
+function goToStep(stepNum) {
+    currentStep = stepNum;
+    [1, 2, 3].forEach(num => {
+        const container = document.getElementById('step-container-' + num);
+        const badge = document.getElementById('step-badge-' + num);
         
-        // Reset tabs
-        ['COLLEGE', 'SCHOOL', 'DEPARTMENT'].forEach(t => {
-            const btn = document.getElementById('tab-' + t);
-            if (t === type) {
-                btn.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-amber-500 text-white shadow-sm transition-all';
-            } else {
-                btn.className = 'px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 dark:bg-slate-800 theme-text-secondary hover:bg-slate-300 dark:hover:bg-slate-700 transition-all';
-            }
-        });
+        if (num === stepNum) {
+            container.classList.remove('hidden');
+            badge.className = 'p-3 rounded-xl cursor-pointer bg-amber-500 text-white shadow-md transition-all flex items-center justify-center gap-2';
+        } else {
+            container.classList.add('hidden');
+            badge.className = 'p-3 rounded-xl cursor-pointer bg-slate-200 dark:bg-slate-800/60 theme-text-muted transition-all flex items-center justify-center gap-2';
+        }
+    });
 
-        const labelName = document.getElementById('label-name');
-        const inputName = document.getElementById('input-name');
-        const labelCode = document.getElementById('label-code');
-        const inputCode = document.getElementById('input-code');
-        const collegeSelect = document.getElementById('field-college-select');
-        const schoolSelect = document.getElementById('field-school-select');
-
-        if (type === 'COLLEGE') {
-            labelName.textContent = 'College Name';
-            inputName.placeholder = 'e.g. College of Engineering';
-            labelCode.textContent = 'College Code';
-            inputCode.placeholder = 'e.g. COE';
-            collegeSelect.classList.add('hidden');
-            schoolSelect.classList.add('hidden');
-        } else if (type === 'SCHOOL') {
-            labelName.textContent = 'School Name';
-            inputName.placeholder = 'e.g. School of Computer Science and Engineering';
-            labelCode.textContent = 'School Code';
-            inputCode.placeholder = 'e.g. SCSE';
-            collegeSelect.classList.remove('hidden');
-            schoolSelect.classList.add('hidden');
-        } else if (type === 'DEPARTMENT') {
-            labelName.textContent = 'Department Name';
-            inputName.placeholder = 'e.g. Department of CSE';
-            labelCode.textContent = 'Department Code';
-            inputCode.placeholder = 'e.g. CSE';
-            collegeSelect.classList.remove('hidden');
-            schoolSelect.classList.remove('hidden');
+    // Auto sync pre-selected created values into Step 2 and Step 3 dropdowns
+    if (stepNum === 2 && lastCreatedCollegeId) {
+        const sCollegeSelect = document.getElementById('s_college');
+        if (sCollegeSelect) sCollegeSelect.value = lastCreatedCollegeId;
+    }
+    if (stepNum === 3) {
+        if (lastCreatedCollegeId) {
+            const dCollegeSelect = document.getElementById('d_college');
+            if (dCollegeSelect) dCollegeSelect.value = lastCreatedCollegeId;
+        }
+        if (lastCreatedSchoolId) {
+            const dSchoolSelect = document.getElementById('d_school');
+            if (dSchoolSelect) dSchoolSelect.value = lastCreatedSchoolId;
         }
     }
+}
+
+async function saveCollegeAndNext() {
+    const name = document.getElementById('c_name').value.trim();
+    const code = document.getElementById('c_code').value.trim();
+    const desc = document.getElementById('c_desc').value.trim();
+
+    if (!name || !code) {
+        showAlert('Please provide College Name and College Code before saving.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    formData.append('entity_type', 'COLLEGE');
+    formData.append('name', name);
+    formData.append('code', code);
+    formData.append('description', desc);
+    formData.append('ajax', '1');
+
+    try {
+        const res = await fetch("{% url 'add_structure' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await res.json();
+        if (data.success) {
+            lastCreatedCollegeId = data.college.id;
+
+            // Append newly created College to select dropdowns in Step 2 and Step 3
+            ['s_college', 'd_college'].forEach(selectId => {
+                const sel = document.getElementById(selectId);
+                if (sel) {
+                    let opt = Array.from(sel.options).find(o => o.value == data.college.id);
+                    if (!opt) {
+                        opt = document.createElement('option');
+                        opt.value = data.college.id;
+                        opt.textContent = `${data.college.name} (${data.college.code})`;
+                        sel.appendChild(opt);
+                    }
+                    opt.selected = true;
+                }
+            });
+
+            showAlert(data.message, 'success');
+            goToStep(2);
+        } else {
+            showAlert(data.message || 'Error saving College.', 'error');
+        }
+    } catch(err) {
+        console.error(err);
+        showAlert('Failed to connect to server.', 'error');
+    }
+}
+
+async function saveSchoolAndNext() {
+    const name = document.getElementById('s_name').value.trim();
+    const code = document.getElementById('s_code').value.trim();
+    const desc = document.getElementById('s_desc').value.trim();
+    const collegeId = document.getElementById('s_college').value;
+
+    if (!name || !code) {
+        showAlert('Please provide School Name and School Code before saving.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    formData.append('entity_type', 'SCHOOL');
+    formData.append('name', name);
+    formData.append('code', code);
+    formData.append('college', collegeId);
+    formData.append('description', desc);
+    formData.append('ajax', '1');
+
+    try {
+        const res = await fetch("{% url 'add_structure' %}", {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const data = await res.json();
+        if (data.success) {
+            lastCreatedSchoolId = data.school.id;
+
+            // Append newly created School to select dropdown in Step 3
+            const sel = document.getElementById('d_school');
+            if (sel) {
+                let opt = Array.from(sel.options).find(o => o.value == data.school.id);
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = data.school.id;
+                    opt.textContent = `${data.school.name} (${data.school.code})`;
+                    sel.appendChild(opt);
+                }
+                opt.selected = true;
+            }
+
+            showAlert(data.message, 'success');
+            goToStep(3);
+        } else {
+            showAlert(data.message || 'Error saving School.', 'error');
+        }
+    } catch(err) {
+        console.error(err);
+        showAlert('Failed to connect to server.', 'error');
+    }
+}
 </script>
 {% endblock %}
