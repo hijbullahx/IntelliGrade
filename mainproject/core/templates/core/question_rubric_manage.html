@@ -144,6 +144,7 @@
                     <i data-lucide="x-circle" class="w-4 h-4"></i> 🗑️ Cancel & Remove Staged Data
                 </button>
             </div>
+        </div>
         <!-- Manual Paper / Examination Information Input Bar (Verify & Edit Before Final Submit) -->
         <div class="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div>
@@ -171,23 +172,43 @@
                 <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
 
                 <!-- Builder Header & Sticky Action Controls -->
-                <div class="glass-card p-5 rounded-2xl flex items-center justify-between gap-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
-                    <div>
-                        <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
-                            <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
-                        </h3>
-                        <p class="text-[10px] theme-text-muted">Fill question metadata, prompt statement & rubric criteria below</p>
+                <div class="glass-card p-5 rounded-2xl space-y-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                                <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
+                            </h3>
+                            <p class="text-[10px] theme-text-muted">Choose creation method below: Fill fields manually or write prompt & auto-analyze</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if questions %}
+                            <button type="button" onclick="openIUBATPreviewModal()" class="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                                <i data-lucide="printer" class="w-3.5 h-3.5 text-white"></i> Preview Paper
+                            </button>
+                            {% else %}
+                            <button type="button" disabled title="Paper preview will activate after questions are scanned or saved." class="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-300 dark:border-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed">
+                                <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-400"></i> Preview Paper (Inactive)
+                            </button>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        {% if questions %}
-                        <button type="button" onclick="openIUBATPreviewModal()" class="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
-                            <i data-lucide="printer" class="w-3.5 h-3.5 text-white"></i> Preview Paper
-                        </button>
-                        {% else %}
-                        <button type="button" disabled title="Paper preview will activate after questions are scanned or saved." class="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-300 dark:border-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed">
-                            <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-400"></i> Preview Paper (Inactive)
-                        </button>
-                        {% endif %}
+
+                    <!-- Creation Method Selection Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div class="p-3 rounded-xl border-2 border-brand-500/50 bg-brand-500/5 flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-brand-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                            <div>
+                                <span class="font-extrabold text-xs theme-text-primary block">Method 1: Direct Manual Entry</span>
+                                <span class="text-[10px] theme-text-muted">Type prompt, criteria, marks & taxonomy manually</span>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                            <div>
+                                <span class="font-extrabold text-xs theme-text-primary block">Method 2: AI Auto-Analyze</span>
+                                <span class="text-[10px] theme-text-muted">Type question prompt & click ✨ AI Auto-Analyze</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -267,7 +288,12 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold theme-text-secondary mb-1">Question Statement / Prompt Text</label>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-bold theme-text-secondary">Question Statement / Prompt Text</label>
+                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer" title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
+                                <i data-lucide="sparkles" class="w-3 h-3"></i> ✨ AI Auto-Analyze Question Text
+                            </button>
+                        </div>
                         <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
                     </div>
 
@@ -598,6 +624,22 @@
 </div>
 
 <script>
+function showCreationTab(mode) {
+    const aiSection = document.getElementById('aiScanSection');
+    const manualBtn = document.getElementById('tabManualBtn');
+    const aiBtn = document.getElementById('tabAiBtn');
+
+    if (mode === 'ai') {
+        aiSection.classList.remove('hidden');
+        manualBtn.className = "px-4 py-2 rounded-lg text-brand-600 hover:bg-brand-500/10 font-bold transition-all flex items-center gap-2 cursor-pointer";
+        aiBtn.className = "px-4 py-2 rounded-lg bg-purple-600 text-white font-extrabold shadow transition-all flex items-center gap-2 cursor-pointer";
+    } else {
+        aiSection.classList.add('hidden');
+        manualBtn.className = "px-4 py-2 rounded-lg bg-brand-600 text-white font-extrabold shadow transition-all flex items-center gap-2 cursor-pointer";
+        aiBtn.className = "px-4 py-2 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 font-bold transition-all flex items-center gap-2 cursor-pointer";
+    }
+}
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
