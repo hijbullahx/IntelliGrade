@@ -20,7 +20,7 @@
         </div>
 
         <!-- Form -->
-        <form method="POST" autocomplete="off" class="space-y-4">
+        <form method="POST" autocomplete="off" onsubmit="this.querySelector('button[type=submit]').disabled = true;" class="space-y-4">
             {% csrf_token %}
             <!-- Hidden inputs to prevent aggressive browser autofill -->
             <input type="text" style="display:none" aria-hidden="true">

@@ -171,8 +171,13 @@ def student_register(request):
         password = request.POST.get('password', '')
         dept_code = request.POST.get('department', '').strip()
 
-        if User.objects.filter(username=student_id).exists():
-            messages.error(request, f"Student ID / Username '{student_id}' is already registered.")
+        if not student_id or not full_name:
+            messages.error(request, "Student ID and Full Name are required.")
+            return redirect('student_register')
+
+        # Only check Student ID duplication
+        if User.objects.filter(username__iexact=student_id).exists():
+            messages.error(request, f"Duplicate Entry Blocked: Student ID '{student_id}' is already registered in the system.")
             return redirect('student_register')
 
         user = User.objects.create_user(
@@ -374,8 +379,13 @@ def add_student(request):
         password = request.POST.get('password', '')
         dept_code = request.POST.get('department', '').strip()
 
-        if User.objects.filter(username=student_id).exists():
-            messages.error(request, f"Student ID / Username '{student_id}' already exists.")
+        if not student_id or not full_name:
+            messages.error(request, "Student ID and Full Name are required.")
+            return redirect('add_student')
+
+        # Only check Student ID duplication
+        if User.objects.filter(username__iexact=student_id).exists():
+            messages.error(request, f"Duplicate Entry Blocked: Student ID '{student_id}' already exists in the system.")
             return redirect('add_student')
 
         user = User.objects.create_user(

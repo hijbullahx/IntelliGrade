@@ -19,7 +19,7 @@
     </div>
 
     <!-- Form Card -->
-    <form method="POST" autocomplete="off" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
+    <form method="POST" autocomplete="off" onsubmit="this.querySelector('button[type=submit]').disabled = true;" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
         {% csrf_token %}
         <!-- Hidden input to prevent aggressive browser autofill -->
         <input type="text" style="display:none" aria-hidden="true">
