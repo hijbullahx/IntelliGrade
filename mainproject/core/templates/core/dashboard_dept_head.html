@@ -18,36 +18,151 @@
 
     <!-- Analytics Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Faculty Members</span>
+        <!-- 1. Faculty Members Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-cyan-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Faculty Members</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.faculty_count }}</span>
-                <i data-lucide="users" class="w-6 h-6 text-cyan-500"></i>
+                <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view Department Faculty Roster">
+                    <span>{{ stats.faculty_count }}</span>
+                    <i data-lucide="chevron-down" id="faculty-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                </div>
             </div>
+            <p class="text-[11px] theme-text-muted mt-2">Click count to view department faculty roster</p>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Active Courses</span>
+        <!-- 2. Active Courses Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-brand-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Active Courses</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.active_courses }}</span>
-                <i data-lucide="book-open" class="w-6 h-6 text-brand-500"></i>
+                <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="text-3xl font-extrabold text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view Department Course Roster">
+                    <span>{{ stats.active_courses }}</span>
+                    <i data-lucide="chevron-down" id="courses-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2.5 rounded-xl bg-brand-500/10 text-brand-500">
+                    <i data-lucide="book-open" class="w-5 h-5"></i>
+                </div>
             </div>
+            <p class="text-[11px] theme-text-muted mt-2">Click count to view department course catalog</p>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Department Pass Rate</span>
+        <!-- 3. Pass Rate Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-emerald-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Department Pass Rate</span>
             <div class="mt-3 flex items-baseline justify-between">
                 <span class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ stats.pass_rate }}</span>
-                <i data-lucide="trending-up" class="w-6 h-6 text-emerald-500"></i>
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <i data-lucide="trending-up" class="w-5 h-5"></i>
+                </div>
             </div>
+            <p class="text-[11px] theme-text-muted mt-2">Based on evaluated script outcomes</p>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Teacher AI Approval Rate</span>
+        <!-- 4. AI Approval Rate Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-purple-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Teacher AI Approval Rate</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">{{ stats.ai_approval_rate }}</span>
-                <i data-lucide="sparkles" class="w-6 h-6 text-cyan-500"></i>
+                <span class="text-3xl font-extrabold text-purple-600 dark:text-purple-400">{{ stats.ai_approval_rate }}</span>
+                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
+                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                </div>
             </div>
+            <p class="text-[11px] theme-text-muted mt-2">AI evaluations approved by faculty</p>
+        </div>
+    </div>
+
+    <!-- Collapsible 1: Department Faculty Roster Table (Hidden by default until Faculty Card count is clicked) -->
+    <div id="faculty-section" class="space-y-4 hidden transition-all duration-300">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="users" class="w-5 h-5 text-cyan-500"></i> Department Faculty Members Roster &bull; <span class="text-cyan-600 dark:text-cyan-400">{{ stats.dept_name }}</span>
+            </h2>
+            <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Roster
+            </button>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Faculty Name</th>
+                        <th class="px-5 py-4">Username / ID</th>
+                        <th class="px-5 py-4">Email Address</th>
+                        <th class="px-5 py-4">Assigned Department</th>
+                        <th class="px-5 py-4 text-right">Role</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for f in dept_faculty %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-bold theme-text-primary flex items-center gap-2">
+                            <i data-lucide="user-check" class="w-4 h-4 text-cyan-500"></i>
+                            <span>{{ f.user.get_full_name|default:f.user.username }}</span>
+                        </td>
+                        <td class="px-5 py-4"><span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 font-mono text-[11px] font-bold">{{ f.user.username }}</span></td>
+                        <td class="px-5 py-4 theme-text-muted">{{ f.user.email|default:"No email provided" }}</td>
+                        <td class="px-5 py-4 font-semibold text-cyan-600 dark:text-cyan-400">{{ stats.dept_name }}</td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 font-bold text-[11px]">Faculty Examiner</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-5 py-8 text-center theme-text-muted italic">
+                            No faculty members currently assigned to {{ stats.dept_name }}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Collapsible 2: Department Course Catalog Table (Hidden by default until Courses Card count is clicked) -->
+    <div id="courses-section" class="space-y-4 hidden transition-all duration-300">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="book-open" class="w-5 h-5 text-brand-500"></i> Department Active Courses Catalog &bull; <span class="text-brand-600 dark:text-brand-400">{{ stats.dept_name }}</span>
+            </h2>
+            <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Catalog
+            </button>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Course Code</th>
+                        <th class="px-5 py-4">Course Title</th>
+                        <th class="px-5 py-4">Department</th>
+                        <th class="px-5 py-4 text-right">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for crs in dept_courses %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-mono font-bold text-brand-600 dark:text-brand-400">
+                            <span class="px-2 py-0.5 rounded bg-brand-500/10 border border-brand-500/20">{{ crs.code }}</span>
+                        </td>
+                        <td class="px-5 py-4 font-bold theme-text-primary">{{ crs.title }}</td>
+                        <td class="px-5 py-4 font-semibold text-slate-600 dark:text-slate-400">{{ stats.dept_name }}</td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold text-[11px]">Active</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-5 py-8 text-center theme-text-muted italic">
+                            No active courses found for {{ stats.dept_name }}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -85,4 +200,21 @@
     </div>
 
 </div>
+
+<script>
+function toggleDeptSection(sectionId, chevronId) {
+    const section = document.getElementById(sectionId);
+    const chevron = document.getElementById(chevronId);
+    if (!section) return;
+    
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        section.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
 {% endblock %}
