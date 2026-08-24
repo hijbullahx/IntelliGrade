@@ -176,21 +176,22 @@
                             {% endif %}
                         </div>
 
-                        <!-- Teacher Review & Override Controls -->
+                        <!-- Teacher Review & Manual Score Assignment / Override Controls -->
                         <div class="pt-3 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center gap-2">
-                                <input type="number" step="0.5" min="0" max="{{ q.marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary text-center">
+                                <span class="text-xs font-bold theme-text-muted">Manual Evaluate / Assign Marks:</span>
+                                <input type="number" step="0.5" min="0" max="{{ q.marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-bold theme-text-primary text-center focus:ring-2 focus:ring-amber-500 outline-none">
                                 <span class="text-xs theme-text-muted">/ {{ q.marks }}</span>
-                                <button onclick="submitReview({{ eval.id }}, 'OVERRIDE')" class="px-3 py-1 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs transition-all shadow">
-                                    Override Score
+                                <button onclick="submitReview({{ eval.id }}, 'OVERRIDE')" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5">
+                                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Assign / Save Marks
                                 </button>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
+                                <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-1">
                                     <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
                                 </button>
-                                <button onclick="openReevalModal()" class="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs transition-all shadow flex items-center gap-1">
-                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Evaluate Options
+                                <button onclick="openReevalModal()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-1">
+                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Evaluate
                                 </button>
                             </div>
                         </div>

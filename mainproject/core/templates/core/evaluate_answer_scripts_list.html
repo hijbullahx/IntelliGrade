@@ -80,12 +80,12 @@
                             {% endif %}
                         </td>
                         <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
-                            {% if sub.is_finalized or sub.status == 'FINALIZED' %}
+                            {% if sub.is_finalized or sub.status == 'FINALIZED' or sub.status == 'AI_EVALUATED' or sub.status == 'UNDER_REVIEW' or sub.status == 'REVIEWED' or sub.total_max_marks > 0 %}
                             <a href="{% url 'api_download_evaluated_pdf' sub.id %}" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]" title="Download Evaluated Script PDF">
                                 <i data-lucide="file-down" class="w-3.5 h-3.5"></i> Download PDF
                             </a>
                             {% else %}
-                            <button type="button" disabled class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 font-bold rounded-lg cursor-not-allowed inline-flex items-center gap-1 text-[11px]" title="PDF Download unlocks after teacher finalizes evaluation in Workspace.">
+                            <button type="button" disabled class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 font-bold rounded-lg cursor-not-allowed inline-flex items-center gap-1 text-[11px]" title="PDF Download unlocks after evaluation has been run.">
                                 <i data-lucide="lock" class="w-3 h-3"></i> Download PDF
                             </button>
                             {% endif %}

@@ -3150,6 +3150,14 @@ def api_run_evaluation_v3(request, submission_id):
         except Exception:
             body_data = request.POST.dict()
 
+        st_name = body_data.get('student_name', '').strip()
+        st_roll = body_data.get('roll_no', '').strip()
+        if st_name and st_name != 'Pending OCR Extraction':
+            submission.student_name = st_name
+        if st_roll:
+            submission.student_roll_no = st_roll
+        submission.save()
+
         options = {
             'ink_color': body_data.get('ink_color', 'None'),
             'deskew': body_data.get('deskew', True),
@@ -3235,11 +3243,11 @@ def api_download_evaluated_pdf(request, submission_id):
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
 
-    # Workflow Guard: Evaluated PDF download is only enabled after finalization
-    if not submission.is_finalized and submission.status != 'FINALIZED':
+    # Workflow Guard: Evaluated PDF download is enabled for evaluated or finalized submissions
+    if not submission.is_finalized and submission.status not in ['FINALIZED', 'AI_EVALUATED', 'UNDER_REVIEW', 'REVIEWED'] and float(submission.total_max_marks) == 0:
         return JsonResponse({
             'success': False,
-            'error': 'Evaluated PDF download is only available after evaluation has been finalized by the teacher.'
+            'error': 'Evaluated PDF download is available after evaluation has been run.'
         }, status=403)
 
     try:
