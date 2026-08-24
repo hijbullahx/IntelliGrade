@@ -401,7 +401,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             
             <!-- 1. Faculty / Examiner -->
-            <a href="{% url 'teacher_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'teacher_login' %}" onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="award" class="w-5 h-5"></i>
@@ -419,7 +419,7 @@
             </a>
 
             <!-- 2. Student Portal -->
-            <a href="{% url 'student_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'student_login' %}" onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="user-check" class="w-5 h-5"></i>
@@ -437,7 +437,7 @@
             </a>
 
             <!-- 3. Department Head -->
-            <a href="{% url 'dept_head_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'dept_head_login' %}" onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
@@ -455,7 +455,7 @@
             </a>
 
             <!-- 4. Chief Exam Controller -->
-            <a href="{% url 'exam_controller_login' %}" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'exam_controller_login' %}" onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="shield-check" class="w-5 h-5"></i>

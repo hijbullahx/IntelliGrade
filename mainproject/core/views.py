@@ -114,8 +114,30 @@ def student_dashboard(request):
     return render(request, 'core/dashboard_student.html', {'evaluations': evaluations, 'stats': stats})
 
 
+def get_user_role_and_dashboard(user):
+    """Helper to determine a logged-in user's role code, human role name, and dashboard route."""
+    if not user.is_authenticated:
+        return None, None, 'landing_page'
+    if user.is_superuser or (hasattr(user, 'profile') and user.profile.role == Profile.Role.ADMIN):
+        return Profile.Role.ADMIN, 'Chief Exam Controller', 'exam_controller_dashboard'
+    elif hasattr(user, 'profile') and user.profile.role == Profile.Role.STUDENT:
+        return Profile.Role.STUDENT, 'Enrolled Student', 'student_dashboard'
+    elif hasattr(user, 'profile') and user.profile.role == Profile.Role.DEPARTMENT_HEAD:
+        return Profile.Role.DEPARTMENT_HEAD, 'Department Head', 'dept_head_dashboard'
+    else:
+        return Profile.Role.TEACHER, 'Teacher / Examiner', 'teacher_dashboard'
+
+
 def student_login(request):
     """Login view dedicated for Students."""
+    if request.user.is_authenticated:
+        user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
+        if user_role == Profile.Role.STUDENT:
+            return redirect('student_dashboard')
+        else:
+            messages.warning(request, f"Please log out from your active {role_name} session before accessing the Student portal.")
+            return redirect(dashboard_url)
+
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -180,6 +202,14 @@ def student_register(request):
 
 def exam_controller_login(request):
     """Login view dedicated for Chief Exam Controller (Admin)."""
+    if request.user.is_authenticated:
+        user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
+        if user_role == Profile.Role.ADMIN:
+            return redirect('exam_controller_dashboard')
+        else:
+            messages.warning(request, f"Please log out from your active {role_name} session before accessing the Chief Exam Controller portal.")
+            return redirect(dashboard_url)
+
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -301,6 +331,14 @@ def add_structure(request):
 
 def teacher_login(request):
     """Login view dedicated for Faculty Members & Teachers."""
+    if request.user.is_authenticated:
+        user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
+        if user_role == Profile.Role.TEACHER:
+            return redirect('teacher_dashboard')
+        else:
+            messages.warning(request, f"Please log out from your active {role_name} session before accessing the Faculty portal.")
+            return redirect(dashboard_url)
+
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
@@ -606,6 +644,14 @@ def add_dept_head(request):
 
 def dept_head_login(request):
     """Login view dedicated for Department Heads."""
+    if request.user.is_authenticated:
+        user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
+        if user_role == Profile.Role.DEPARTMENT_HEAD:
+            return redirect('dept_head_dashboard')
+        else:
+            messages.warning(request, f"Please log out from your active {role_name} session before accessing the Department Head portal.")
+            return redirect(dashboard_url)
+
     if request.method == 'POST':
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
