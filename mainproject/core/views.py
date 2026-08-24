@@ -2590,6 +2590,12 @@ def api_finalize_scanned_paper(request):
 
     try:
         with transaction.atomic():
+            # Save supplementary rubric reference file if attached during scan staging
+            supp_file = request.FILES.get('supplementary_file') or request.FILES.get('rubric_reference_file')
+            if supp_file:
+                exam.rubric_file = supp_file
+                exam.save()
+
             DocumentDOM.objects.update_or_create(
                 examination=exam,
                 defaults={

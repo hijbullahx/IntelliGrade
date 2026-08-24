@@ -166,18 +166,18 @@
                         <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
                             <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
                         </h3>
-                        <p class="text-[10px] theme-text-muted">Fill manually or write question text & click AI Auto-Analyze</p>
+                        <p class="text-[10px] theme-text-muted">Fill question metadata, prompt statement & rubric criteria below</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button type="button" onclick="analyzeQuestionFullAI()" id="aiFullAnalyzeBtn" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-1.5">
-                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Analyze
+                        {% if questions %}
+                        <button type="button" onclick="openIUBATPreviewModal()" class="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                            <i data-lucide="printer" class="w-3.5 h-3.5 text-white"></i> Preview Paper
                         </button>
-                        <button type="button" onclick="openIUBATPreviewModal()" class="px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-xl text-xs font-bold transition-all flex items-center gap-1">
-                            <i data-lucide="printer" class="w-3.5 h-3.5 text-cyan-500"></i> Preview Paper
+                        {% else %}
+                        <button type="button" disabled title="Paper preview will activate after questions are scanned or saved." class="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-300 dark:border-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed">
+                            <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-400"></i> Preview Paper (Inactive)
                         </button>
-                        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center gap-1">
-                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Save
-                        </button>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -402,6 +402,12 @@
                     <div>
                         <label class="block text-xs font-bold theme-text-secondary mb-1">Private Teacher Notes (Internal Only)</label>
                         <textarea name="teacher_notes" id="qNotes" rows="2" placeholder="Private internal grading notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Save Question & Rubric to Database
+                        </button>
                     </div>
                 </div>
             </form>
@@ -1114,6 +1120,7 @@ function stopScan() {
 
 function quitScan() {
     currentStagedScanData = null;
+    stagedSupplementaryFile = null;
     document.getElementById('scannedPaperPreview').classList.add('hidden');
     document.getElementById('scannedQuestionsContainer').innerHTML = '';
     closeScanProgressModal();
@@ -1274,12 +1281,18 @@ function renderScannedPaperPreview(data) {
     previewBox.scrollIntoView({ behavior: 'smooth' });
 }
 
+let stagedSupplementaryFile = null;
+
 function finalizeScannedPaper() {
     const btn = document.getElementById('scanAcademicBtn');
     
     const formData = new FormData();
     formData.append('examination_id', "{{ selected_exam.id }}");
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    if (stagedSupplementaryFile) {
+        formData.append('supplementary_file', stagedSupplementaryFile);
+    }
 
     fetch("{% url 'api_finalize_scanned_paper' %}", {
         method: 'POST',
@@ -1290,7 +1303,7 @@ function finalizeScannedPaper() {
     .then(data => {
         if (data.success) {
             localStorage.setItem("finalized_exam_{{ selected_exam.id }}", "true");
-            const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, and rubrics are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
+            const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, rubrics, and supplementary documents are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
             closeScanProgressModal();
             if (goEval) {
                 window.location.href = "{% url 'evaluate_answer_scripts_list' selected_exam.id %}";
@@ -1307,16 +1320,45 @@ function finalizeScannedPaper() {
 }
 
 function openSupplementaryModal() {
-    closeScanProgressModal();
     const modal = document.getElementById('supplementaryDocModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function closeSupplementaryModal() {
     const modal = document.getElementById('supplementaryDocModal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+    const scanModal = document.getElementById('scanProgressModal');
+    if (scanModal) {
+        scanModal.classList.remove('hidden');
+        scanModal.classList.add('flex');
+    }
+}
+
+function attachSupplementaryDocJS() {
+    const fileInput = document.getElementById('modalSupplementaryFileInput');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please select a supplementary document file first.');
+        return;
+    }
+
+    stagedSupplementaryFile = fileInput.files[0];
+    
+    appendScanLog(`📎 Staged Supplementary Document: ${stagedSupplementaryFile.name} (${(stagedSupplementaryFile.size/1024).toFixed(1)} KB)`, 'success');
+    appendScanLog(`ℹ️ Supplementary document staged in memory. It will be committed when you click Finalize & Save.`, 'info');
+
+    const badge = document.getElementById('modalSupplementaryStatus');
+    if (badge) {
+        badge.innerHTML = `✓ Staged Supplementary File: ${stagedSupplementaryFile.name} (${(stagedSupplementaryFile.size/1024).toFixed(1)} KB)`;
+        badge.classList.remove('hidden');
+    }
+
+    closeSupplementaryModal();
 }
 
 // Enforce Finalized Lock State on Page Load
@@ -1613,30 +1655,30 @@ function editQuestion(num, marks, prompt, criteria, ideal) {
 
 <!-- Supplementary Document Upload Modal -->
 <div id="supplementaryDocModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
+    <div class="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <h3 class="font-bold text-sm text-white flex items-center gap-2">
-                <i data-lucide="file-text" class="w-4 h-4 text-purple-400"></i> Upload Supplementary Document
+                <i data-lucide="file-plus" class="w-4 h-4 text-purple-400"></i> Attach Supplementary Document
             </h3>
-            <button type="button" onclick="closeSupplementaryModal()" class="text-slate-400 hover:text-white">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
+            <button type="button" onclick="closeSupplementaryModal()" class="text-slate-400 hover:text-white cursor-pointer">&times;</button>
         </div>
 
-        <form method="POST" enctype="multipart/form-data" class="space-y-4">
-            {% csrf_token %}
-            <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
-
+        <div class="space-y-4">
             <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Supplementary Document (Rubric / Solution Key / Reference)</label>
-                <input type="file" name="rubric_reference_file" accept=".pdf,.doc,.docx,.png,.jpg" required class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+                <label class="block text-xs font-bold text-slate-300 mb-1">Supplementary Reference Document (Rubric / Solution Key / Reference)</label>
+                <input type="file" id="modalSupplementaryFileInput" accept=".pdf,.doc,.docx,.png,.jpg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+                <p class="text-[10px] text-slate-400 mt-1">This document will be staged in memory and saved only when you click "Finalize & Save Paper".</p>
+            </div>
+
+            <div id="modalSupplementaryStatus" class="hidden text-xs p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">
+                <!-- Status rendered here -->
             </div>
 
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeSupplementaryModal()" class="px-3.5 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl">Upload Document</button>
+                <button type="button" onclick="closeSupplementaryModal()" class="px-3.5 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700 cursor-pointer">Close</button>
+                <button type="button" onclick="attachSupplementaryDocJS()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Attach Document</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %}
