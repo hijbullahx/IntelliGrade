@@ -190,24 +190,6 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     }
 });
 
-async function deleteSubmission(subId, studentName) {
-    if(!confirm(`Are you sure you want to remove the submission for "${studentName}"? This action cannot be undone.`)) return;
-
-    try {
-        const resp = await fetch(`/api/submission/${subId}/delete/`, {
-            method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-        });
-        const data = await resp.json();
-        if(data.success) {
-            const row = document.getElementById(`sub-row-${subId}`);
-            if(row) row.remove();
-        } else {
-            alert("Error removing submission: " + data.error);
-        }
-    } catch(err) {
-        alert("Exception removing submission: " + err.message);
-    }
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -221,6 +203,35 @@ function getCookie(name) {
         }
     }
     return cookieValue || '{{ csrf_token }}';
+}
+
+async function deleteSubmission(subId, studentName) {
+    if(!confirm(`Are you sure you want to remove the submission for "${studentName}"? This action cannot be undone.`)) return;
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/delete/`, {
+            method: 'POST',
+            headers: { 
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json'
+            }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            const row = document.getElementById(`sub-row-${subId}`);
+            if(row) {
+                row.style.transition = 'all 0.3s ease';
+                row.style.opacity = '0';
+                row.style.transform = 'scale(0.95)';
+                setTimeout(() => row.remove(), 300);
+            }
+            alert(`✓ Student submission for "${studentName}" removed successfully.`);
+        } else {
+            alert("Error removing submission: " + (data.error || 'Failed'));
+        }
+    } catch(err) {
+        alert("Exception removing submission: " + err.message);
+    }
 }
 
 function triggerMcqEvaluation(examId) {

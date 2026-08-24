@@ -3430,6 +3430,7 @@ def api_confirm_question_mapping(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
 
 
+@csrf_exempt
 def api_delete_submission(request, submission_id):
     """Deletes a student submission and its associated answers, pages, mappings, and evaluations."""
     if not request.user.is_authenticated:
