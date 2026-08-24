@@ -284,6 +284,7 @@ def exam_controller_dashboard(request):
         'standalone_departments': standalone_departments,
         'departments': Department.objects.select_related('college', 'school').all(),
         'recheck_tickets': recheck_tickets,
+        'recent_exams': Examination.objects.select_related('course', 'course__department', 'assigned_faculty').order_by('-id')[:6],
         'ai_config': ai_config,
     })
 

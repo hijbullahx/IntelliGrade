@@ -164,6 +164,75 @@
 
     </div>
 
+    <!-- IntelliGrade AI Pipeline Interactive Showcase -->
+    <div class="glass-card p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden relative">
+        <div class="grid lg:grid-cols-12 gap-8 items-center">
+            
+            <!-- Left 7 cols: Content & Direct Action Link -->
+            <div class="lg:col-span-7 space-y-4">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 text-xs font-semibold">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-brand-500"></i> AI Evaluation Engine & Workflow
+                </div>
+                
+                <h2 class="text-xl md:text-2xl font-extrabold theme-text-primary tracking-tight">
+                    End-to-End Automated Examination & Assessment Pipeline
+                </h2>
+                
+                <p class="theme-text-muted text-sm leading-relaxed max-w-xl">
+                    IntelliGrade digitizes handwritten student answer scripts via hybrid Gemini 2.5 Flash Vision & EasyOCR, auto-evaluates against faculty question rubrics, and enforces an 80% confidence threshold for human-in-the-loop verification.
+                </p>
+
+                <div class="pt-2 flex flex-wrap items-center gap-4">
+                    <a href="{% url 'landing_page' %}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2">
+                        <i data-lucide="compass" class="w-4 h-4"></i> Explore Platform Capabilities &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Right 5 cols: Compact Orbiting AI Animation -->
+            <div class="lg:col-span-5 flex items-center justify-center relative py-4">
+                <div class="w-56 h-56 md:w-64 md:h-64 rounded-full bg-brand-500/5 dark:bg-brand-500/10 border border-brand-500/20 flex items-center justify-center relative">
+                    
+                    <!-- Center Core -->
+                    <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-400 text-white flex flex-col items-center justify-center shadow-lg shadow-brand-500/30 z-10">
+                        <i data-lucide="cpu" class="w-7 h-7 text-white animate-pulse"></i>
+                        <span class="text-[9px] font-extrabold tracking-wider uppercase mt-1">AI CORE</span>
+                    </div>
+
+                    <!-- Orbit Rings -->
+                    <div class="absolute inset-2 rounded-full border border-dashed border-brand-500/30 animate-spin" style="animation-duration: 18s;"></div>
+
+                    <!-- Pipeline Orbit Items -->
+                    <div class="absolute inset-0 flex items-center justify-center animate-spin" style="animation-duration: 22s;">
+                        
+                        <!-- 1. OCR Step (Top) -->
+                        <div class="absolute top-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-brand-500/40 shadow-md flex items-center justify-center" title="Handwriting OCR / HTR">
+                            <i data-lucide="scan-line" class="w-4 h-4 text-cyan-500"></i>
+                        </div>
+
+                        <!-- 2. Rubric Step (Right) -->
+                        <div class="absolute right-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-indigo-500/40 shadow-md flex items-center justify-center" title="Rubric Matching">
+                            <i data-lucide="file-check-2" class="w-4 h-4 text-indigo-500"></i>
+                        </div>
+
+                        <!-- 3. AI Eval Step (Bottom) -->
+                        <div class="absolute bottom-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-amber-500/40 shadow-md flex items-center justify-center" title="Confidence Audit">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                        </div>
+
+                        <!-- 4. Review Step (Left) -->
+                        <div class="absolute left-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-emerald-500/40 shadow-md flex items-center justify-center" title="Certified Grade">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- Integrated Department & Academic Hierarchy Management Section (Hidden by default until Department Card count is clicked) -->
     <div id="dept-table-section" class="space-y-4 hidden transition-all duration-300">
         <div class="flex items-center justify-between">
