@@ -80,4 +80,5 @@ urlpatterns = [
     path('api/evaluation-result/<int:result_id>/review/', views.review_evaluation_answer, name='review_evaluation_answer'),
     path('teacher/exam/<int:exam_id>/export-report/', views.export_evaluation_report, name='export_evaluation_report'),
     path('api/ai-analyze-question-full/', views.api_ai_analyze_question_full, name='api_ai_analyze_question_full'),
+    path('api/exam/<int:exam_id>/evaluate-quiz/', views.api_evaluate_quiz_submission, name='api_evaluate_quiz_submission'),
 ]

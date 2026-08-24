@@ -194,7 +194,7 @@
                     </div>
 
                     <!-- Creation Method Selection Cards -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                         <div class="p-3 rounded-xl border-2 border-brand-500/50 bg-brand-500/5 flex items-center gap-2.5">
                             <span class="w-7 h-7 rounded-lg bg-brand-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
                             <div>
@@ -209,6 +209,13 @@
                                 <span class="text-[10px] theme-text-muted">Type question prompt & click ✨ AI Auto-Analyze</span>
                             </div>
                         </div>
+                        <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all flex items-center gap-2.5 cursor-pointer">
+                            <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                            <div>
+                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400 block flex items-center gap-1">Method 3: MCQ Quiz System &rarr;</span>
+                                <span class="text-[10px] theme-text-muted">Automatic MCQ bubble & tick evaluation</span>
+                            </div>
+                        </a>
                     </div>
                 </div>
 
@@ -246,6 +253,7 @@
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Question Category (Multi-Select)</label>
                             <select name="question_type" id="qTypeSelect" multiple class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs theme-text-primary h-24 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="MCQ" class="font-extrabold text-purple-600 dark:text-purple-400">⚡ MCQ / Multiple Choice Quiz</option>
                                 <option value="Theory" selected>Theory</option>
                                 <option value="Explanation" selected>Explanation</option>
                                 <option value="Numerical">Numerical Problem</option>

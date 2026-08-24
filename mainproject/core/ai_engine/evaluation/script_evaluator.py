@@ -604,6 +604,40 @@ Return ONLY JSON without markdown commentary.
         # Construct canonical QuestionDTO via QuestionAccessor
         q_dto = QuestionAccessor.to_dto(question)
 
+        # Step 0: Check Question Type for MCQ/Quiz Routing vs Subjective Multimodal Flow
+        q_types = [str(t).lower() for t in (q_dto.question_type if isinstance(q_dto.question_type, list) else [str(q_dto.question_type)])]
+        is_mcq_quiz = any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types)
+
+        if is_mcq_quiz:
+            print(f"[EVALUATION ROUTER] Routing Q{q_dto.number} through MCQ / Quiz Pipeline Engine...")
+            from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
+            correct_ans = q_dto.ideal_answer or q_dto.rubric or q_dto.text
+            q_key = f"Q{q_dto.number}"
+            answer_key = {q_key: str(correct_ans).strip()}
+
+            detected_info = {
+                q_key: {
+                    "detected": [answer.extracted_text.strip()] if answer.extracted_text.strip() else [],
+                    "status": "VALID" if answer.extracted_text.strip() else "NOT_ATTEMPTED",
+                    "mark_type": "OCR Extracted" if answer.extracted_text.strip() else "None"
+                }
+            }
+
+            quiz_report = evaluate_quiz_submission(detected_info, answer_key, marks_per_question=float(q_dto.marks))
+            q_res = quiz_report['question_breakdown'].get(q_key, {})
+
+            from core.models import EvaluationResult
+            eval_result, _ = EvaluationResult.objects.get_or_create(submission_answer=answer)
+            eval_result.obtained_marks = q_res.get('marks_obtained', 0.0)
+            eval_result.maximum_marks = float(q_dto.marks)
+            eval_result.percentage = round((eval_result.obtained_marks / max(1.0, float(q_dto.marks))) * 100.0, 2)
+            eval_result.feedback_text = f"MCQ/Quiz Evaluation ({q_res.get('status', 'NOT_ATTEMPTED')}) - Detected: {q_res.get('detected_answer', [])}, Correct: {q_res.get('correct_answer', '')}"
+            eval_result.confidence_score = 0.95
+            eval_result.requires_manual_review = (q_res.get('status') == 'REJECTED_MULTIPLE_MARKS')
+            eval_result.status = EvaluationResult.ReviewStatus.APPROVED if not eval_result.requires_manual_review else EvaluationResult.ReviewStatus.PENDING
+            eval_result.save()
+            return eval_result
+
         custom_prompt = options.get('custom_prompt', '').strip()
         strictness = options.get('strictness', 'Balanced')
         eval_mode = options.get('eval_mode', 'Rubric-based')

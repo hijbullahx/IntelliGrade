@@ -82,6 +82,94 @@
             </div>
 
             <div class="flex-1 overflow-y-auto mt-3 space-y-6 pr-1">
+
+                {% if is_mcq %}
+                <!-- MCQ / Quiz Evaluation Matrix & Summary Header -->
+                <div class="mb-6 p-5 rounded-2xl border-2 border-purple-500/40 bg-purple-500/5 space-y-4 shadow-xl">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/20 pb-3">
+                        <div>
+                            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 font-extrabold text-xs">
+                                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> MCQ / Quiz Evaluation Engine
+                            </div>
+                            <h3 class="text-base font-extrabold theme-text-primary mt-1">Automatic Mark Detection Matrix</h3>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button type="button" onclick="runMcqEvaluationWorkspace({{ exam.id }})" id="wsMcqEvalBtn" class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 cursor-pointer">
+                                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)
+                            </button>
+                            <span class="text-xs font-bold theme-text-muted">Total Score:</span>
+                            <span class="text-lg font-black text-purple-600 dark:text-purple-400 font-mono">{{ mcq_summary.total_score }} / {{ mcq_summary.max_score }} ({{ mcq_summary.percentage }}%)</span>
+                        </div>
+                    </div>
+
+                    <!-- Top Performance Summary Counters -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                            <span class="block text-[10px] font-extrabold uppercase">✓ Correct</span>
+                            <span class="text-lg font-black">{{ mcq_summary.total_correct }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
+                            <span class="block text-[10px] font-extrabold uppercase">✗ Incorrect</span>
+                            <span class="text-lg font-black">{{ mcq_summary.total_incorrect }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
+                            <span class="block text-[10px] font-extrabold uppercase">⚠️ Multi-Mark / Rejected</span>
+                            <span class="text-lg font-black">{{ mcq_summary.total_rejected }}</span>
+                        </div>
+                        <div class="p-3 rounded-xl bg-slate-500/10 border border-slate-500/20 theme-text-muted">
+                            <span class="block text-[10px] font-extrabold uppercase">— Blank / Unattempted</span>
+                            <span class="text-lg font-black">{{ mcq_summary.total_not_attempted }}</span>
+                        </div>
+                    </div>
+
+                    <!-- MCQ Evaluation Table -->
+                    <div class="overflow-x-auto rounded-xl border border-purple-500/20">
+                        <table class="w-full text-left text-xs font-sans">
+                            <thead class="bg-purple-900/10 theme-text-muted uppercase font-bold text-[10px] border-b border-purple-500/20">
+                                <tr>
+                                    <th class="px-3 py-2.5">Q#</th>
+                                    <th class="px-3 py-2.5">Scheme</th>
+                                    <th class="px-3 py-2.5">Student Mark Detected</th>
+                                    <th class="px-3 py-2.5">Answer Key</th>
+                                    <th class="px-3 py-2.5">Verdict Status</th>
+                                    <th class="px-3 py-2.5 text-right">Score</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-purple-500/10 font-medium">
+                                {% for item in mcq_breakdown %}
+                                <tr class="hover:bg-purple-500/5 transition-colors">
+                                    <td class="px-3 py-2.5 font-extrabold theme-text-primary font-mono">{{ item.question_number }}</td>
+                                    <td class="px-3 py-2.5 font-mono text-[10px] theme-text-muted">{{ item.scheme }}</td>
+                                    <td class="px-3 py-2.5">
+                                        {% if item.detected_answer %}
+                                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold font-mono text-[11px] border border-purple-500/30">
+                                            {{ item.mark_type }}: {{ item.detected_answer|join:", " }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-slate-400 italic text-[11px]">— Blank</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-3 py-2.5 font-mono font-bold text-emerald-600 dark:text-emerald-400">Key: {{ item.correct_answer }}</td>
+                                    <td class="px-3 py-2.5">
+                                        {% if item.verdict == 'CORRECT' %}
+                                        <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/30">✓ Correct</span>
+                                        {% elif item.verdict == 'INCORRECT' %}
+                                        <span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-500/30">✗ Incorrect</span>
+                                        {% elif item.verdict == 'REJECTED_MULTIPLE_MARKS' %}
+                                        <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/30">⚠️ Multiple Marked / Invalid</span>
+                                        {% else %}
+                                        <span class="px-2 py-0.5 rounded-full bg-slate-500/20 theme-text-muted font-bold text-[10px] border border-slate-500/30">— Unattempted</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-3 py-2.5 text-right font-mono font-bold theme-text-primary">{{ item.marks_awarded }} / {{ item.max_marks }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
                 {% for item in normalized_answers %}
                 {% with ans=item.answer eval=item.evaluation_result q=item.q %}
                 <div class="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-50/50 dark:bg-slate-900/40 space-y-4 shadow-lg">
@@ -447,6 +535,45 @@ async function finalizeSubmissionEvaluation(subId) {
     } catch(err) {
         alert("Finalization Exception: " + err.message);
     }
+}
+function runMcqEvaluationWorkspace(examId) {
+    const btn = document.getElementById('wsMcqEvalBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Re-evaluating...`;
+        lucide.createIcons();
+    }
+
+    fetch(`/api/exam/${examId}/evaluate-quiz/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ scheme: 'ALPHA_UPPER', marks_per_question: 1.0 })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert(`✅ MCQ Evaluation Completed!\nScore: ${data.summary.total_score} / ${data.summary.max_score} (${data.summary.percentage}%)\nCorrect: ${data.summary.total_correct}, Incorrect: ${data.summary.total_incorrect}`);
+            window.location.reload();
+        } else {
+            alert(`❌ Error: ${data.error || 'Evaluation failed'}`);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)`;
+                lucide.createIcons();
+            }
+        }
+    })
+    .catch(err => {
+        alert(`❌ Network error: ${err.message}`);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)`;
+            lucide.createIcons();
+        }
+    });
 }
 </script>
 {% endblock %}

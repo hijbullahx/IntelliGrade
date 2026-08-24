@@ -20,6 +20,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Q, F
 
 from .models import (
@@ -2810,6 +2811,10 @@ def evaluation_workspace(request, submission_id):
     answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
 
     normalized_answers = []
+    is_mcq = False
+    mcq_detected_results = {}
+    answer_key = {}
+
     for ans in answers:
         q_dto = QuestionAccessor.to_dto(ans.question)
         normalized_answers.append({
@@ -2819,11 +2824,81 @@ def evaluation_workspace(request, submission_id):
             'evaluation_result': getattr(ans, 'evaluation_result', None)
         })
 
+        q_type_raw = getattr(ans.question, 'question_type', [])
+        q_types = [str(t).lower() for t in (q_type_raw if isinstance(q_type_raw, list) else [str(q_type_raw)])]
+        if any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types):
+            is_mcq = True
+            q_key = f"Q{q_dto.number}"
+            answer_key[q_key] = str(q_dto.ideal_answer or q_dto.rubric or q_dto.text).strip()
+
+            det_val = []
+            eval_res = getattr(ans, 'evaluation_result', None)
+            if ans.extracted_text and ans.extracted_text.strip():
+                det_val = [ans.extracted_text.strip()]
+            elif eval_res and "Detected:" in str(eval_res.feedback_text):
+                try:
+                    det_str = eval_res.feedback_text.split("Detected:")[1].split(",")[0].strip()
+                    det_val = eval(det_str) if det_str.startswith("[") else [det_str]
+                except Exception:
+                    pass
+
+            status_val = "VALID" if det_val else "NOT_ATTEMPTED"
+            if eval_res and eval_res.requires_manual_review:
+                status_val = "REJECTED_MULTIPLE_MARKS"
+
+            mark_type_val = "Tick (✓)" if det_val else "None"
+            if len(det_val) > 1:
+                mark_type_val = "Multiple Marks"
+
+            mcq_detected_results[q_key] = {
+                "detected": det_val,
+                "status": status_val,
+                "mark_type": mark_type_val
+            }
+
+    mcq_summary = None
+    mcq_breakdown = None
+
+    if is_mcq and answer_key:
+        from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
+        report = evaluate_quiz_submission(
+            detected_results=mcq_detected_results,
+            answer_key=answer_key,
+            marks_per_question=1.0
+        )
+        mcq_summary = {
+            "total_questions": report["total_questions"],
+            "total_attempted": report["total_attempted"],
+            "total_correct": report["total_correct"],
+            "total_incorrect": report["total_incorrect"],
+            "total_rejected": report["total_rejected"],
+            "total_not_attempted": report["total_not_attempted"],
+            "total_score": report["total_score"],
+            "max_score": report["max_possible_score"],
+            "percentage": report["percentage"]
+        }
+
+        mcq_breakdown = []
+        for q_id, q_item in report['question_breakdown'].items():
+            mcq_breakdown.append({
+                "question_number": q_id,
+                "scheme": "ALPHA_UPPER",
+                "detected_answer": q_item["detected_answer"],
+                "correct_answer": q_item["correct_answer"],
+                "mark_type": q_item["mark_type"],
+                "verdict": q_item["status"],
+                "marks_awarded": q_item["marks_obtained"],
+                "max_marks": q_item["max_marks"]
+            })
+
     return render(request, 'core/evaluation_workspace.html', {
         'submission': submission,
         'exam': exam,
         'answers': answers,
-        'normalized_answers': normalized_answers
+        'normalized_answers': normalized_answers,
+        'is_mcq': is_mcq,
+        'mcq_summary': mcq_summary,
+        'mcq_breakdown': mcq_breakdown
     })
 
 
@@ -3469,4 +3544,79 @@ def api_finalize_evaluation(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
 
 
+@csrf_exempt
+def api_evaluate_quiz_submission(request, exam_id):
+    """
+    API Endpoint for MCQ / Quiz Evaluation.
+    Integrates TickDetector and evaluate_quiz_submission pipeline.
+    """
+    exam = get_object_or_404(Examination, id=exam_id)
 
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body.decode('utf-8')) if request.body else request.POST.dict()
+        except Exception:
+            body = request.POST.dict()
+
+        detected_results = body.get('detected_results', {})
+        provided_key = body.get('answer_key', {})
+        scheme = body.get('scheme', 'ALPHA_UPPER')
+        marks_per_question = float(body.get('marks_per_question', 1.0))
+        negative_marking = float(body.get('negative_marking', 0.0))
+
+        # Auto-build answer_key if not explicitly provided
+        answer_key = {}
+        if provided_key:
+            answer_key = provided_key
+        else:
+            for q in exam.questions.all():
+                q_key = f"Q{q.question_number}"
+                ans_val = ""
+                if hasattr(q, 'rubric') and q.rubric:
+                    ans_val = q.rubric.ideal_answer or q.rubric.expected_answer or q.rubric.criteria
+                if not ans_val:
+                    ans_val = q.prompt_text
+                answer_key[q_key] = str(ans_val).strip()
+
+        if not answer_key:
+            return JsonResponse({'status': 'error', 'error': 'No questions or answer keys found for examination.'}, status=400)
+
+        from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
+        report = evaluate_quiz_submission(
+            detected_results=detected_results,
+            answer_key=answer_key,
+            marks_per_question=marks_per_question,
+            negative_marking=negative_marking
+        )
+
+        question_breakdown_list = []
+        for q_id, q_item in report['question_breakdown'].items():
+            question_breakdown_list.append({
+                "question_number": q_id,
+                "scheme": scheme,
+                "detected_answer": q_item["detected_answer"],
+                "correct_answer": q_item["correct_answer"],
+                "mark_type": q_item["mark_type"],
+                "verdict": q_item["status"],
+                "marks_awarded": q_item["marks_obtained"],
+                "max_marks": q_item["max_marks"]
+            })
+
+        return JsonResponse({
+            "status": "success",
+            "evaluation_type": "MCQ",
+            "summary": {
+                "total_questions": report["total_questions"],
+                "total_attempted": report["total_attempted"],
+                "total_correct": report["total_correct"],
+                "total_incorrect": report["total_incorrect"],
+                "total_rejected": report["total_rejected"],
+                "total_not_attempted": report["total_not_attempted"],
+                "total_score": report["total_score"],
+                "max_score": report["max_possible_score"],
+                "percentage": report["percentage"]
+            },
+            "question_breakdown": question_breakdown_list
+        })
+
+    return JsonResponse({'status': 'error', 'error': 'POST request method required.'}, status=405)
