@@ -276,33 +276,69 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default="cpu", help="Compute device (cpu or cuda)")
     args = parser.parse_args()
 
-    # Dictionary of adapters to benchmark
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+
+    # Dynamic model path resolution for CRNN_LSTM model weights
+    crnn_candidates = [
+        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "C_LSTM_best.hdf5"),
+        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "crnn_model.h5"),
+        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "model.hdf5"),
+        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main", "model.h5"),
+        os.path.join(base_dir, "OCR and HTR", "Handwriting_Recognition_CRNN_LSTM-main", "Handwriting_Recognition_CRNN_LSTM-main"),
+        os.path.join(base_dir, "models", "crnn_lstm.h5"),
+    ]
+    crnn_model_path = next((p for p in crnn_candidates if os.path.exists(p)), crnn_candidates[0])
+
+    # Dynamic fallback logic: If resolved path is a directory, scan for .hdf5 / .h5 weight files
+    if os.path.isdir(crnn_model_path):
+        sub_files = [f for f in os.listdir(crnn_model_path) if f.lower().endswith(('.hdf5', '.h5'))]
+        if sub_files:
+            crnn_model_path = os.path.join(crnn_model_path, sub_files[0])
+
+    print(f"[DEBUG] Final CRNN Model Path: {crnn_model_path}")
+
+
+    # Dynamic model path resolution for SimpleHTR repo/model directory
+    simple_htr_candidates = [
+        os.path.join(base_dir, "OCR and HTR", "SimpleHTR-master", "SimpleHTR-master", "model"),
+        os.path.join(base_dir, "OCR and HTR", "SimpleHTR-master", "SimpleHTR-master"),
+        os.path.join(base_dir, "OCR and HTR", "SimpleHTR-master", "model"),
+        os.path.join(base_dir, "OCR and HTR", "SimpleHTR-master"),
+        os.path.join(base_dir, "models", "simple_htr"),
+    ]
+    simple_htr_model_path = next((p for p in simple_htr_candidates if os.path.exists(p)), simple_htr_candidates[0])
+
+    # Active adapters dictionary
     active_adapters: Dict[str, BaseHandwritingRecognizer] = {}
 
     # Register default fallback Dummy Adapter for verification
     active_adapters["DummyHTRAdapter"] = DummyHTRAdapter(device=args.device)
 
+    # Register CRNN_LSTM Adapter
     try:
         from core.ai_engine.ocr.adapters import CRNNLSTMAdapter
         active_adapters["CRNN_LSTM"] = CRNNLSTMAdapter(
-            model_path="models/crnn_lstm.h5",
+            model_path=crnn_model_path,
             device=args.device
         )
+        print(f"[BENCHMARK] Registered CRNN_LSTM adapter with model path: '{crnn_model_path}'")
     except Exception as e:
         print(f"[INFO] CRNNLSTMAdapter load info: {e}")
 
+    # Register SimpleHTR Adapter
     try:
         from core.ai_engine.ocr.adapters import SimpleHTRAdapter
         active_adapters["SimpleHTR"] = SimpleHTRAdapter(
+            model_path=simple_htr_model_path,
             device=args.device
         )
+        print(f"[BENCHMARK] Registered SimpleHTR adapter with model path: '{simple_htr_model_path}'")
     except Exception as e:
         print(f"[INFO] SimpleHTRAdapter load info: {e}")
-
-
 
     run_benchmark(
         manifest_path=args.manifest,
         adapters=active_adapters,
         output_report_path=args.output
     )
+

@@ -61,11 +61,26 @@ class CRNNLSTMAdapter(BaseHandwritingRecognizer):
             if self.model_path and os.path.exists(self.model_path):
                 print(f"[CRNNLSTMAdapter] Loading CRNN model weights from '{self.model_path}'...")
                 custom_objects = {'ctc_loss': lambda y_true, y_pred: y_pred}
-                self.model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects, compile=False)
-                print("[CRNNLSTMAdapter] Model successfully loaded.")
+                try:
+                    if os.path.isdir(self.model_path):
+                        try:
+                            self.model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects, compile=False)
+                        except Exception:
+                            # Keras 3 fallback for SavedModel directories
+                            self.model = tf.keras.Sequential([
+                                tf.keras.layers.TFSMLayer(self.model_path, call_endpoint='serving_default')
+                            ])
+                            print("[CRNNLSTMAdapter] Loaded SavedModel via TFSMLayer.")
+                    else:
+                        self.model = tf.keras.models.load_model(self.model_path, custom_objects=custom_objects, compile=False)
+                    print("[CRNNLSTMAdapter] Model successfully loaded.")
+                except Exception as load_err:
+                    print(f"[CRNNLSTMAdapter WARNING] Model load error: {load_err}. Operating in fallback mode.")
+                    self.model = None
             else:
                 print(f"[CRNNLSTMAdapter WARNING] Model path '{self.model_path}' is not accessible. Initialized in fallback mode.")
                 self.model = None
+
 
             self.is_initialized = True
             return True
