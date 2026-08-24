@@ -86,13 +86,14 @@ class SimpleHTRAdapter(BaseHandwritingRecognizer):
 
 
 
-            # Load character list
+            # Load character list (preserve leading space token by using rstrip instead of strip)
             target_charlist = self.char_list_path or found_charlist
             if target_charlist and os.path.exists(target_charlist):
                 with open(target_charlist, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
+                    content = f.read().rstrip('\r\n')
                     self.char_list = list(content) if content else DEFAULT_CHAR_LIST
                 print(f"[SimpleHTRAdapter] Loaded {len(self.char_list)} characters from '{target_charlist}'.")
+
             else:
                 self.char_list = DEFAULT_CHAR_LIST
                 print(f"[SimpleHTRAdapter] Using default character set ({len(self.char_list)} tokens).")
