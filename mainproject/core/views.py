@@ -20,6 +20,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse, HttpResponse
+from django.db.models import Q, F
 
 from .models import (
     College, School, Department, Course, Examination, AnswerScript,
@@ -86,7 +87,7 @@ def teacher_dashboard(request):
 
 
 def student_dashboard(request):
-    """Dashboard view tailored for Students."""
+    """Dashboard view tailored for Students with real evaluated script and score metrics."""
     if not request.user.is_authenticated:
         messages.warning(request, "Please sign in to access the Student Portal.")
         return redirect('student_login')
@@ -101,17 +102,136 @@ def student_dashboard(request):
         auth_logout(request)
         return redirect('student_login')
 
-    evaluations = Evaluation.objects.select_related('segment__script', 'segment__question').all()[:5]
+    user = request.user
+    dept = profile.department
+
+    # Helper function for letter grade
+    def get_letter_grade(pct):
+        if pct >= 80: return 'A+'
+        elif pct >= 75: return 'A'
+        elif pct >= 70: return 'A-'
+        elif pct >= 65: return 'B+'
+        elif pct >= 60: return 'B'
+        elif pct >= 55: return 'B-'
+        elif pct >= 50: return 'C+'
+        elif pct >= 45: return 'C'
+        elif pct >= 40: return 'D'
+        else: return 'F'
+
+    evaluated_results_list = []
+
+    # 1. Fetch evaluated StudentSubmissions
+    student_submissions = StudentSubmission.objects.filter(
+        Q(student=user) | Q(student_roll_no__iexact=user.username),
+        status__in=[
+            StudentSubmission.Status.AI_EVALUATED,
+            StudentSubmission.Status.UNDER_REVIEW,
+            StudentSubmission.Status.FINALIZED
+        ]
+    ).select_related('examination', 'examination__course')
+
+    for sub in student_submissions:
+        max_marks = float(sub.examination.total_marks if (sub.examination and sub.examination.total_marks) else (sub.total_max_marks or 100.0))
+        obtained = float(sub.total_obtained_marks or 0.0)
+        pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+
+        answers = sub.answers.select_related('question', 'evaluation_result').all()
+        answer_breakdowns = []
+        for ans in answers:
+            eval_res = getattr(ans, 'evaluation_result', None)
+            answer_breakdowns.append({
+                'question_number': ans.question.question_number if ans.question else 'Q',
+                'question_text': ans.question.question_text if ans.question else '',
+                'obtained_marks': float(eval_res.obtained_marks) if eval_res else 0.0,
+                'maximum_marks': float(eval_res.maximum_marks) if eval_res else (float(ans.question.marks) if ans.question else 0.0),
+                'feedback_text': eval_res.feedback_text if eval_res else '',
+            })
+
+        evaluated_results_list.append({
+            'id': sub.id,
+            'type': 'submission',
+            'exam_title': sub.examination.title if sub.examination else 'Examination',
+            'course_code': sub.examination.course.code if (sub.examination and sub.examination.course) else 'GEN',
+            'course_title': sub.examination.course.title if (sub.examination and sub.examination.course) else 'General Course',
+            'obtained_marks': obtained,
+            'total_marks': max_marks,
+            'percentage': pct,
+            'grade': get_letter_grade(pct),
+            'status_label': 'Finalized & Certified' if sub.status == StudentSubmission.Status.FINALIZED else 'AI Evaluated',
+            'evaluated_at': sub.updated_at,
+            'answers': answer_breakdowns,
+        })
+
+    # 2. Fetch evaluated AnswerScripts
+    student_scripts = AnswerScript.objects.filter(
+        student=user,
+        status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+    ).select_related('examination', 'examination__course')
+
+    for sc in student_scripts:
+        max_marks = float(sc.examination.total_marks) if (sc.examination and sc.examination.total_marks) else 100.0
+        segments = sc.segments.select_related('question', 'evaluation').all()
+        obtained = 0.0
+        segment_breakdowns = []
+
+        for seg in segments:
+            eval_obj = getattr(seg, 'evaluation', None)
+            seg_marks = float(eval_obj.ai_suggested_marks or 0.0) if eval_obj else 0.0
+            obtained += seg_marks
+            segment_breakdowns.append({
+                'question_number': seg.question.question_number if seg.question else 'Q',
+                'question_text': seg.question.question_text if seg.question else '',
+                'obtained_marks': seg_marks,
+                'maximum_marks': float(seg.question.marks) if seg.question else 0.0,
+                'feedback_text': eval_obj.ai_feedback if eval_obj else '',
+            })
+
+        pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+
+        evaluated_results_list.append({
+            'id': sc.id,
+            'type': 'script',
+            'exam_title': sc.examination.title if sc.examination else 'Examination',
+            'course_code': sc.examination.course.code if (sc.examination and sc.examination.course) else 'GEN',
+            'course_title': sc.examination.course.title if (sc.examination and sc.examination.course) else 'General Course',
+            'obtained_marks': obtained,
+            'total_marks': max_marks,
+            'percentage': pct,
+            'grade': get_letter_grade(pct),
+            'status_label': 'Finalized & Certified' if sc.status == AnswerScript.Status.REVIEWED else 'AI Evaluated',
+            'evaluated_at': sc.uploaded_at,
+            'answers': segment_breakdowns,
+        })
+
+    # Sort evaluated results by date newest first
+    evaluated_results_list.sort(key=lambda x: x['evaluated_at'], reverse=True)
+
+    # Compute real stats
+    enrolled_courses_count = Course.objects.filter(department=dept).count() if dept else 0
+    completed_exams_count = len(evaluated_results_list)
+
+    if completed_exams_count > 0:
+        avg_pct = sum(r['percentage'] for r in evaluated_results_list) / completed_exams_count
+        gpa_avg = f"{round(avg_pct, 1)}% ({get_letter_grade(avg_pct)})"
+        rank = "Active Student"
+    else:
+        gpa_avg = "N/A"
+        rank = "Enrolled"
+
     stats = {
-        'student_name': request.user.get_full_name() or request.user.username,
-        'student_id': request.user.username,
-        'dept_name': profile.department.name if profile.department else "Academic Faculty Department",
-        'enrolled_courses': Course.objects.filter(department=profile.department).count() if profile.department else Course.objects.count(),
-        'completed_exams': 0,
-        'gpa_avg': 'N/A',
-        'rank': 'Enrolled',
+        'student_name': user.get_full_name() or user.username,
+        'student_id': user.username,
+        'dept_name': dept.name if dept else "Academic Faculty Department",
+        'enrolled_courses': enrolled_courses_count,
+        'completed_exams': completed_exams_count,
+        'gpa_avg': gpa_avg,
+        'rank': rank,
     }
-    return render(request, 'core/dashboard_student.html', {'evaluations': evaluations, 'stats': stats})
+
+    return render(request, 'core/dashboard_student.html', {
+        'stats': stats,
+        'evaluated_results': evaluated_results_list,
+    })
 
 
 def get_user_role_and_dashboard(user):
