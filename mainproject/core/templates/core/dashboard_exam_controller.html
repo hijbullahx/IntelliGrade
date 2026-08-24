@@ -96,10 +96,10 @@
                 <div>
                     <span class="text-[11px] font-bold uppercase tracking-wider theme-text-muted">Departments</span>
                     <div>
-                        <a href="#dept-table-section" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 hover:underline tracking-tight mt-1 inline-flex items-center gap-1.5" title="Click to view Department Management Table">
+                        <button type="button" onclick="toggleDeptHierarchyTable()" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 hover:underline tracking-tight mt-1 inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view & manage System Department & Academic Hierarchy">
                             <span>{{ stats.total_departments }}</span>
-                            <i data-lucide="external-link" class="w-3.5 h-3.5 opacity-60"></i>
-                        </a>
+                            <i data-lucide="chevron-down" id="dept-chevron-icon" class="w-4 h-4 opacity-70 transition-transform"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="p-2 rounded-xl bg-amber-500/10 text-amber-500">
@@ -164,8 +164,8 @@
 
     </div>
 
-    <!-- Integrated Department & Academic Hierarchy Management Section -->
-    <div id="dept-table-section" class="space-y-4">
+    <!-- Integrated Department & Academic Hierarchy Management Section (Hidden by default until Department Card count is clicked) -->
+    <div id="dept-table-section" class="space-y-4 hidden transition-all duration-300">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
                 <i data-lucide="building-2" class="w-5 h-5 text-amber-500"></i> System Department & Academic Hierarchy Management
@@ -174,6 +174,9 @@
                 <a href="{% url 'add_structure' %}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Dept / School / College
                 </a>
+                <button type="button" onclick="toggleDeptHierarchyTable()" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Section
+                </button>
             </div>
         </div>
 
@@ -259,4 +262,21 @@
     </div>
 
 </div>
+
+<script>
+function toggleDeptHierarchyTable() {
+    const section = document.getElementById('dept-table-section');
+    const chevron = document.getElementById('dept-chevron-icon');
+    if (!section) return;
+    
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        section.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
 {% endblock %}
