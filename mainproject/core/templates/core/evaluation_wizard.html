@@ -165,32 +165,10 @@
                 <label class="flex items-center gap-2"><input type="checkbox" id="optContrast" checked> Contrast Enhancement (CLAHE)</label>
             </div>
 
-            <!-- OCR & Evaluation Strictness -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">OCR Mode</label>
-                    <select id="optOcrMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Balanced" selected>Balanced (EasyOCR + PyMuPDF)</option>
-                        <option value="High Accuracy">High Accuracy (Multi-Engine Ensemble)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">LLM Strictness Level</label>
-                    <select id="optStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Lenient">Lenient (Give partial marks freely)</option>
-                        <option value="Balanced" selected>Balanced (Standard University Grading)</option>
-                        <option value="Strict">Strict (Exact technical accuracy)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
-                    <select id="optEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Rubric-based" selected>Rubric-based Evaluation</option>
-                        <option value="Concept-based">Concept & Derivation Based</option>
-                        <option value="Keyword-based">Keyword Matching Based</option>
-                    </select>
-                </div>
-            </div>
+            <!-- Hidden Default Evaluation Engine Options -->
+            <input type="hidden" id="optOcrMode" value="Balanced">
+            <input type="hidden" id="optStrictness" value="Balanced">
+            <input type="hidden" id="optEvalMode" value="Rubric-based">
 
             <!-- Custom Multiline Prompt Textbox -->
             <div class="pt-2">
@@ -855,11 +833,40 @@ function goToStep(stepNum) {
     const mStep = document.getElementById('stepMappingContent');
     if(mStep) mStep.classList.add('hidden');
 
+    let activeNum = 1;
+    if(stepNum === 'Mapping' || stepNum === '2.5' || stepNum === 3 || stepNum === '3') {
+        activeNum = 3;
+    } else if(stepNum === 2 || stepNum === '2') {
+        activeNum = 2;
+    } else {
+        activeNum = 1;
+    }
+
     if(stepNum === 'Mapping' || stepNum === '2.5') {
         document.getElementById('stepMappingContent').classList.remove('hidden');
     } else {
         document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
     }
+
+    // Update Wizard Progress Header Highlighting (Blue when active)
+    for (let i = 1; i <= 3; i++) {
+        const header = document.getElementById(`stepHeader${i}`);
+        if (!header) continue;
+        const circle = header.querySelector('span:first-child');
+        
+        if (i === activeNum) {
+            header.className = "text-brand-500 font-extrabold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-extrabold shadow-md shadow-brand-500/30";
+        } else if (i < activeNum) {
+            header.className = "text-emerald-500 font-bold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold";
+        } else {
+            header.className = "theme-text-muted flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted flex items-center justify-center text-xs font-bold";
+        }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function closeEvalProgressModal() {
