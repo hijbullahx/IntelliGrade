@@ -2676,6 +2676,7 @@ def api_scan_question_paper(request):
         }, status=500)
 
 
+@csrf_exempt
 def api_finalize_scanned_paper(request):
     """AJAX endpoint to commit staged scanned question paper items to the database and lock the exam paper."""
     if not request.user.is_authenticated:
@@ -2684,8 +2685,16 @@ def api_finalize_scanned_paper(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
 
-    exam_id = request.POST.get('examination_id')
-    if not exam_id or not exam_id.isdigit():
+    import json
+    body_data = {}
+    if request.body:
+        try:
+            body_data = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            pass
+
+    exam_id = request.POST.get('examination_id') or body_data.get('examination_id')
+    if not exam_id or not str(exam_id).isdigit():
         return JsonResponse({'error': 'Valid examination_id is required.'}, status=400)
 
     exam = Examination.objects.filter(id=int(exam_id)).first()
@@ -2696,12 +2705,15 @@ def api_finalize_scanned_paper(request):
     staged_json_param = request.POST.get('staged_questions_json')
     if staged_json_param:
         try:
-            import json
             p_qs = json.loads(staged_json_param)
             if isinstance(p_qs, list) and len(p_qs) > 0:
                 staged_data = {'parsed_questions': p_qs}
         except Exception as e:
             print(f"[FINALIZE JSON PARSE WARNING] {e}")
+    elif body_data.get('questions'):
+        p_qs = body_data.get('questions')
+        if isinstance(p_qs, list) and len(p_qs) > 0:
+            staged_data = {'parsed_questions': p_qs}
 
     if not staged_data or not staged_data.get('parsed_questions'):
         return JsonResponse({'error': 'No staged scan data found for this examination. Please run the scanner first.'}, status=400)
@@ -2782,13 +2794,25 @@ def api_finalize_scanned_paper(request):
                 )
 
                 # Persist single-owner QuestionFigure records
-                for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
+                assoc_figs = item.get('associated_figures', [])
+                if not assoc_figs and item.get('figure_url'):
+                    assoc_figs = [{
+                        'caption': f'Figure for {q_num}',
+                        'image_url': item.get('figure_url'),
+                        'image_path': item.get('figure_url').replace(settings.MEDIA_URL, '').lstrip('/'),
+                        'page_number': 1
+                    }]
+
+                for fig_idx, fig_data in enumerate(assoc_figs):
+                    fig_img = fig_data.get('image_path') or fig_data.get('image') or fig_data.get('image_url', '')
+                    if fig_img.startswith(settings.MEDIA_URL):
+                        fig_img = fig_img.replace(settings.MEDIA_URL, '').lstrip('/')
                     QuestionFigure.objects.create(
                         question=q_obj,
                         display_order=fig_idx + 1,
                         page_number=fig_data.get('page_number', 1),
                         caption=fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
-                        image=fig_data.get('image_path', ''),
+                        image=fig_img,
                         thumbnail=fig_data.get('thumbnail_url', ''),
                         bounding_box=fig_data.get('bounding_box', [])
                     )
@@ -3906,6 +3930,42 @@ def api_save_mcq_answer_key(request, exam_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+def _format_matrices_in_text(text: str) -> str:
+    """
+    Detects and converts unformatted raw matrix grids (e.g. 6x6 pixel values, 3x3 RGB tuples)
+    into structured Markdown pipe tables.
+    """
+    if not text:
+        return text
+
+    # 1. Match 9 RGB tuples like (120, 150, 180) for 3x3 RGB matrices
+    rgb_tuples = re.findall(r'\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)', text)
+    if len(rgb_tuples) == 9 and not ('|' in text and 'Col 1' in text):
+        md_table = '\n\n| **RGB Matrix** | **Col 1** | **Col 2** | **Col 3** |\n| :---: | :---: | :---: | :---: |\n'
+        for r in range(3):
+            row_items = rgb_tuples[r*3:(r+1)*3]
+            md_table += f'| **Row {r+1}** | ' + ' | '.join(row_items) + ' |\n'
+        first_idx = text.find(rgb_tuples[0])
+        last_idx = text.find(rgb_tuples[-1]) + len(rgb_tuples[-1])
+        text = text[:first_idx] + md_table + '\n' + text[last_idx:]
+
+    # 2. Match sequence of square number grids (e.g. 36 numbers for 6x6, 25 for 5x5, 16 for 4x4, 9 for 3x3)
+    num_seq_match = re.search(r'(?:\b\d{1,4}\b\s+){8,64}\b\d{1,4}\b', text)
+    if num_seq_match and not ('|' in text and 'Matrix' in text):
+        nums = re.findall(r'\b\d{1,4}\b', num_seq_match.group(0))
+        n = len(nums)
+        grid_dim = int(n**0.5)
+        if grid_dim * grid_dim == n and grid_dim >= 3:
+            md_table = f'\n\n| **{grid_dim}x{grid_dim} Matrix** | ' + ' | '.join([f'**Col {c+1}**' for c in range(grid_dim)]) + ' |\n'
+            md_table += '| ' + ' | '.join([':---:'] * (grid_dim + 1)) + ' |\n'
+            for r in range(grid_dim):
+                row_items = nums[r*grid_dim:(r+1)*grid_dim]
+                md_table += f'| **Row {r+1}** | ' + ' | '.join(row_items) + ' |\n'
+            text = text.replace(num_seq_match.group(0), md_table + '\n')
+
+    return text.strip()
+
+
 def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[Dict[str, Any]]:
     """
     Deterministic Fallback Parser for Examination Question Papers (MCQ & Subjective).
@@ -3976,6 +4036,7 @@ def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[D
             q_type = "Subjective"
             prompt_text = re.sub(r'\[.*?\]', '', rest_text).strip()
             prompt_text = prompt_text.split("Bloom's Taxonomy Levels")[0].strip()
+            prompt_text = _format_matrices_in_text(prompt_text)
             options = []
             predicted_key = "Model Solution / Evaluation Rubric"
 
@@ -4204,7 +4265,7 @@ Return ONLY a valid JSON array matching this exact schema:
     normalized_questions = []
     for idx, q in enumerate(extracted_questions):
         q_num = q.get('question_number') or q.get('q_num') or f"Q{idx+1}"
-        prompt_txt = q.get('prompt_text') or q.get('question_text') or f"Question {idx+1}"
+        prompt_txt = _format_matrices_in_text(q.get('prompt_text') or q.get('question_text') or f"Question {idx+1}")
         q_type = q.get('question_type') or 'MCQ'
         
         marks_val = float(q.get('marks') or q.get('allocated_marks') or 10.0)

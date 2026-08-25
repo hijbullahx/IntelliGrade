@@ -1355,6 +1355,42 @@ function renderModalInlinePreview(data) {
     lucide.createIcons();
 }
 
+function formatMarkdownTables(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let inTable = false;
+    let html = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        let trimmed = line.trim();
+        
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            if (!inTable) {
+                html += '<div class="overflow-x-auto my-2.5 rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-sm"><table class="w-full text-[11px] border-collapse font-mono text-center"><tbody class="divide-y divide-slate-800">';
+                inTable = true;
+            }
+            if (trimmed.includes('---') || trimmed.includes(':---')) continue;
+            const cells = trimmed.split('|').slice(1, -1);
+            html += '<tr class="hover:bg-slate-800/50 transition-colors">' + cells.map((c, idx) => {
+                const isHeader = c.includes('**') || idx === 0;
+                const cleanCell = c.replace(/\*\*/g, '').trim();
+                return `<td class="border-r border-slate-800/80 px-2.5 py-1.5 ${isHeader ? 'font-extrabold text-cyan-300 bg-slate-800/40' : 'font-medium text-slate-200'}">${cleanCell}</td>`;
+            }).join('') + '</tr>';
+        } else {
+            if (inTable) {
+                html += '</tbody></table></div>';
+                inTable = false;
+            }
+            if (trimmed) {
+                html += `<p class="leading-relaxed my-1">${trimmed}</p>`;
+            }
+        }
+    }
+    if (inTable) html += '</tbody></table></div>';
+    return html || text;
+}
+
 function renderScannedPaperPreview(data) {
     const previewBox = document.getElementById('scannedPaperPreview');
     const modalPreviewBox = document.getElementById('modalScannedPreviewBox');
@@ -1397,11 +1433,25 @@ function renderScannedPaperPreview(data) {
         const figUrl = q.figure_url || (q.associated_figures && q.associated_figures.length > 0 ? q.associated_figures[0].image_url : null);
         if (figUrl) {
             figureHtml = `
-            <div class="my-2 p-2 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center">
-                <img src="${figUrl}" alt="Figure for ${qNum}" class="max-h-48 object-contain rounded border border-slate-700 shadow-md">
-                <span class="text-[10px] font-mono text-cyan-400 mt-1">📷 ${qNum} Figure / Reference Image</span>
+            <div class="my-3 p-3 rounded-xl bg-slate-900 border border-slate-800 text-center flex flex-col items-center shadow-sm">
+                <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold mb-2">📷 Attached Diagram / Figure</span>
+                <img src="${figUrl}" alt="Figure for ${qNum}" class="max-h-64 object-contain rounded-lg border border-slate-700 shadow-md" onerror="this.parentElement.style.display='none';">
             </div>`;
         }
+
+        const hasTable = promptText.includes('|');
+        const formattedPromptHtml = formatMarkdownTables(promptText);
+        const promptDisplayHtml = hasTable ? `
+            <div class="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 space-y-1.5">
+                <div class="text-xs text-slate-200">${formattedPromptHtml}</div>
+                <details class="text-[11px] text-slate-400 pt-1">
+                    <summary class="cursor-pointer font-bold hover:text-cyan-300 transition-colors">✏️ Edit Raw Prompt / Table Markdown</summary>
+                    <textarea id="preview_prompt_${qNum}" rows="4" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-full mt-1.5 focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
+                </details>
+            </div>
+        ` : `
+            <textarea id="preview_prompt_${qNum}" rows="2" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium w-full focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
+        `;
 
         let bodyContentHtml = '';
         if (isSubjective) {
@@ -1456,7 +1506,7 @@ function renderScannedPaperPreview(data) {
                         ${typeBadge}
                         ${coPoBadge}
                     </div>
-                    <textarea id="preview_prompt_${qNum}" rows="2" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium w-full focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
+                    ${promptDisplayHtml}
                 </div>
             </div>
             ${figureHtml}
@@ -1557,7 +1607,9 @@ function finalizeScannedPaper() {
                 co_mapping: q.co || 'CO1',
                 bloom_level: q.bloom_level || 'C1',
                 po_mapping: q.po || 'PO1',
-                options: q.options || []
+                options: q.options || [],
+                figure_url: q.figure_url || '',
+                associated_figures: q.associated_figures || []
             }))));
         }
     }
@@ -1571,9 +1623,20 @@ function finalizeScannedPaper() {
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
         body: formData
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
+    .then(async r => {
+        const text = await r.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch(e) {
+            console.error("[FINALIZE SERVER RAW RESPONSE]:", text);
+            throw new Error(`Server returned status ${r.status} with non-JSON response. Please refresh and try again.`);
+        }
+        return { status: r.status, ok: r.ok, data };
+    })
+    .then(res => {
+        const data = res.data;
+        if (res.ok && data.success) {
             localStorage.setItem("finalized_exam_{{ selected_exam.id }}", "true");
             const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, rubrics, and supplementary documents are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
             closeScanProgressModal();
@@ -1583,7 +1646,7 @@ function finalizeScannedPaper() {
                 window.location.reload();
             }
         } else {
-            alert(data.error || 'Failed to finalize scanned paper.');
+            alert(data.error || data.message || 'Failed to finalize scanned paper.');
         }
     })
     .catch(err => {
