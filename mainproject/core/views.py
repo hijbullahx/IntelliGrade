@@ -4326,6 +4326,114 @@ def email_course_tabulation_report(request, course_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+def api_update_student_grade_record(request, record_id):
+    """
+    AJAX endpoint allowing instructors to manually edit/override student scores in the OBE tabulation table.
+    Updates exam_scores, co_scores, po_scores, overall_score, and letter_grade, which automatically
+    syncs with the downloadable Excel spreadsheet (.xlsx).
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST method required.'}, status=405)
+
+    try:
+        record = get_object_or_404(StudentGradeRecord, id=record_id)
+        data = json.loads(request.body) if request.body else request.POST
+
+        student_name = (data.get('student_name') or '').strip()
+        if student_name:
+            record.student_name = student_name
+
+        ct_pct = float(data.get('class_test', 0.0) or 0.0)
+        mid_pct = float(data.get('midterm', 0.0) or 0.0)
+        fn_pct = float(data.get('final', 0.0) or 0.0)
+        as_pct = float(data.get('assignment', 0.0) or 0.0)
+        att_pct = float(data.get('attendance', 100.0) or 100.0)
+
+        exam_scores = record.exam_scores or {}
+
+        def set_cat_score(cat_key, title, pct_val):
+            found = False
+            for k, ex in exam_scores.items():
+                if isinstance(ex, dict) and (ex.get('category') == cat_key or ex.get('exam_type') == cat_key):
+                    ex['percentage'] = round(pct_val, 2)
+                    ex['obtained'] = round(pct_val, 2)
+                    ex['max_marks'] = 100.0
+                    found = True
+                    break
+            if not found and pct_val >= 0:
+                exam_scores[f"manual_{cat_key}"] = {
+                    'exam_title': title,
+                    'exam_type': cat_key,
+                    'category': cat_key,
+                    'percentage': round(pct_val, 2),
+                    'obtained': round(pct_val, 2),
+                    'max_marks': 100.0,
+                    'breakdown': {}
+                }
+
+        set_cat_score('class_test', 'Class Test / Quiz', ct_pct)
+        set_cat_score('midterm', 'Mid Term Examination', mid_pct)
+        set_cat_score('final', 'Final Examination', fn_pct)
+        set_cat_score('assignment', 'Course Assignments', as_pct)
+
+        record.exam_scores = exam_scores
+
+        raw_co = data.get('co_scores')
+        if isinstance(raw_co, dict):
+            record.co_scores = {str(k).upper(): float(v or 0.0) for k, v in raw_co.items()}
+
+        raw_po = data.get('po_scores')
+        if isinstance(raw_po, dict):
+            record.po_scores = {str(k).upper(): float(v or 0.0) for k, v in raw_po.items()}
+
+        weights = record.tabulation.weightage_config or {
+            'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0
+        }
+        w_ct = float(weights.get('class_test', 10.0))
+        w_mid = float(weights.get('midterm', 25.0))
+        w_fn = float(weights.get('final', 50.0))
+        w_as = float(weights.get('assignment', 10.0))
+        w_att = float(weights.get('attendance', 5.0))
+
+        weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0)) + (att_pct * (w_att / 100.0))
+        overall = round(min(100.0, max(0.0, weighted_total)), 2)
+        record.overall_score = overall
+
+        if overall >= 80: record.letter_grade = 'A+'
+        elif overall >= 75: record.letter_grade = 'A'
+        elif overall >= 70: record.letter_grade = 'A-'
+        elif overall >= 65: record.letter_grade = 'B+'
+        elif overall >= 60: record.letter_grade = 'B'
+        elif overall >= 55: record.letter_grade = 'B-'
+        elif overall >= 50: record.letter_grade = 'C+'
+        elif overall >= 45: record.letter_grade = 'C'
+        elif overall >= 40: record.letter_grade = 'D'
+        else: record.letter_grade = 'F'
+
+        record.save()
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Updated grade record for {record.student_name} ({record.student_id}) successfully!",
+            'record': {
+                'id': record.id,
+                'student_id': record.student_id,
+                'student_name': record.student_name,
+                'class_test_weighted': record.class_test_data['weighted'] if record.class_test_data else 0.0,
+                'midterm_weighted': record.midterm_data['weighted'] if record.midterm_data else 0.0,
+                'final_weighted': record.final_data['weighted'] if record.final_data else 0.0,
+                'assignment_weighted': record.assignment_data['weighted'] if record.assignment_data else 0.0,
+                'overall_score': record.overall_score,
+                'letter_grade': record.letter_grade
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+
 def api_forgot_password(request):
     """
     Generates a 6-digit OTP, stores it in the Django cache for 15 minutes,

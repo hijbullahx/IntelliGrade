@@ -67,13 +67,15 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
 
     for sub in all_subs:
         sub_exam = sub.examination
-        ex_title = sub_exam.title.upper()
+        ex_title = (sub_exam.title or '').upper()
         if 'MID' in ex_title:
             exam_type_key = 'midterm'
-        elif 'QUIZ' in ex_title or 'TEST' in ex_title or 'CLASS' in ex_title:
+        elif 'QUIZ' in ex_title or 'TEST' in ex_title or 'CLASS' in ex_title or 'CT' in ex_title:
             exam_type_key = 'class_test'
-        elif 'ASSIGN' in ex_title:
+        elif 'ASSIGN' in ex_title or 'HW' in ex_title or 'PROJECT' in ex_title:
             exam_type_key = 'assignment'
+        elif 'FINAL' in ex_title:
+            exam_type_key = 'final'
         else:
             exam_type_key = 'final'
 
@@ -111,7 +113,7 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
 
         if total_sub_max <= 0:
             total_sub_obtained = float(sub.total_obtained_marks or 0.0)
-            total_sub_max = float(sub.total_max_marks or 100.0)
+            total_sub_max = float(sub.total_max_marks or getattr(sub_exam, 'total_marks', 100.0) or 100.0)
 
         sub_pct = round((total_sub_obtained / max(1.0, total_sub_max)) * 100.0, 2)
         category_percentages[exam_type_key].append(sub_pct)
@@ -119,6 +121,7 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
         exam_scores[str(sub_exam.id)] = {
             'exam_title': sub_exam.title,
             'exam_type': exam_type_key,
+            'category': exam_type_key,
             'obtained': total_sub_obtained,
             'max_marks': total_sub_max,
             'percentage': sub_pct,

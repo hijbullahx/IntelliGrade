@@ -86,6 +86,7 @@ urlpatterns = [
     path('course/<int:course_id>/tabulation/', views.course_tabulation_view, name='course_tabulation_view'),
     path('course/<int:course_id>/export-tabulation/', views.export_course_tabulation, name='export_course_tabulation'),
     path('course/<int:course_id>/email-tabulation/', views.email_course_tabulation_report, name='email_course_tabulation_report'),
+    path('api/tabulation/grade-record/<int:record_id>/update/', views.api_update_student_grade_record, name='api_update_student_grade_record'),
     path('auth/forgot-password/', views.forgot_password, name='forgot_password'),
     path('auth/verify-otp/', views.verify_otp, name='verify_otp'),
     path('auth/reset-password/', views.reset_password, name='reset_password'),

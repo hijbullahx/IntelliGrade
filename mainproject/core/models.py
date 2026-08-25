@@ -655,6 +655,53 @@ class StudentGradeRecord(models.Model):
     def __str__(self):
         return f"GradeRecord: {self.student_name} ({self.student_id}) - {self.overall_score:.1f}% ({self.letter_grade})"
 
+    def get_category_data(self, category_key):
+        """Extracts and computes aggregated obtained, max, percentage, and weighted score for a category."""
+        if not self.exam_scores or not isinstance(self.exam_scores, dict):
+            return None
+        matching = []
+        for ex in self.exam_scores.values():
+            if isinstance(ex, dict):
+                c = ex.get('category') or ex.get('exam_type')
+                if c == category_key:
+                    matching.append(ex)
+        if not matching:
+            return None
+        avg_pct = sum(float(m.get('percentage', 0.0)) for m in matching) / len(matching)
+        tot_obtained = sum(float(m.get('obtained', 0.0)) for m in matching)
+        tot_max = sum(float(m.get('max_marks', 100.0)) for m in matching)
+        weights = {'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
+        if self.tabulation and self.tabulation.weightage_config:
+            w = float(self.tabulation.weightage_config.get(category_key, weights.get(category_key, 10.0)))
+        else:
+            w = float(weights.get(category_key, 10.0))
+        weighted_score = round(avg_pct * (w / 100.0), 2)
+        return {
+            'obtained': round(tot_obtained, 2),
+            'max_marks': round(tot_max, 2),
+            'percentage': round(avg_pct, 2),
+            'weighted': weighted_score,
+            'weight': w,
+            'exam_titles': [m.get('exam_title', '') for m in matching]
+        }
+
+    @property
+    def class_test_data(self):
+        return self.get_category_data('class_test')
+
+    @property
+    def midterm_data(self):
+        return self.get_category_data('midterm')
+
+    @property
+    def final_data(self):
+        return self.get_category_data('final')
+
+    @property
+    def assignment_data(self):
+        return self.get_category_data('assignment')
+
+
 
 
 
