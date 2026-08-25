@@ -81,4 +81,6 @@ urlpatterns = [
     path('teacher/exam/<int:exam_id>/export-report/', views.export_evaluation_report, name='export_evaluation_report'),
     path('api/ai-analyze-question-full/', views.api_ai_analyze_question_full, name='api_ai_analyze_question_full'),
     path('api/exam/<int:exam_id>/evaluate-quiz/', views.api_evaluate_quiz_submission, name='api_evaluate_quiz_submission'),
+    path('api/exam/<int:exam_id>/save-mcq-key/', views.api_save_mcq_answer_key, name='api_save_mcq_answer_key'),
+    path('api/exam/<int:exam_id>/fast-scan-mcq/', views.api_fast_scan_mcq_paper, name='api_fast_scan_mcq_paper'),
 ]
