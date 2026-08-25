@@ -1,20 +1,89 @@
 {% extends 'emails/base_email.html' %}
 
-{% block title %}Welcome to IntelliGrade Institutional Portal{% endblock %}
+{% block title %}
+{% if is_approval %}
+Account Approved & Activated - IntelliGrade Portal
+{% else %}
+Welcome to IntelliGrade Institutional Academic Portal
+{% endif %}
+{% endblock %}
 
 {% block content %}
-<h2 style="color: #ffffff; margin-top: 0;">Welcome, {{ user.get_full_name|default:user.username }}!</h2>
-<p>Your institutional IntelliGrade account has been successfully provisioned for the IUBAT academic portal.</p>
-
-<div style="background-color: #0f172a; padding: 16px; border-radius: 10px; border-left: 4px solid #0284c7; margin: 20px 0;">
-    <p style="margin: 0; color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase;">Account Details</p>
-    <p style="margin: 4px 0 0; color: #ffffff;"><strong>Username / Email:</strong> {{ user.email|default:user.username }}</p>
-    {% if raw_password %}
-    <p style="margin: 4px 0 0; color: #38bdf8;"><strong>Temporary Password:</strong> {{ raw_password }}</p>
+<div style="margin-bottom: 24px;">
+    {% if is_approval %}
+    <span style="display: inline-block; padding: 5px 14px; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; font-size: 11px; font-weight: 800; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;">&#10004; Account Verified & Approved</span>
+    <h2 style="color: #ffffff; margin: 14px 0 6px 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">Welcome, {{ user.get_full_name|default:user.username }}!</h2>
+    <p style="margin: 0; color: #94a3b8; font-size: 13.5px; line-height: 1.5;">Your self-registration request has been reviewed and officially approved by the Chief Exam Controller. Your student portal access is now fully active.</p>
+    {% else %}
+    <span style="display: inline-block; padding: 5px 14px; background: rgba(2, 132, 199, 0.15); border: 1px solid #0284c7; color: #38bdf8; font-size: 11px; font-weight: 800; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;">&#9733; Official Account Provisioned</span>
+    <h2 style="color: #ffffff; margin: 14px 0 6px 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">Welcome to IntelliGrade, {{ user.get_full_name|default:user.username }}!</h2>
+    <p style="margin: 0; color: #94a3b8; font-size: 13.5px; line-height: 1.5;">Your institutional academic account has been created for you by the Chief Exam Controller on the IUBAT IntelliGrade platform.</p>
     {% endif %}
 </div>
 
-<p>You can now sign in to view your courses, assigned examinations, live OBE tabulation sheets, and AI script evaluation feedback.</p>
+<!-- Credentials Box -->
+<div style="background-color: #090d16; padding: 22px; border-radius: 14px; border: 1px solid #1e293b; margin: 22px 0;">
+    <div style="border-bottom: 1px solid #1e293b; padding-bottom: 10px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: #38bdf8; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">Account Credentials</span>
+        <span style="color: #64748b; font-size: 11px;">Role: <strong style="color: #e2e8f0;">{{ role_name|default:"Academic Member" }}</strong></span>
+    </div>
+    
+    <table style="width: 100%; border-collapse: collapse; font-size: 13.5px;">
+        <tr>
+            <td style="padding: 7px 0; color: #64748b; width: 140px;">Institutional ID:</td>
+            <td style="padding: 7px 0; color: #f8fafc; font-weight: 800; font-family: Consolas, monospace; font-size: 14px;">{{ user.username }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 7px 0; color: #64748b;">Registered Email:</td>
+            <td style="padding: 7px 0; color: #cbd5e1;">{{ user.email|default:"N/A" }}</td>
+        </tr>
+        {% if department_name %}
+        <tr>
+            <td style="padding: 7px 0; color: #64748b;">Department:</td>
+            <td style="padding: 7px 0; color: #cbd5e1;">{{ department_name }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td style="padding: 7px 0; color: #64748b;">Access Password:</td>
+            <td style="padding: 7px 0;">
+                {% if raw_password %}
+                <span style="background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; color: #38bdf8; padding: 4px 10px; border-radius: 6px; font-family: Consolas, monospace; font-weight: 800;">{{ raw_password }}</span>
+                {% else %}
+                <span style="color: #94a3b8; font-style: italic;">Use the password chosen during self-registration</span>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+</div>
 
-<a href="{{ login_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary">Sign In to IntelliGrade Portal</a>
+<!-- Features Callout -->
+<div style="background-color: rgba(30, 41, 59, 0.5); padding: 14px 18px; border-radius: 10px; margin: 16px 0; font-size: 12.5px; color: #94a3b8; line-height: 1.5;">
+    <p style="margin: 0; color: #e2e8f0; font-weight: 700;">Available Features & Workspace Access:</p>
+    <ul style="margin: 6px 0 0 0; padding-left: 18px; color: #cbd5e1;">
+        {% if role_name == 'Student' %}
+        <li>Continuous AI evaluated answer scripts & detailed question rubrics.</li>
+        <li>Real-time Outcome-Based Education (OBE) course attainment scores and letter grades.</li>
+        <li>Online recheck requests directly to faculty examiners.</li>
+        {% elif role_name == 'Department Head' %}
+        <li>Department-wide real-time OBE tabulation sheets and course attainment matrices.</li>
+        <li>Review Course Learning Outcomes (COs) and Program Outcomes (POs).</li>
+        <li>Supervision of departmental faculty grading and script evaluations.</li>
+        {% else %}
+        <li>Manage course question papers, marking schemes, and AI grading rubrics.</li>
+        <li>High-speed AI batch evaluation on student answer scripts.</li>
+        <li>Generate and export official multi-sheet OBE tabulation reports.</li>
+        {% endif %}
+    </ul>
+</div>
+
+<!-- Call to action button -->
+<div style="text-align: center; margin-top: 26px;">
+    <a href="{{ login_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary" style="display: inline-block; padding: 14px 28px; font-size: 13.5px; font-weight: 800; text-decoration: none; border-radius: 12px; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color: #ffffff; box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4);">
+        Sign In to {{ role_name|default:"IntelliGrade" }} Portal &rarr;
+    </a>
+</div>
+
+<p style="margin-top: 26px; font-size: 11px; color: #64748b; text-align: center;">
+    <em>Security Notice: Please keep your credentials confidential. You can update your password at any time from your account settings or via the Password Recovery portal.</em>
+</p>
 {% endblock %}

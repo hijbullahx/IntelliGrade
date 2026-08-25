@@ -68,18 +68,56 @@ class EmailService:
         return thread
 
     @classmethod
-    def send_account_creation_email(cls, user, raw_password: Optional[str] = None, activation_token: Optional[str] = None, sync: bool = False):
-        """Sends account welcome & provisioning email."""
+    def send_account_creation_email(
+        cls,
+        user,
+        raw_password: Optional[str] = None,
+        role_name: Optional[str] = None,
+        department_name: Optional[str] = None,
+        login_url_path: Optional[str] = None,
+        is_approval: bool = False,
+        activation_token: Optional[str] = None,
+        sync: bool = False,
+    ):
+        """Sends account welcome & provisioning email with credentials and direct portal login link."""
         recipient = getattr(user, 'email', None) or getattr(user, 'username', None)
         if not recipient or '@' not in recipient:
             return None
 
-        subject = "Welcome to IntelliGrade Institutional Academic Portal"
+        base_url = cls._get_base_url()
+        path = (login_url_path or '/').lstrip('/')
+        resolved_login_url = f"{base_url}/{path}" if path else f"{base_url}/"
+
+        if not role_name:
+            profile = getattr(user, 'profile', None)
+            if profile:
+                if profile.role == 'STUDENT':
+                    role_name = 'Student'
+                elif profile.role == 'TEACHER':
+                    role_name = 'Faculty Member / Examiner'
+                elif profile.role == 'DEPARTMENT_HEAD':
+                    role_name = 'Department Head'
+                elif profile.role == 'ADMIN':
+                    role_name = 'Chief Exam Controller'
+
+        if not department_name:
+            profile = getattr(user, 'profile', None)
+            if profile and profile.department:
+                department_name = profile.department.name
+
+        if is_approval:
+            subject = f"[Account Approved] Welcome to IntelliGrade Student Portal ({user.username})"
+        else:
+            subject = f"[Account Created] Your IntelliGrade {role_name or 'Portal'} Credentials ({user.username})"
+
         context = {
             'user': user,
             'raw_password': raw_password,
+            'role_name': role_name or 'Academic Portal User',
+            'department_name': department_name or '',
+            'login_url': resolved_login_url,
+            'is_approval': is_approval,
             'activation_token': activation_token,
-            'login_url': f"{cls._get_base_url()}/",
         }
         return cls._send_async_email(subject, [recipient], 'emails/account_welcome.html', context, sync=sync)
 

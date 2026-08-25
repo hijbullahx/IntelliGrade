@@ -321,12 +321,6 @@ def student_register(request):
         )
 
         messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
-        # Send welcome email asynchronously
-        try:
-            from core.services.email_service import EmailService
-            EmailService.send_account_creation_email(user, raw_password=password)
-        except Exception as _e_mail:
-            pass
         return redirect('student_login')
 
     departments = Department.objects.filter(is_active=True)
@@ -588,11 +582,19 @@ def add_student(request):
             }
         )
 
-        # Console Simulation of Sending Welcome Email with Credentials
-        print(f"\n[EMAIL SYSTEM SIMULATION]")
-        print(f"To: {email}")
-        print(f"Subject: Welcome to IntelliGrade - Student Access Credentials")
-        print(f"Body: Hello {full_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
+        # Dispatch official welcome email with credentials
+        dept_name = dept_obj.name if dept_obj else ""
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Student",
+                department_name=dept_name,
+                login_url_path="/student/login/"
+            )
+        except Exception as _e_mail:
+            pass
 
         messages.success(request, f"Student '{full_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
@@ -614,13 +616,22 @@ def approve_student(request, profile_id):
         profile.is_approved = True
         profile.save()
 
-        # Console Simulation of Sending Approval Email
-        print(f"\n[EMAIL SYSTEM SIMULATION]")
-        print(f"To: {profile.user.email}")
-        print(f"Subject: Account Approved - IntelliGrade Student Portal Access")
-        print(f"Body: Hello {profile.user.first_name},\nYour self-registration request for Student ID {profile.user.username} has been approved by the Chief Exam Controller.\nYou can now log in at http://127.0.0.1:8000/student/login/\n")
+        # Dispatch official approval welcome email
+        dept_name = profile.department.name if profile.department else ""
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=profile.user,
+                raw_password=None,
+                role_name="Student",
+                department_name=dept_name,
+                login_url_path="/student/login/",
+                is_approval=True
+            )
+        except Exception as _e_mail:
+            pass
 
-        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated!")
+        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated! Official welcome email dispatched.")
     return redirect('pending_students')
 
 
@@ -781,11 +792,17 @@ def add_faculty(request):
             }
         )
 
-        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated.")
-        # Send welcome email asynchronously
+        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated and welcome email sent.")
+        # Send welcome email asynchronously with role & portal link
         try:
             from core.services.email_service import EmailService
-            EmailService.send_account_creation_email(user, raw_password=password)
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Faculty Member / Examiner",
+                department_name=dept_obj.name if dept_obj else "",
+                login_url_path="/teacher/login/"
+            )
         except Exception as _e_mail:
             pass
         if redirect_after:
@@ -833,7 +850,18 @@ def add_dept_head(request):
             }
         )
 
-        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated.")
+        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated and welcome email sent.")
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Department Head",
+                department_name=dept_obj.name if dept_obj else "",
+                login_url_path="/dept-head/login/"
+            )
+        except Exception as _e_mail:
+            pass
         return redirect('exam_controller_dashboard')
 
     departments = Department.objects.filter(is_active=True)
@@ -1875,21 +1903,7 @@ def api_publish_exam(request):
 
         faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
 
-        # Dispatch exam-assigned notification to enrolled students
-        try:
-            from core.services.email_service import EmailService
-            enrolled = Profile.objects.filter(role=Profile.Role.STUDENT, department=course.department)
-            for prof in enrolled:
-                if prof.user.email and '@' in prof.user.email:
-                    EmailService.send_exam_assigned_notification(
-                        student_email=prof.user.email,
-                        student_name=prof.user.get_full_name() or prof.user.username,
-                        exam_title=exam.title,
-                        course_code=course.code,
-                        exam_date=str(exam.exam_date)
-                    )
-        except Exception as _e_mail:
-            pass
+
 
         return JsonResponse({
             'success': True,
@@ -3783,26 +3797,7 @@ def api_finalize_evaluation(request, submission_id):
                 teacher_user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR')
             )
-            # Send evaluation published notification to student
-            try:
-                from core.services.email_service import EmailService
-                student_email = ''
-                if submission.student and submission.student.email:
-                    student_email = submission.student.email
-                elif '@' in (submission.student_name or ''):
-                    student_email = submission.student_name
-                if student_email:
-                    pct = float(submission.percentage or 0.0)
-                    grade = 'A+' if pct >= 80 else ('A' if pct >= 75 else ('A-' if pct >= 70 else ('B+' if pct >= 65 else ('B' if pct >= 60 else ('F')))))
-                    EmailService.send_evaluation_published_notification(
-                        student_email=student_email,
-                        student_name=submission.student_name,
-                        exam_title=submission.examination.title,
-                        score=f"{submission.total_obtained_marks}/{submission.total_max_marks}",
-                        grade=grade
-                    )
-            except Exception as _e_mail:
-                pass
+
             return JsonResponse(res)
         except Exception as e:
             import traceback
