@@ -9,6 +9,7 @@ from .groq import GroqProvider
 from .openai import OpenAIProvider
 from .openrouter import OpenRouterProvider
 from .ollama import OllamaProvider
+from .local_vision import LocalOfflineVisionProvider
 from core.ai_engine.routing.task_types import TaskType, ProviderStrategy
 from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
 
@@ -46,10 +47,13 @@ class FailoverAIProvider(BaseAIProvider):
         if openrouter_key and not any(isinstance(p, OpenRouterProvider) for p in self._chain):
             self._chain.append(OpenRouterProvider(api_key=openrouter_key))
 
+        if not any(isinstance(p, LocalOfflineVisionProvider) for p in self._chain):
+            self._chain.append(LocalOfflineVisionProvider())
+
         if not any(isinstance(p, OllamaProvider) for p in self._chain):
             self._chain.append(OllamaProvider())
 
-        print(f"[AI PROVIDER STATUS] Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'} | OpenRouter: {'CONFIGURED' if openrouter_key else 'NOT CONFIGURED'} | Ollama: CONFIGURED")
+        print(f"[AI PROVIDER STATUS] Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'} | OpenRouter: {'CONFIGURED' if openrouter_key else 'NOT CONFIGURED'} | Local Offline Vision: CONFIGURED | Ollama: CONFIGURED")
 
     @staticmethod
     def _extract_image_count(args: tuple, kwargs: dict) -> int:
