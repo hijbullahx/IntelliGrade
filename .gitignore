@@ -1,22 +1,46 @@
-# Environment variables
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
 .env
+.env.*
+*.env
+**/.env
+**/.env*
+local_settings.py
 
-# Python bytecode & cache
+# ==========================================
+# Scratch & Local Verification Test Scripts
+# ==========================================
+scratch/
+**/scratch/
+scratch_*
+**/scratch_*
+benchmark_htr.py
+segmentation_test.py
+
+# ==========================================
+# Python Bytecode & Cache
+# ==========================================
+__pycache__/
 **/__pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 
-# Virtual Environment
+# ==========================================
+# Virtual Environments
+# ==========================================
 venv/
 ENV/
 env/
 .venv/
-.env
-# Django
+.env/
+
+# ==========================================
+# Django Runtime Files & Storage
+# ==========================================
 *.log
-local_settings.py
 db.sqlite3
 db.sqlite3-journal
 staticfiles/
@@ -24,7 +48,9 @@ media/
 generate_mcq_pdf.py
 generate_test_student_sheet.py
 
-# IDE & OS files
+# ==========================================
+# IDE & Operating System Files
+# ==========================================
 .vscode/
 .idea/
 *.swp
@@ -34,12 +60,10 @@ Thumbs.db
 OCR and HTR
 Materials
 
-
-
-# Agent metadata
+# ==========================================
+# Agent & Debug Artifacts
+# ==========================================
 .gemini/
-
-# Debug artifacts & traces
 request_trace/
 **/request_trace/
 htr_benchmark_report.json
