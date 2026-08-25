@@ -1212,8 +1212,10 @@ function runAIQuestionScanFromModal() {
         if (ok && (data.success || data.status === 'success') && qList && qList.length > 0) {
             currentStagedScanData = data;
             const count = data.question_count || qList.length;
+            const isSubjective = qList.some(q => q.question_type === 'Subjective' || (!q.options || q.options.length === 0));
+            const typeLabel = isSubjective ? "Subjective" : "MCQ";
             updateScanProgress(100, "🎉 Scan Complete!");
-            appendScanLog(`🎉 Success! Extracted ${count} MCQ questions with option keys & marks.`, 'success');
+            appendScanLog(`🎉 Success! Extracted ${count} ${typeLabel} questions with OBE mappings & criteria.`, 'success');
             appendScanLog(`⚠️ Extracted paper staged in memory. Click Finalize & Save to commit to database.`, 'warn');
 
             const statusBadge = document.getElementById('scanStatusBadge');
@@ -1321,54 +1323,28 @@ function renderModalInlinePreview(data) {
     if (!container) return;
     container.innerHTML = '';
 
-    const questions = data.data.questions || [];
+    const questions = data.data ? (data.data.questions || []) : (data.questions || []);
     questions.forEach((q, idx) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-xs font-sans text-slate-200';
 
         let figsHtml = '';
-        if (q.associated_figures && q.associated_figures.length > 0) {
-            figsHtml += '<div class="my-1.5 flex flex-wrap gap-2">';
-            q.associated_figures.forEach(fig => {
-                figsHtml += `
-                    <div class="p-1 rounded bg-slate-900 border border-slate-700 text-center">
-                        <img src="${fig.image_url || fig.thumbnail_url || ''}" alt="${fig.caption || 'Figure'}" class="max-h-32 object-contain mx-auto rounded">
-                        <p class="text-[9px] font-bold text-slate-400 mt-0.5">📷 ${fig.caption || 'Figure'}</p>
-                    </div>
-                `;
-            });
-            figsHtml += '</div>';
-        }
-
-        let tblsHtml = '';
-        if (q.associated_tables && q.associated_tables.length > 0) {
-            tblsHtml += '<div class="my-1.5 overflow-x-auto">';
-            q.associated_tables.forEach(tbl => {
-                tblsHtml += `
-                    <p class="text-[10px] font-bold text-cyan-400 mb-0.5">${tbl.element_type === 'MATRIX' ? '🔢 Matrix Grid' : '📊 Table'} ${tbl.caption || ''}</p>
-                `;
-                if (tbl.cell_json && Array.isArray(tbl.cell_json)) {
-                    tblsHtml += '<table class="text-[10px] border-collapse border border-slate-700 font-mono bg-slate-900 my-1">';
-                    tbl.cell_json.forEach(row => {
-                        tblsHtml += '<tr>';
-                        row.forEach(cell => {
-                            tblsHtml += `<td class="border border-slate-700 px-2 py-0.5 text-center font-bold text-slate-200">${cell}</td>`;
-                        });
-                        tblsHtml += '</tr>';
-                    });
-                    tblsHtml += '</table>';
-                }
-            });
-            tblsHtml += '</div>';
+        const figUrl = q.figure_url || (q.associated_figures && q.associated_figures.length > 0 ? q.associated_figures[0].image_url : null);
+        if (figUrl) {
+            figsHtml += `
+                <div class="my-1.5 p-1 rounded bg-slate-900 border border-slate-700 text-center">
+                    <img src="${figUrl}" alt="Figure" class="max-h-32 object-contain mx-auto rounded">
+                    <p class="text-[9px] font-bold text-slate-400 mt-0.5">📷 Figure Preview</p>
+                </div>
+            `;
         }
 
         itemDiv.innerHTML = `
             <div class="flex items-start justify-between font-bold">
                 <span class="text-xs text-cyan-300 font-mono">${q.question_number || 'Q' + (idx+1)}. ${q.prompt_text || ''}</span>
-                <span class="font-mono text-purple-400 font-extrabold text-xs ml-2">[${q.allocated_marks || 10} Marks]</span>
+                <span class="font-mono text-purple-400 font-extrabold text-xs ml-2">[${q.allocated_marks || q.marks || 10} Marks]</span>
             </div>
             ${figsHtml}
-            ${tblsHtml}
         `;
         container.appendChild(itemDiv);
     });
@@ -1396,61 +1372,91 @@ function renderScannedPaperPreview(data) {
     const questions = data.data ? (data.data.questions || []) : (data.questions || []);
     questions.forEach((q, idx) => {
         const itemDiv = document.createElement('div');
-        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200';
+        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200 shadow-sm';
 
         const qNum = q.question_number || q.q_num || ('Q' + (idx + 1));
         const promptText = q.prompt_text || q.question_text || '';
         const defaultMark = q.allocated_marks || q.marks || 10.0;
-        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().toUpperCase().trim();
+        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().trim();
         const optsList = q.options || [];
+        const isSubjective = (q.question_type === 'Subjective') || (!optsList || optsList.length === 0);
 
         const coVal = q.co || 'CO1';
         const bloomVal = q.bloom_level || 'C1';
         const poVal = q.po || 'PO1';
         const coPoBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">[${coVal}, ${bloomVal}, ${poVal}]</span>`;
+        const typeBadge = isSubjective 
+            ? `<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">Subjective</span>`
+            : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">MCQ Quiz</span>`;
 
-        let optsHtml = '';
-        if (optsList && optsList.length > 0) {
-            optsHtml = `
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300">
-                ${optsList.map(opt => `<div class="font-medium">${opt}</div>`).join('')}
+        let figureHtml = '';
+        const figUrl = q.figure_url || (q.associated_figures && q.associated_figures.length > 0 ? q.associated_figures[0].image_url : null);
+        if (figUrl) {
+            figureHtml = `
+            <div class="my-2 p-2 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center">
+                <img src="${figUrl}" alt="Figure for ${qNum}" class="max-h-48 object-contain rounded border border-slate-700 shadow-md">
+                <span class="text-[10px] font-mono text-cyan-400 mt-1">📷 ${qNum} Figure / Reference Image</span>
             </div>`;
         }
 
-        let keySelectHtml = `
-        <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
-            <div class="flex items-center gap-2">
-                <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
-                <div class="flex items-center gap-1">
-                    ${['A', 'B', 'C', 'D'].map(optKey => {
-                        const isChecked = (optKey === keyVal) ? 'checked' : '';
-                        return `
-                        <label class="cursor-pointer">
-                            <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
-                            <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
-                        </label>
-                        `;
-                    }).join('')}
+        let bodyContentHtml = '';
+        if (isSubjective) {
+            bodyContentHtml = `
+            <div class="space-y-2 pt-1 border-t border-slate-800/80">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> Model Answer & Marking Criteria:
+                    </label>
+                    <textarea id="preview_criteria_${qNum}" rows="2" onchange="updateStagedCriteria('${qNum}', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-sans focus:ring-2 focus:ring-purple-500 outline-none resize-y" placeholder="Enter model answer or marking rubric breakdown...">${keyVal}</textarea>
                 </div>
-            </div>
-            <div class="flex items-center gap-1">
-                <span class="text-[11px] text-slate-400 font-bold">Mark:</span>
-                <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateMcqMarkFromPreview('${qNum}', this.value)" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono font-bold text-center focus:ring-2 focus:ring-purple-500 outline-none">
-            </div>
-        </div>`;
+                <div class="flex items-center justify-end gap-2">
+                    <span class="text-[11px] text-slate-400 font-bold">Max Marks:</span>
+                    <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateStagedMark('${qNum}', this.value)" class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-purple-400 font-mono font-extrabold text-center focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+            </div>`;
+        } else {
+            let optsHtml = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300">
+                ${optsList.map(opt => `<div class="font-medium">${opt}</div>`).join('')}
+            </div>`;
+
+            let keySelectHtml = `
+            <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
+                    <div class="flex items-center gap-1">
+                        ${['A', 'B', 'C', 'D'].map(optKey => {
+                            const isChecked = (optKey === keyVal.toUpperCase()) ? 'checked' : '';
+                            return `
+                            <label class="cursor-pointer">
+                                <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
+                                <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
+                            </label>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[11px] text-slate-400 font-bold">Mark:</span>
+                    <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateMcqMarkFromPreview('${qNum}', this.value)" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono font-bold text-center focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+            </div>`;
+            bodyContentHtml = optsHtml + keySelectHtml;
+        }
 
         itemDiv.innerHTML = `
             <div class="flex items-start justify-between font-bold gap-3">
-                <div class="flex-1 space-y-1">
+                <div class="flex-1 space-y-1.5">
                     <div class="flex items-center gap-2">
                         <span class="text-sm text-cyan-300 font-mono font-extrabold">${qNum}.</span>
+                        ${typeBadge}
                         ${coPoBadge}
                     </div>
-                    <input type="text" id="preview_prompt_${qNum}" value="${promptText.replace(/"/g, '&quot;')}" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold w-full focus:ring-2 focus:ring-purple-500 outline-none">
+                    <textarea id="preview_prompt_${qNum}" rows="2" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium w-full focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
                 </div>
             </div>
-            ${optsHtml}
-            ${keySelectHtml}
+            ${figureHtml}
+            ${bodyContentHtml}
         `;
 
         if (container) container.appendChild(itemDiv.cloneNode(true));
@@ -1465,6 +1471,41 @@ function renderScannedPaperPreview(data) {
         modalPreviewBox.classList.remove('hidden');
     }
     lucide.createIcons();
+}
+
+function updateStagedMark(qNum, val) {
+    updateMcqMarkFromPreview(qNum, val);
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.marks = parseFloat(val) || 10.0;
+            targetQ.allocated_marks = parseFloat(val) || 10.0;
+        }
+    }
+}
+
+function updateStagedCriteria(qNum, val) {
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.correct_answer = val;
+            targetQ.ideal_answer = val;
+            targetQ.key = val;
+        }
+    }
+}
+
+function updateStagedPrompt(qNum, val) {
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.prompt_text = val;
+            targetQ.question_text = val;
+        }
+    }
 }
 
 function updateMcqKeyFromPreview(qNum, keyVal) {

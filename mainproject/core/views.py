@@ -4033,6 +4033,7 @@ def api_fast_scan_mcq_paper(request, exam_id):
 
     extracted_text = ""
     mime_type = 'image/jpeg'
+    extracted_figures = []
 
     if qp_file:
         file_bytes = qp_file.read()
@@ -4043,6 +4044,7 @@ def api_fast_scan_mcq_paper(request, exam_id):
             # 1. Direct PyMuPDF (fitz) extraction from bytes
             try:
                 import fitz
+                from django.conf import settings
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
                 pages_text = []
                 for page_idx in range(len(doc)):
@@ -4050,6 +4052,32 @@ def api_fast_scan_mcq_paper(request, exam_id):
                     if p_txt and p_txt.strip():
                         pages_text.append(p_txt.strip())
                 extracted_text = "\n\n".join(pages_text).strip()
+
+                # Extract embedded images/figures from PDF pages
+                fig_dir = settings.MEDIA_ROOT / 'exam_figures'
+                os.makedirs(fig_dir, exist_ok=True)
+                for p_idx in range(len(doc)):
+                    page = doc[p_idx]
+                    for img_idx, img_info in enumerate(page.get_images(full=True)):
+                        try:
+                            xref = img_info[0]
+                            base_image = doc.extract_image(xref)
+                            image_bytes = base_image.get("image")
+                            image_ext = base_image.get("ext", "png")
+                            if image_bytes and len(image_bytes) > 2048:  # ignore tiny icons
+                                fig_fname = f"exam_{exam.id}_p{p_idx+1}_img{img_idx+1}_{xref}.{image_ext}"
+                                fig_path = fig_dir / fig_fname
+                                with open(fig_path, 'wb') as f:
+                                    f.write(image_bytes)
+                                fig_url = f"/media/exam_figures/{fig_fname}"
+                                extracted_figures.append({
+                                    'caption': f"Figure {len(extracted_figures)+1}",
+                                    'image_url': fig_url,
+                                    'page': p_idx + 1
+                                })
+                        except Exception as img_ex:
+                            print(f"[FAST SCAN IMG EXTRACT WARNING] {img_ex}")
+
             except Exception as pdf_err:
                 print(f"[FAST SCAN PDF FITZ WARNING] {pdf_err}")
             
@@ -4126,32 +4154,36 @@ Return ONLY a valid JSON array matching this exact schema:
 ]
 """
         try:
-            raw_res = provider.generate_completion(prompt, system_instruction="Return ONLY a raw JSON array. No conversational text. No markdown formatting.")
+            raw_res = provider.generate_completion(prompt, system_instruction="You are a strict JSON parser API. Return ONLY a valid JSON array starting with '[' and ending with ']'. No markdown, no conversation, no thoughts.")
             raw_content = (raw_res or '').strip()
             print("[DEBUG RAW LLM RESPONSE]:", raw_content[:500])
             
-            # 1. Search for JSON markdown block ```json ... ```
-            json_blocks = re.findall(r'```(?:json)?\s*([\s\S]*?)\s*```', raw_content)
-            candidates = json_blocks if json_blocks else [raw_content]
-
             parsed = None
-            for cand in candidates:
-                cand = cand.strip()
-                b_start = cand.find('[')
-                b_end = cand.rfind(']')
-                if b_start != -1 and b_end > b_start:
+
+            # 1. Search for outermost JSON array [ { ... } ]
+            array_match = re.search(r'(\[\s*\{[\s\S]*\}\s*\])', raw_content)
+            if array_match:
+                try:
+                    parsed = json.loads(array_match.group(1))
+                except Exception:
+                    pass
+
+            # 2. Search for JSON object { "questions": [...] }
+            if parsed is None:
+                obj_match = re.search(r'(\{\s*"questions"[\s\S]*\}\s*)', raw_content)
+                if obj_match:
                     try:
-                        parsed = json.loads(cand[b_start:b_end+1])
-                        break
+                        parsed = json.loads(obj_match.group(1))
                     except Exception:
                         pass
-                
-                o_start = cand.find('{')
-                o_end = cand.rfind('}')
-                if o_start != -1 and o_end > o_start:
+
+            # 3. Find widest '[' and ']'
+            if parsed is None:
+                b_start = raw_content.find('[')
+                b_end = raw_content.rfind(']')
+                if b_start != -1 and b_end > b_start:
                     try:
-                        parsed = json.loads(cand[o_start:o_end+1])
-                        break
+                        parsed = json.loads(raw_content[b_start:b_end+1])
                     except Exception:
                         pass
 
@@ -4205,6 +4237,18 @@ Return ONLY a valid JSON array matching this exact schema:
 
         ans_key = str(q.get('correct_answer') or q.get('key') or ('B' if q_type == 'MCQ' else 'Model Answer / Criteria')).strip()
 
+        # Match associated figure if available
+        matched_fig_url = q.get('figure_url') or ''
+        assoc_figs = []
+        p_text_lower = prompt_txt.lower()
+        if not matched_fig_url and extracted_figures:
+            if 'figure 1' in p_text_lower or 'football' in p_text_lower or 'matrix' in p_text_lower or q_num in ['Q1', '1', 'Q1(a)']:
+                matched_fig_url = extracted_figures[0]['image_url']
+                assoc_figs = [extracted_figures[0]]
+            elif 'figure 2' in p_text_lower and len(extracted_figures) > 1:
+                matched_fig_url = extracted_figures[1]['image_url']
+                assoc_figs = [extracted_figures[1]]
+
         normalized_questions.append({
             "question_number": q_num,
             "q_num": q_num,
@@ -4218,7 +4262,9 @@ Return ONLY a valid JSON array matching this exact schema:
             "allocated_marks": marks_val,
             "co": co_val,
             "bloom_level": bloom_val,
-            "po": po_val
+            "po": po_val,
+            "figure_url": matched_fig_url,
+            "associated_figures": assoc_figs
         })
 
     # Cache freshly parsed questions for this exam
@@ -4236,10 +4282,12 @@ Return ONLY a valid JSON array matching this exact schema:
                 'co_mapping': q['co'],
                 'bloom_level': q['bloom_level'],
                 'po_mapping': q['po'],
-                'options': q['options']
+                'options': q['options'],
+                'figure_url': q.get('figure_url', ''),
+                'associated_figures': q.get('associated_figures', [])
             } for q in normalized_questions
         ],
-        'extracted_figures': [],
+        'extracted_figures': extracted_figures,
         'extracted_tables': [],
         'extracted_formulas': [],
         'dom_elements': [],
