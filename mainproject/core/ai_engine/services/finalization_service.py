@@ -60,6 +60,13 @@ class FinalizationService:
             }
         )
 
+        # 2.1 Synchronize OBE Course Tabulation & Grade Record
+        try:
+            from core.services.tabulation_service import sync_submission_to_tabulation
+            sync_submission_to_tabulation(submission)
+        except Exception as _e_tab:
+            print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} to tabulation: {_e_tab}")
+
         # 3. Purge Temporary Files (Working images, preview PDFs, temporary crops, OCR cache)
         deleted_files = cls._purge_temporary_artifacts(submission.id)
 

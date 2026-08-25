@@ -148,6 +148,12 @@ class AnswerCropService:
             if not working_path or not os.path.exists(working_path):
                 from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
                 working_path = WorkingCopyManager.get_latest_working_image_path(submission.id, p_num)
+            if (not working_path or not os.path.exists(working_path)) and sp.page_image:
+                try:
+                    if os.path.exists(sp.page_image.path):
+                        working_path = sp.page_image.path
+                except Exception:
+                    pass
 
             page_regs = regions_by_page.get(p_num, [])
             # If no specific sub-regions on this page (e.g. continuation page), use full page

@@ -790,6 +790,7 @@ Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awar
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
   "question_id": "{q_dto.id}",
+  "transcribed_text": "<exact_transcription_of_student_handwritten_solution_formulas_and_diagrams>",
   "obtained_marks": <float_sum_of_awarded_criterion_marks>,
   "maximum_marks": {q_dto.marks},
   "percentage": <float_percentage>,
@@ -799,16 +800,17 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
   "expected_points": [<list_of_strings>],
   "rubric_breakdown": [
     {{
-      "criteria": "<criterion_name>",
-      "allocated": <max_criterion_marks>,
-      "awarded": <awarded_criterion_marks>,
+      "criterion": "<criterion_name>",
+      "max_marks": <max_criterion_marks>,
+      "awarded_marks": <awarded_criterion_marks>,
       "evidence_found": "<exact_visual_evidence_in_image>",
       "missing_or_incorrect": "<omission_or_error_details_or_none>",
       "comments": "<justification_text>"
     }}
   ],
-  "feedback": "<step_by_step_marking_justification>",
-  "confidence": <float_between_0.0_and_1.0>,
+  "co_attainment": {{"{q_dto.co or 'CO1'}": <percentage_attained_0_to_100>}},
+  "feedback_text": "<step_by_step_marking_justification>",
+  "confidence_score": <float_between_0.0_and_1.0>,
   "requires_manual_review": <true_or_false>
 }}
 Return ONLY raw JSON without markdown commentary.
@@ -888,11 +890,17 @@ Return ONLY JSON without markdown commentary.
         start_t = time.time()
         question = answer.question
 
+        from core.models import (
+            EvaluationResult, EvaluationFeedback, PromptHistory,
+            EvaluationHistory, QuestionMapping
+        )
+
         # Construct canonical QuestionDTO via QuestionAccessor
         q_dto = QuestionAccessor.to_dto(question)
 
         # Step 0: Check Question Type for MCQ/Quiz Routing vs Subjective Multimodal Flow
-        q_types = [str(t).lower() for t in (q_dto.question_type if isinstance(q_dto.question_type, list) else [str(q_dto.question_type)])]
+        raw_types = getattr(q_dto, 'question_type', None) or getattr(question, 'question_type', []) or []
+        q_types = [str(t).lower() for t in (raw_types if isinstance(raw_types, list) else [str(raw_types)])]
         is_mcq_quiz = any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types)
 
         if is_mcq_quiz:
@@ -1048,26 +1056,35 @@ Return ONLY JSON without markdown commentary.
         cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (VisualMode={used_visual_mode}, Success={eval_data is not None}).")
 
         if eval_data:
+            # Update student answer transcription from multimodal vision output
+            transcribed = eval_data.get('transcribed_text') or eval_data.get('transcription') or eval_data.get('student_transcription')
+            if transcribed and str(transcribed).strip():
+                answer.extracted_text = str(transcribed).strip()
+                answer.save(update_fields=['extracted_text'])
+
             raw_m = eval_data.get('obtained_marks', eval_data.get('ai_suggested_marks', 0.0))
             rubric_breakdown = eval_data.get('rubric_breakdown', [])
             if rubric_breakdown and isinstance(rubric_breakdown, list):
                 sum_awarded = 0.0
                 has_valid_breakdown = False
                 for r_item in rubric_breakdown:
-                    if isinstance(r_item, dict) and 'awarded' in r_item:
-                        try:
-                            sum_awarded += float(r_item['awarded'])
-                            has_valid_breakdown = True
-                        except (ValueError, TypeError):
-                            pass
+                    if isinstance(r_item, dict):
+                        awarded_val = r_item.get('awarded_marks', r_item.get('awarded'))
+                        if awarded_val is not None:
+                            try:
+                                sum_awarded += float(awarded_val)
+                                has_valid_breakdown = True
+                            except (ValueError, TypeError):
+                                pass
                 if has_valid_breakdown:
                     raw_m = sum_awarded
 
             obtained_m = min(float(q_dto.marks), max(0.0, float(raw_m or 0.0)))
             max_m = float(q_dto.marks)
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)
-            conf = min(1.0, max(0.0, float(eval_data.get('confidence', eval_data.get('confidence_score', 0.85)))))
+            conf = min(1.0, max(0.0, float(eval_data.get('confidence_score', eval_data.get('confidence', 0.85)))))
             req_review = bool(eval_data.get('requires_manual_review', False)) or (not used_visual_mode) or (conf < 0.70) or answer.requires_manual_review
+            feedback_val = eval_data.get('feedback_text', eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.')))
 
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
@@ -1078,8 +1095,8 @@ Return ONLY JSON without markdown commentary.
                     'strengths_json': eval_data.get('strengths', []),
                     'mistakes_json': eval_data.get('mistakes', []),
                     'missing_points_json': eval_data.get('missing_points', []),
-                    'rubric_breakdown_json': eval_data.get('rubric_breakdown', []),
-                    'feedback_text': eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.')),
+                    'rubric_breakdown_json': rubric_breakdown,
+                    'feedback_text': feedback_val,
                     'confidence': conf,
                     'requires_manual_review': req_review
                 }
@@ -1100,8 +1117,8 @@ Return ONLY JSON without markdown commentary.
             eval_res.strengths_json = eval_data.get('strengths', [])
             eval_res.mistakes_json = eval_data.get('mistakes', [])
             eval_res.missing_points_json = eval_data.get('missing_points', [])
-            eval_res.rubric_breakdown_json = eval_data.get('rubric_breakdown', [])
-            eval_res.feedback_text = eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.'))
+            eval_res.rubric_breakdown_json = rubric_breakdown
+            eval_res.feedback_text = feedback_val
             eval_res.confidence = conf
             eval_res.requires_manual_review = req_review
             eval_res.save()
@@ -1115,13 +1132,17 @@ Return ONLY JSON without markdown commentary.
             )
 
             EvaluationFeedback.objects.filter(evaluation_result=eval_res).delete()
-            for r_item in eval_data.get('rubric_breakdown', []):
+            for r_item in rubric_breakdown:
+                c_name = r_item.get('criterion', r_item.get('criteria', 'Criteria'))
+                a_marks = float(r_item.get('max_marks', r_item.get('allocated', r_item.get('allocated_marks', 0.0))))
+                w_marks = float(r_item.get('awarded_marks', r_item.get('awarded', 0.0)))
+                comm = r_item.get('comments', '')
                 EvaluationFeedback.objects.create(
                     evaluation_result=eval_res,
-                    criteria_name=r_item.get('criteria', 'Criteria'),
-                    allocated_marks=float(r_item.get('allocated', 0.0)),
-                    awarded_marks=float(r_item.get('awarded', 0.0)),
-                    comments=r_item.get('comments', '')
+                    criteria_name=c_name,
+                    allocated_marks=a_marks,
+                    awarded_marks=w_marks,
+                    comments=comm
                 )
 
             return eval_res

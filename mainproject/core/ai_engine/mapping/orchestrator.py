@@ -633,14 +633,18 @@ class QuestionMappingOrchestrator:
 
             for m_item in confirmed_mappings:
                 q_id = m_item.get('question_id')
-                pg_list = m_item.get('page_numbers', [])
+                pg_list = m_item.get('page_numbers') or m_item.get('pages', [])
+                reg_list = m_item.get('regions') or m_item.get('regions_json', [])
 
                 if not q_id:
                     continue
 
                 q_obj = Question.objects.get(id=q_id)
                 q_map, _ = QuestionMapping.objects.get_or_create(submission=submission, question=q_obj)
-                q_map.page_numbers_json = pg_list
+                if pg_list:
+                    q_map.page_numbers_json = pg_list
+                if reg_list:
+                    q_map.regions_json = reg_list
                 q_map.confidence = 1.0  # Teacher confirmed
                 q_map.mapping_status = QuestionMapping.Status.MANUAL_OVERRIDE
                 q_map.is_confirmed = True
