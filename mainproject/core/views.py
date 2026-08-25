@@ -4248,17 +4248,21 @@ def course_tabulation_view(request, course_id):
             weightage_config={'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
         )
 
-    # Auto-sync backfill all existing evaluated submissions for this course upon page load
+    # Only sync/backfill submissions for students who DO NOT have a StudentGradeRecord yet!
     from core.services.tabulation_service import sync_submission_to_tabulation
     evaluated_subs = StudentSubmission.objects.filter(
         examination__course=course
     )
     
+    existing_ids = set(StudentGradeRecord.objects.filter(tabulation=tabulation).values_list('student_id', flat=True))
     for sub in evaluated_subs:
-        try:
-            sync_submission_to_tabulation(sub)
-        except Exception as e_backfill:
-            print(f"[TABULATION BACKFILL WARNING] {e_backfill}")
+        stu_id = (sub.student_roll_no or sub.student_name or f"STU-{sub.id}").strip()
+        if stu_id not in existing_ids:
+            try:
+                sync_submission_to_tabulation(sub)
+                existing_ids.add(stu_id)
+            except Exception as e_backfill:
+                print(f"[TABULATION BACKFILL WARNING] {e_backfill}")
 
     grade_records = StudentGradeRecord.objects.filter(tabulation=tabulation).order_by('student_id')
 

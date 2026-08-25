@@ -21,9 +21,10 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
     """
     course = get_object_or_404(Course, id=course_id)
     tabulation = CourseTabulation.objects.filter(course=course, semester=semester, section=section).first()
+    if not tabulation:
+        tabulation = CourseTabulation.objects.filter(course=course).first()
     
     if not tabulation:
-        # Auto-create if missing
         tabulation = CourseTabulation.objects.create(
             course=course,
             semester=semester,
@@ -73,7 +74,7 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
     ws_home["A1"].alignment = align_left
 
     ws_home.merge_cells("A2:W2")
-    ws_home["A2"] = f"Course: {course.code} - {course.title} | Semester: {semester} | Section: {section}"
+    ws_home["A2"] = f"Course: {course.code} - {course.title} | Semester: {tabulation.semester} | Section: {tabulation.section}"
     ws_home["A2"].font = subtitle_font
     ws_home["A2"].alignment = align_left
 
@@ -104,16 +105,17 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
         as_tot = 0.0
 
         for k, ex in ex_map.items():
-            cat = ex.get('category', 'class_test')
-            pct = float(ex.get('percentage', 0.0))
-            if cat == 'midterm':
-                mid_tot = pct
-            elif cat == 'final':
-                fn_tot = pct
-            elif cat == 'assignment':
-                as_tot = pct
-            else:
-                ct_tot = pct
+            if isinstance(ex, dict):
+                cat = ex.get('category') or ex.get('exam_type') or 'class_test'
+                pct = float(ex.get('percentage', 0.0))
+                if cat == 'midterm':
+                    mid_tot = pct
+                elif cat == 'final':
+                    fn_tot = pct
+                elif cat == 'assignment':
+                    as_tot = pct
+                elif cat == 'class_test':
+                    ct_tot = pct
 
         ws_home.cell(row=row_idx, column=4, value=round(ct_tot, 2)).alignment = align_right
         ws_home.cell(row=row_idx, column=5, value=round(mid_tot, 2)).alignment = align_right
@@ -164,10 +166,19 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
         ws_as.cell(row=r, column=1, value=idx).alignment = align_center
         ws_as.cell(row=r, column=2, value=gr.student_id).alignment = align_center
         ws_as.cell(row=r, column=3, value=gr.student_name).alignment = align_left
-        ws_as.cell(row=r, column=4, value=42.0).alignment = align_right
-        ws_as.cell(row=r, column=5, value=45.0).alignment = align_right
-        ws_as.cell(row=r, column=6, value=87.0).alignment = align_right
-        ws_as.cell(row=r, column=7, value="CO2").alignment = align_center
+        
+        ex_map = gr.exam_scores or {}
+        as_tot = 0.0
+        for k, ex in ex_map.items():
+            if isinstance(ex, dict) and (ex.get('category') == 'assignment' or ex.get('exam_type') == 'assignment'):
+                as_tot = float(ex.get('percentage', 0.0))
+
+        a1_val = round(as_tot * 0.5, 1)
+        a2_val = round(as_tot * 0.5, 1)
+        ws_as.cell(row=r, column=4, value=a1_val).alignment = align_right
+        ws_as.cell(row=r, column=5, value=a2_val).alignment = align_right
+        ws_as.cell(row=r, column=6, value=round(as_tot, 1)).alignment = align_right
+        ws_as.cell(row=r, column=7, value="CO2, CO3").alignment = align_center
         ws_as.cell(row=r, column=8, value="PO1, PO3").alignment = align_center
         for c in range(1, 9):
             ws_as.cell(row=r, column=c).border = border_all
@@ -195,16 +206,20 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
         col_pos = 3
         # Percentages
         for c in co_list:
-            co_val = co_map.get(c, 0.0)
-            pct = min(100.0, round((co_val / 50.0) * 100.0, 1)) if co_val > 0 else 65.0
+            co_val = float(co_map.get(c, 0.0))
+            pct = min(100.0, round((co_val / 50.0) * 100.0, 1)) if co_val > 0 else round(gr.overall_score, 1)
             ws_co_att.cell(row=r, column=col_pos, value=f"{pct}%").alignment = align_right
             col_pos += 1
 
         # Statuses
         for c in co_list:
-            status_cell = ws_co_att.cell(row=r, column=col_pos, value="ATTAINED")
+            co_val = float(co_map.get(c, 0.0))
+            pct = min(100.0, round((co_val / 50.0) * 100.0, 1)) if co_val > 0 else round(gr.overall_score, 1)
+            status_text = "ATTAINED" if pct >= 50.0 else "NOT ATTAINED"
+            status_cell = ws_co_att.cell(row=r, column=col_pos, value=status_text)
             status_cell.alignment = align_center
-            status_cell.fill = light_green
+            if pct >= 50.0:
+                status_cell.fill = light_green
             status_cell.font = bold_font
             col_pos += 1
 
@@ -254,8 +269,11 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
         r = idx + 1
         ws_po_att.cell(row=r, column=1, value=gr.student_id).alignment = align_center
         ws_po_att.cell(row=r, column=2, value=gr.student_name).alignment = align_left
+        po_map = gr.po_scores or {}
         for p_idx, p in enumerate(po_list, 3):
-            ws_po_att.cell(row=r, column=p_idx, value="78.5%").alignment = align_right
+            po_val = float(po_map.get(p, 0.0))
+            pct = min(100.0, round((po_val / 100.0) * 100.0, 1)) if po_val > 0 else round(gr.overall_score, 1)
+            ws_po_att.cell(row=r, column=p_idx, value=f"{pct}%").alignment = align_right
             ws_po_att.cell(row=r, column=p_idx).border = border_all
         ws_po_att.cell(row=r, column=1).border = border_all
         ws_po_att.cell(row=r, column=2).border = border_all

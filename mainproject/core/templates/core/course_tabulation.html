@@ -158,7 +158,33 @@
 
                         <!-- Action: Edit Record -->
                         <td class="px-4 py-3.5 text-center">
-                            <button type="button" onclick="openEditGradeModal({{ gr.id }}, '{{ gr.student_id|escapejs }}', '{{ gr.student_name|escapejs }}', {{ gr.class_test_data.percentage|default:0.0 }}, {{ gr.midterm_data.percentage|default:0.0 }}, {{ gr.final_data.percentage|default:0.0 }}, {{ gr.assignment_data.percentage|default:0.0 }}, 100.0)" class="px-2.5 py-1 bg-brand-500/10 hover:bg-brand-500 hover:text-white text-brand-600 dark:text-brand-400 border border-brand-500/20 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer">
+                            <button type="button" 
+                                class="btn-edit-grade px-2.5 py-1 bg-brand-500/10 hover:bg-brand-500 hover:text-white text-brand-600 dark:text-brand-400 border border-brand-500/20 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                                data-record-id="{{ gr.id }}"
+                                data-student-id="{{ gr.student_id }}"
+                                data-student-name="{{ gr.student_name }}"
+                                data-class-test="{{ gr.class_test_data.percentage|default:0.0 }}"
+                                data-midterm="{{ gr.midterm_data.percentage|default:0.0 }}"
+                                data-final="{{ gr.final_data.percentage|default:0.0 }}"
+                                data-assignment="{{ gr.assignment_data.percentage|default:0.0 }}"
+                                data-co1="{{ gr.co_scores.CO1|default:'' }}"
+                                data-co2="{{ gr.co_scores.CO2|default:'' }}"
+                                data-co3="{{ gr.co_scores.CO3|default:'' }}"
+                                data-co4="{{ gr.co_scores.CO4|default:'' }}"
+                                data-co5="{{ gr.co_scores.CO5|default:'' }}"
+                                data-po1="{{ gr.po_scores.PO1|default:'' }}"
+                                data-po2="{{ gr.po_scores.PO2|default:'' }}"
+                                data-po3="{{ gr.po_scores.PO3|default:'' }}"
+                                data-po4="{{ gr.po_scores.PO4|default:'' }}"
+                                data-po5="{{ gr.po_scores.PO5|default:'' }}"
+                                data-po6="{{ gr.po_scores.PO6|default:'' }}"
+                                data-po7="{{ gr.po_scores.PO7|default:'' }}"
+                                data-po8="{{ gr.po_scores.PO8|default:'' }}"
+                                data-po9="{{ gr.po_scores.PO9|default:'' }}"
+                                data-po10="{{ gr.po_scores.PO10|default:'' }}"
+                                data-po11="{{ gr.po_scores.PO11|default:'' }}"
+                                data-po12="{{ gr.po_scores.PO12|default:'' }}"
+                                onclick="openEditGradeModalFromButton(this)">
                                 <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
                             </button>
                         </td>
@@ -182,23 +208,23 @@
 
 <!-- Interactive Student Grade Record Edit Modal -->
 <div id="editGradeModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="glass-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-5 text-slate-800 dark:text-slate-200">
+    <div class="glass-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl text-slate-800 dark:text-slate-200">
         
         <!-- Modal Header -->
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
             <div class="flex items-center gap-2.5">
                 <span class="p-2 rounded-xl bg-brand-500/10 text-brand-500">
                     <i data-lucide="edit-3" class="w-5 h-5"></i>
                 </span>
                 <div>
-                    <h3 class="font-extrabold text-base theme-text-primary tracking-tight">Edit Student Grade & Assessment Scores</h3>
+                    <h3 class="font-extrabold text-base theme-text-primary tracking-tight">Edit Student Grade & OBE Outcome Scores</h3>
                     <p class="text-xs theme-text-muted">Changes instantly update the database & official Excel export (.xlsx)</p>
                 </div>
             </div>
             <button type="button" onclick="closeEditGradeModal()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer px-2">&times;</button>
         </div>
 
-        <form id="editGradeForm" onsubmit="submitEditGrade(event)" class="space-y-4">
+        <form id="editGradeForm" onsubmit="submitEditGrade(event)" class="p-6 space-y-4 overflow-y-auto flex-1">
             <input type="hidden" id="editRecordId" value="">
 
             <div class="grid grid-cols-2 gap-3">
@@ -244,6 +270,96 @@
                 </div>
             </div>
 
+            <!-- Course Outcomes (CO1 - CO5) Section -->
+            <div class="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <span class="text-xs font-bold theme-text-primary block flex items-center gap-1.5">
+                    <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Course Outcome Scores (CO1..CO5)
+                </span>
+                <p class="text-[11px] theme-text-muted">Attainment marks per Course Outcome (out of 50.0 / 100.0)</p>
+
+                <div class="grid grid-cols-5 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO1</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO2</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO2" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO3</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO3" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO4</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO4" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO5</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO5" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Program Outcomes (PO1 - PO12) Section -->
+            <div class="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <span class="text-xs font-bold theme-text-primary block flex items-center gap-1.5">
+                    <i data-lucide="award" class="w-4 h-4 text-cyan-500"></i> Program Outcome Scores (PO1..PO12)
+                </span>
+                <p class="text-[11px] theme-text-muted">Attainment marks per Program Outcome (out of 100.0)</p>
+
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO1</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO2</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO2" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO3</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO3" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO4</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO4" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO5</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO5" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO6</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO6" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO7</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO7" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO8</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO8" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO9</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO9" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO10</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO10" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO11</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO11" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO12</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO12" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                </div>
+            </div>
+
             <!-- Modal Action Buttons -->
             <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                 <button type="button" onclick="closeEditGradeModal()" class="px-4 py-2 text-xs font-bold theme-text-muted hover:text-white rounded-xl transition-all cursor-pointer">Cancel</button>
@@ -256,14 +372,27 @@
 </div>
 
 <script>
-function openEditGradeModal(recordId, studentId, studentName, ctVal, midVal, fnVal, asVal, attVal) {
-    document.getElementById('editRecordId').value = recordId;
-    document.getElementById('editStudentId').value = studentId;
-    document.getElementById('editStudentName').value = studentName;
-    document.getElementById('editClassTest').value = ctVal || 0;
-    document.getElementById('editMidterm').value = midVal || 0;
-    document.getElementById('editFinal').value = fnVal || 0;
-    document.getElementById('editAssignment').value = asVal || 0;
+function openEditGradeModalFromButton(btn) {
+    const ds = btn.dataset;
+    document.getElementById('editRecordId').value = ds.recordId;
+    document.getElementById('editStudentId').value = ds.studentId;
+    document.getElementById('editStudentName').value = ds.studentName;
+    document.getElementById('editClassTest').value = ds.classTest || 0;
+    document.getElementById('editMidterm').value = ds.midterm || 0;
+    document.getElementById('editFinal').value = ds.final || 0;
+    document.getElementById('editAssignment').value = ds.assignment || 0;
+    
+    // CO scores
+    for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`editCO${i}`);
+        if (el) el.value = ds[`co${i}`] || '';
+    }
+    
+    // PO scores
+    for (let i = 1; i <= 12; i++) {
+        const el = document.getElementById(`editPO${i}`);
+        if (el) el.value = ds[`po${i}`] || '';
+    }
     
     calculateLiveOverall();
     
@@ -325,13 +454,31 @@ function submitEditGrade(e) {
     btn.disabled = true;
     btn.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Saving...`;
 
+    const coScores = {};
+    for (let i = 1; i <= 5; i++) {
+        const raw = document.getElementById(`editCO${i}`).value.trim();
+        if (raw !== '') {
+            coScores[`CO${i}`] = parseFloat(raw) || 0.0;
+        }
+    }
+
+    const poScores = {};
+    for (let i = 1; i <= 12; i++) {
+        const raw = document.getElementById(`editPO${i}`).value.trim();
+        if (raw !== '') {
+            poScores[`PO${i}`] = parseFloat(raw) || 0.0;
+        }
+    }
+
     const payload = {
         student_name: document.getElementById('editStudentName').value.trim(),
         class_test: parseFloat(document.getElementById('editClassTest').value) || 0,
         midterm: parseFloat(document.getElementById('editMidterm').value) || 0,
         final: parseFloat(document.getElementById('editFinal').value) || 0,
         assignment: parseFloat(document.getElementById('editAssignment').value) || 0,
-        attendance: 100.0
+        attendance: 100.0,
+        co_scores: coScores,
+        po_scores: poScores
     };
 
     fetch(`/api/tabulation/grade-record/${recordId}/update/`, {
