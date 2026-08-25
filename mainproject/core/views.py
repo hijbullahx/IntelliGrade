@@ -1316,6 +1316,20 @@ def exam_create(request):
                 created_by=request.user
             )
 
+        if assigned_faculty:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=assigned_faculty,
+                    exam_title=exam.title,
+                    course_code=course.code,
+                    course_title=course.title,
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
+
         faculty_str = f" (Assigned Examiner: {assigned_faculty.get_full_name() or assigned_faculty.username})" if assigned_faculty else ""
         messages.success(request, f"Examination '{exam.title}' for {course.code} saved successfully!{faculty_str}")
 
@@ -1740,7 +1754,23 @@ def add_course(request):
             return redirect('add_course')
 
         dept_obj = Department.objects.filter(code=dept_code).first()
-        Course.objects.create(title=title, code=code, department=dept_obj)
+        course = Course.objects.create(title=title, code=code, department=dept_obj)
+        instructor_ids = request.POST.getlist('instructors') or request.POST.getlist('instructor')
+        if instructor_ids:
+            instructors = User.objects.filter(id__in=instructor_ids)
+            course.instructors.set(instructors)
+            for instructor in instructors:
+                try:
+                    from core.services.email_service import EmailService
+                    EmailService.send_course_assigned_to_teacher_notification(
+                        teacher_user=instructor,
+                        course_code=course.code,
+                        course_title=course.title,
+                        department_name=dept_obj.name if dept_obj else ""
+                    )
+                except Exception as _e:
+                    pass
+
         messages.success(request, f"Course '{title}' ({code}) registered successfully!")
         if redirect_after:
             return redirect(redirect_after)
@@ -1773,6 +1803,22 @@ def edit_course(request, course_id):
         course.code = code
         course.department = dept_obj
         course.save()
+
+        instructor_ids = request.POST.getlist('instructors')
+        if instructor_ids:
+            instructors = User.objects.filter(id__in=instructor_ids)
+            course.instructors.set(instructors)
+            for instructor in instructors:
+                try:
+                    from core.services.email_service import EmailService
+                    EmailService.send_course_assigned_to_teacher_notification(
+                        teacher_user=instructor,
+                        course_code=course.code,
+                        course_title=course.title,
+                        department_name=dept_obj.name if dept_obj else ""
+                    )
+                except Exception as _e:
+                    pass
 
         messages.success(request, f"Course '{title}' ({code}) updated successfully!")
         return redirect('courses_list')
@@ -1825,6 +1871,20 @@ def edit_exam(request, exam_id):
         exam.status = status
         exam.assigned_faculty = assigned_faculty
         exam.save()
+
+        if assigned_faculty:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=assigned_faculty,
+                    exam_title=exam.title,
+                    course_code=exam.course.code if exam.course else "",
+                    course_title=exam.course.title if exam.course else "",
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
 
         messages.success(request, f"Examination '{title}' updated successfully!")
         return redirect('exams_list')
@@ -1903,7 +1963,19 @@ def api_publish_exam(request):
 
         faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
 
-
+        if faculty_user:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=faculty_user,
+                    exam_title=exam.title,
+                    course_code=course.code,
+                    course_title=course.title,
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
 
         return JsonResponse({
             'success': True,

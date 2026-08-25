@@ -183,3 +183,57 @@ class EmailService:
             'portal_url': f"{cls._get_base_url()}/",
         }
         return cls._send_async_email(subject, [faculty_email], 'emails/faculty_report_summary.html', context, attachment_path=export_file_path, sync=sync)
+
+    @classmethod
+    def send_course_assigned_to_teacher_notification(
+        cls,
+        teacher_user,
+        course_code: str,
+        course_title: str,
+        department_name: Optional[str] = None,
+        sync: bool = False,
+    ):
+        """Sends notification to a teacher when assigned as an instructor/examiner for a course."""
+        recipient = getattr(teacher_user, 'email', None) or getattr(teacher_user, 'username', None)
+        if not recipient or '@' not in recipient:
+            return None
+
+        teacher_name = teacher_user.get_full_name() or teacher_user.username
+        subject = f"[Course Assigned] You are assigned as Instructor for {course_code} - {course_title}"
+        context = {
+            'teacher_name': teacher_name,
+            'course_code': course_code,
+            'course_title': course_title,
+            'department_name': department_name or '',
+            'workspace_url': f"{cls._get_base_url()}/teacher/login/",
+        }
+        return cls._send_async_email(subject, [recipient], 'emails/course_assigned_teacher.html', context, sync=sync)
+
+    @classmethod
+    def send_exam_assigned_to_teacher_notification(
+        cls,
+        teacher_user,
+        exam_title: str,
+        course_code: str,
+        course_title: str,
+        exam_date: str,
+        total_marks: str = "100",
+        sync: bool = False,
+    ):
+        """Sends notification to a teacher when assigned as the examiner for an examination."""
+        recipient = getattr(teacher_user, 'email', None) or getattr(teacher_user, 'username', None)
+        if not recipient or '@' not in recipient:
+            return None
+
+        teacher_name = teacher_user.get_full_name() or teacher_user.username
+        subject = f"[Examiner Assigned] {course_code} - {exam_title}"
+        context = {
+            'teacher_name': teacher_name,
+            'exam_title': exam_title,
+            'course_code': course_code,
+            'course_title': course_title,
+            'exam_date': str(exam_date),
+            'total_marks': str(total_marks),
+            'workspace_url': f"{cls._get_base_url()}/teacher/login/",
+        }
+        return cls._send_async_email(subject, [recipient], 'emails/exam_assigned_teacher.html', context, sync=sync)
