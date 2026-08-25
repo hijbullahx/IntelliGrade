@@ -2868,6 +2868,17 @@ def evaluate_answer_scripts_list(request, exam_id):
         messages.error(request, f"No examination found for ID #{exam_id}.")
         return redirect('teacher_dashboard')
 
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Access Denied: You are not assigned as the examiner for this examination.")
+        return redirect('teacher_dashboard')
+
+    # Guard: If no questions or documents are configured, redirect to Paper & Rubric Setup
+    if exam.questions.count() == 0 and not exam.question_paper_file:
+        messages.warning(request, f"Cannot evaluate scripts: No Question Paper or Rubrics are attached to '{exam.title}' yet. Please set up the question paper first.")
+        return redirect('question_rubric_manage', exam_id=exam.id)
+
     questions = exam.questions.all().select_related('rubric').order_by('id')
     submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
 

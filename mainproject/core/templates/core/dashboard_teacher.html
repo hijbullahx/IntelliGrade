@@ -122,9 +122,15 @@
                                     <a href="{% url 'course_tabulation_view' exam.course.id %}" class="px-3.5 py-2.5 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-500/20 rounded-xl transition-all inline-flex items-center gap-1.5 font-bold text-xs" title="View Live OBE Tabulation & Grade Sheet">
                                         <i data-lucide="table" class="w-4 h-4"></i> OBE Tabulation
                                     </a>
-                                    <a href="{% url 'start_exam_evaluation' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-brand-600 via-cyan-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 font-extrabold text-xs cursor-pointer">
+                                    {% if exam.questions.count > 0 or exam.question_paper_file %}
+                                    <a href="{% url 'start_exam_evaluation' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-brand-600 via-cyan-600 to-emerald-600 hover:from-brand-500 hover:to-emerald-500 text-white rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 font-extrabold text-xs cursor-pointer" title="Open Answer Script Evaluation Hub">
                                         <i data-lucide="play-circle" class="w-4 h-4"></i> Enter Evaluation System &rarr;
                                     </a>
+                                    {% else %}
+                                    <a href="{% url 'question_rubric_manage' exam.id %}" class="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 font-extrabold text-xs cursor-pointer" title="No questions or documents attached. Set up Question Paper & Rubric first.">
+                                        <i data-lucide="file-plus" class="w-4 h-4"></i> Setup Paper & Rubric &rarr;
+                                    </a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
