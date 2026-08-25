@@ -4470,8 +4470,8 @@ def api_forgot_password(request):
         return JsonResponse({'success': True, 'message': 'If that email is registered, a reset OTP has been sent.'})
 
     otp_code = str(random.randint(100000, 999999))
-    cache_key = f'pwd_reset_otp_{user.pk}'
-    cache.set(cache_key, otp_code, timeout=900)  # 15 minutes
+    cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+    cache.set(f"pwd_reset_otp_{user.id}", otp_code, timeout=900)
 
     try:
         from core.services.email_service import EmailService
@@ -4507,14 +4507,204 @@ def api_verify_reset_otp(request):
     if not user:
         return JsonResponse({'success': False, 'error': 'Invalid email or OTP.'}, status=400)
 
-    cache_key = f'pwd_reset_otp_{user.pk}'
-    stored_otp = cache.get(cache_key)
+    stored_otp = cache.get(f"password_reset_otp_{user.id}") or cache.get(f"pwd_reset_otp_{user.id}")
 
     if not stored_otp or stored_otp != otp_input:
         return JsonResponse({'success': False, 'error': 'Invalid or expired OTP. Please request a new reset code.'}, status=400)
 
     user.set_password(new_password)
     user.save()
-    cache.delete(cache_key)
+    cache.delete(f"password_reset_otp_{user.id}")
+    cache.delete(f"pwd_reset_otp_{user.id}")
 
     return JsonResponse({'success': True, 'message': 'Password reset successfully. You can now sign in with your new password.'})
+
+
+def forgot_password(request):
+    """
+    Forgot Password Endpoint.
+    Accepts identifier/email.
+    Generates a random 6-digit numeric OTP.
+    Caches OTP: cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+    Stores target user id: request.session['reset_user_id'] = user.id
+    Triggers EmailService.send_password_reset_otp_email(user=user, otp_code=otp_code)
+    Redirects to OTP verification view with flash message.
+    """
+    import random
+    from django.core.cache import cache
+
+    if request.method == 'POST':
+        identifier = ''
+        if request.content_type == 'application/json' or (request.body and request.body.startswith(b'{')):
+            try:
+                data = json.loads(request.body)
+                identifier = (data.get('identifier') or data.get('email') or data.get('username') or '').strip()
+            except Exception:
+                pass
+        if not identifier:
+            identifier = (request.POST.get('identifier') or request.POST.get('email') or request.POST.get('username') or '').strip()
+
+        if not identifier:
+            msg = "Please enter your registered institutional email or ID."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return render(request, 'core/forgot_password.html')
+
+        user = User.objects.filter(email__iexact=identifier).first() or User.objects.filter(username__iexact=identifier).first()
+
+        if user:
+            otp_code = f"{random.randint(100000, 999999)}"
+            cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+            cache.set(f"pwd_reset_otp_{user.id}", otp_code, timeout=900)
+            request.session['reset_user_id'] = user.id
+            request.session['reset_identifier'] = identifier
+
+            from core.services.email_service import EmailService
+            EmailService.send_password_reset_otp_email(user=user, otp_code=otp_code)
+
+            msg = "A 6-digit security OTP code has been sent to your registered institutional email."
+            messages.success(request, msg)
+
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({
+                    'success': True,
+                    'message': msg,
+                    'redirect_url': '/auth/verify-otp/'
+                })
+            return redirect('verify_otp')
+        else:
+            msg = "If that institutional ID or email is registered, a security OTP code has been dispatched."
+            messages.info(request, msg)
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': True, 'message': msg, 'redirect_url': '/auth/verify-otp/'})
+            return redirect('verify_otp')
+
+    return render(request, 'core/forgot_password.html')
+
+
+def verify_otp(request):
+    """
+    OTP Verification Endpoint.
+    Validates submitted code against cache.
+    On success: sets request.session['otp_verified'] = True and redirects to reset_password.
+    On failure: renders error message.
+    """
+    from django.core.cache import cache
+    reset_user_id = request.session.get('reset_user_id')
+
+    if request.method == 'POST':
+        otp_input = ''
+        if request.content_type == 'application/json' or (request.body and request.body.startswith(b'{')):
+            try:
+                data = json.loads(request.body)
+                otp_input = (data.get('otp') or data.get('otp_code') or '').strip()
+                if not reset_user_id and data.get('email'):
+                    u = User.objects.filter(email__iexact=data['email']).first() or User.objects.filter(username__iexact=data['email']).first()
+                    if u:
+                        reset_user_id = u.id
+                        request.session['reset_user_id'] = u.id
+            except Exception:
+                pass
+        if not otp_input:
+            otp_input = (request.POST.get('otp') or request.POST.get('otp_code') or '').strip()
+
+        if not reset_user_id:
+            msg = "Session expired or invalid reset request. Please request a new OTP."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return redirect('forgot_password')
+
+        user = User.objects.filter(pk=reset_user_id).first()
+        if not user:
+            msg = "User not found. Please request a new OTP."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return redirect('forgot_password')
+
+        cached_otp = cache.get(f"password_reset_otp_{user.id}") or cache.get(f"pwd_reset_otp_{user.id}")
+
+        if not cached_otp or str(cached_otp).strip() != str(otp_input).strip():
+            msg = "Invalid or expired OTP code. Please enter the 6-digit code sent to your email."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return render(request, 'core/verify_otp.html', {'error': msg})
+
+        # OTP verified!
+        request.session['otp_verified'] = True
+        msg = "OTP verification successful. Please choose your new password."
+        messages.success(request, msg)
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'redirect_url': '/auth/reset-password/'
+            })
+        return redirect('reset_password')
+
+    return render(request, 'core/verify_otp.html', {
+        'reset_identifier': request.session.get('reset_identifier', '')
+    })
+
+
+def reset_password(request):
+    """
+    Password Reset Endpoint.
+    Requires verified session (otp_verified=True).
+    Updates user password, cleans cache and session, and redirects to login.
+    """
+    from django.core.cache import cache
+    reset_user_id = request.session.get('reset_user_id')
+    otp_verified = request.session.get('otp_verified')
+
+    if not reset_user_id or not otp_verified:
+        messages.error(request, "Security check: Please verify your OTP code before setting a new password.")
+        return redirect('forgot_password')
+
+    user = User.objects.filter(pk=reset_user_id).first()
+    if not user:
+        messages.error(request, "User account not found.")
+        return redirect('forgot_password')
+
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+
+        if not new_password or len(new_password) < 6:
+            msg = "Password must be at least 6 characters long."
+            messages.error(request, msg)
+            return render(request, 'core/reset_password.html', {'error': msg})
+
+        if new_password != confirm_password:
+            msg = "Passwords do not match. Please re-enter carefully."
+            messages.error(request, msg)
+            return render(request, 'core/reset_password.html', {'error': msg})
+
+        user.set_password(new_password)
+        user.save()
+
+        # Clear security tokens and session
+        cache.delete(f"password_reset_otp_{user.id}")
+        cache.delete(f"pwd_reset_otp_{user.id}")
+        request.session.pop('reset_user_id', None)
+        request.session.pop('otp_verified', None)
+        request.session.pop('reset_identifier', None)
+
+        messages.success(request, "Your password has been successfully updated. Please sign in with your new credentials.")
+
+        profile = getattr(user, 'profile', None)
+        if profile and profile.role == Profile.Role.STUDENT:
+            return redirect('student_login')
+        elif profile and profile.role == Profile.Role.TEACHER:
+            return redirect('teacher_login')
+        elif profile and profile.role == Profile.Role.DEPARTMENT_HEAD:
+            return redirect('dept_head_login')
+        elif user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+            return redirect('exam_controller_login')
+        return redirect('landing_page')
+
+    return render(request, 'core/reset_password.html')
