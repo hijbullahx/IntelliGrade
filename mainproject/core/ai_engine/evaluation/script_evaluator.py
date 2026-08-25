@@ -19,6 +19,25 @@ from core.ai_engine.preprocessing.image_processor import ImagePreprocessingServi
 from core.ai_engine.providers.factory import AIProviderFactory
 from core.ai_engine.routing.task_types import TaskType
 
+
+def get_authoritative_answer_key(question) -> str:
+    """
+    Dynamically resolves ground-truth answer key for ANY arbitrary MCQ question object.
+    Priority 1: Direct question.correct_answer attribute
+    Priority 2: Rubric ideal answer
+    Priority 3: Extract from prompt text metadata (e.g. [Ans: B])
+    Fallback: 'A'
+    """
+    if getattr(question, 'correct_answer', None):
+        return str(question.correct_answer).strip().upper()
+    if hasattr(question, 'rubric') and question.rubric and question.rubric.ideal_answer:
+        return str(question.rubric.ideal_answer).strip().upper()
+    m = re.search(r'\[(?:Ans|Correct|Key)\s*:\s*([A-D1-4i-v])\]', getattr(question, 'prompt_text', '') or '', re.I)
+    if m:
+        return m.group(1).upper()
+    return 'A'
+
+
 class AIScriptEvaluator:
     """
     Production AI Answer Script Evaluation Engine (v3.0) for IntelliGrade.
@@ -335,45 +354,24 @@ Return strict JSON ONLY:
         submission.student_name = detected_name
         submission.student_roll_no = detected_roll
 
-        # 4. Build Ground-Truth Answer Key from Examination Questions
-        spec_answers = {
-            "Q1": "B", "Q2": "B", "Q3": "C", "Q4": "B", "Q5": "B",
-            "Q6": "C", "Q7": "A", "Q8": "B", "Q9": "B", "Q10": "A"
-        }
+        # 4. Build Ground-Truth Answer Key from Examination Questions (100% Dynamic DB Resolution)
         answer_key = {}
         for q in exam.questions.all().order_by('id'):
             q_num = str(q.question_number).upper().replace('QQ', 'Q')
             if not q_num.startswith('Q'):
                 q_num = f"Q{q_num}"
             
-            target_ans = spec_answers.get(q_num, "B")
-            if hasattr(q, 'rubric') and q.rubric:
-                q.rubric.ideal_answer = target_ans
-                q.rubric.save()
+            target_ans = get_authoritative_answer_key(q)
             answer_key[q_num] = target_ans
 
-        # 5. Build Detected Results from Vision JSON, OCR Regex, or Failsafe Local Detector
+        # 5. Build Detected Results from Vision JSON or Local Option Detection
         raw_answers = vision_json_data.get('answers', {})
         detected_results = {}
 
-        # Failsafe Local OpenCV / Synthetic Detection Map
-        failsafe_detection = {
-            "Q1": {"detected": ["B"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q2": {"detected": ["B"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q3": {"detected": ["C"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q4": {"detected": ["B"], "status": "VALID", "mark_type": "Filled Bubble (⬤)"},
-            "Q5": {"detected": ["B"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q6": {"detected": ["C"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q7": {"detected": ["A"], "status": "VALID", "mark_type": "Tick (✓)"},
-            "Q8": {"detected": ["A", "B"], "status": "REJECTED_MULTIPLE_MARKS", "mark_type": "Multi-Mark Rejection"},
-            "Q9": {"detected": [], "status": "NOT_ATTEMPTED", "mark_type": "None"},
-            "Q10": {"detected": ["A"], "status": "VALID", "mark_type": "Tick (✓)"}
-        }
         print(f"[DEBUG RAW ANSWERS FROM VISION]: {raw_answers}")
         print(f"[DEBUG AUTHORITATIVE ANSWER KEY]: {answer_key}")
 
         for q_key in answer_key.keys():
-            fallback_item = failsafe_detection.get(q_key, {"detected": ["B"], "status": "VALID", "mark_type": "Tick (✓)"})
             if q_key in raw_answers:
                 val = raw_answers[q_key]
                 if isinstance(val, list):
@@ -382,29 +380,28 @@ Return strict JSON ONLY:
                     det_list = [val.upper()]
                 else:
                     det_list = []
-
-                if not det_list and q_key not in ["Q8", "Q9"]:
-                    det_list = fallback_item["detected"]
-                elif q_key == "Q5" and det_list == ["A"]:
-                    det_list = ["B"]
-
-                if q_key == "Q8":
-                    status = "REJECTED_MULTIPLE_MARKS"
-                    det_list = ["A", "B"]
-                elif len(det_list) == 1:
-                    status = "VALID"
-                elif len(det_list) > 1:
-                    status = "REJECTED_MULTIPLE_MARKS"
-                else:
-                    status = "NOT_ATTEMPTED"
-                
-                detected_results[q_key] = {
-                    "detected": det_list,
-                    "status": status,
-                    "mark_type": "Vision AI Detected" if det_list else "None"
-                }
             else:
-                detected_results[q_key] = fallback_item
+                det_list = []
+
+            # Universal Attempt Resolution Mapping:
+            # Case 1: Exactly 1 positive mark -> VALID
+            # Case 2: >1 positive marks -> REJECTED_MULTIPLE_MARKS
+            # Case 3: 0 positive marks -> NOT_ATTEMPTED
+            if len(det_list) == 1:
+                status = "VALID"
+                mark_type = "Vision AI / OpenCV Detected"
+            elif len(det_list) > 1:
+                status = "REJECTED_MULTIPLE_MARKS"
+                mark_type = "Multi-Mark Rejection"
+            else:
+                status = "NOT_ATTEMPTED"
+                mark_type = "None"
+            
+            detected_results[q_key] = {
+                "detected": det_list,
+                "status": status,
+                "mark_type": mark_type
+            }
 
         # 6. Evaluate Quiz Submission
         from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
