@@ -138,9 +138,9 @@ class OpenRouterProvider(BaseAIProvider):
             if env_timeout > 0:
                 timeout_sec = env_timeout
             elif has_images_in_call:
-                timeout_sec = float(os.environ.get('AI_OPENROUTER_VISION_TIMEOUT', 45.0))
+                timeout_sec = float(os.environ.get('AI_OPENROUTER_VISION_TIMEOUT', 6.0))
             else:
-                timeout_sec = float(os.environ.get('AI_OPENROUTER_TEXT_TIMEOUT', 20.0))
+                timeout_sec = float(os.environ.get('AI_OPENROUTER_TEXT_TIMEOUT', 6.0))
         start_t = time.monotonic()
         print(f"[AI TIMING] OpenRouter model {selected_model} START (timeout={timeout_sec:.1f}s)")
         try:
@@ -176,8 +176,9 @@ class OpenRouterProvider(BaseAIProvider):
         )
 
     def extract_ocr_text(self, image_bytes: bytes, mime_type: str = 'image/png', timeout: Optional[float] = None, **kwargs) -> str:
+        eff_timeout = timeout if timeout is not None else kwargs.get('timeout')
         prompt = "Perform accurate OCR on this document image. Transcribe all text verbatim line-by-line."
-        return self._call_api(prompt, image_bytes=image_bytes, mime_type=mime_type, timeout=timeout)
+        return self._call_api(prompt, image_bytes=image_bytes, mime_type=mime_type, timeout=eff_timeout)
 
     def evaluate_answer(
         self,

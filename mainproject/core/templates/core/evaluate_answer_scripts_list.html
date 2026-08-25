@@ -16,14 +16,114 @@
             <h1 class="text-2xl font-extrabold theme-text-primary mt-1">Answer Script Evaluation Hub</h1>
             <p class="text-xs theme-text-muted mt-1">Examination: <strong>{{ exam.title }}</strong> | Total Questions: <strong>{{ exam.questions.count }}</strong></p>
         </div>
-        <div class="flex items-center gap-3">
-            <button type="button" onclick="triggerMcqEvaluation({{ exam.id }})" id="mcqEvalBtn" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2 text-xs cursor-pointer">
-                <i data-lucide="check-circle-2" class="w-4 h-4"></i> ⚡ Evaluate MCQ / Quiz (AI Engine)
-            </button>
-            <a href="{% url 'evaluation_wizard' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
-                <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
+        <div class="flex items-center gap-2">
+            <a href="{% url 'question_rubric_manage' exam.id %}" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center gap-1.5">
+                <i data-lucide="settings" class="w-4 h-4"></i> Manage Paper & Rubric
             </a>
         </div>
+    </div>
+
+    <!-- Smart Evaluation Entry Point / Control Banner -->
+    <div class="glass-card p-6 rounded-2xl border border-purple-500/30 bg-slate-900/90 shadow-xl space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="space-y-1.5 flex-1">
+                <div class="flex items-center gap-2">
+                    {% if is_mcq_exam %}
+                    <span class="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-extrabold font-mono uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-purple-400"></i> ✓ MCQ Question Paper Active ({{ questions.count }} Questions Scanned)
+                    </span>
+                    {% elif questions %}
+                    <span class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-extrabold font-mono uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-emerald-400"></i> ✓ Ordinary Descriptive Paper Active ({{ questions.count }} Questions)
+                    </span>
+                    {% else %}
+                    <span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-extrabold font-mono uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-400"></i> ⚠️ No Question Paper Configured Yet
+                    </span>
+                    {% endif %}
+                </div>
+                
+                {% if is_mcq_exam %}
+                <h3 class="font-extrabold text-lg text-white">MCQ Evaluation Control Center</h3>
+                <p class="text-xs text-slate-400">This examination is configured for MCQ auto-grading. View the scanned answer key, grade student scripts, or reset to re-scan.</p>
+                {% elif questions %}
+                <h3 class="font-extrabold text-lg text-white">Descriptive Script Evaluation Hub</h3>
+                <p class="text-xs text-slate-400">This examination is configured for Ordinary / Descriptive rubric evaluation. Launch the wizard or view student submissions.</p>
+                {% else %}
+                <h3 class="font-extrabold text-lg text-white">Question Paper Setup Required</h3>
+                <p class="text-xs text-slate-400">Scan an MCQ Question Paper or Ordinary Question Paper to activate AI script evaluation.</p>
+                {% endif %}
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+                {% if is_mcq_exam %}
+                <!-- MCQ Mode Buttons -->
+                <button type="button" onclick="toggleSavedMcqViewerInHub()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-purple-300 font-extrabold text-xs rounded-xl border border-purple-500/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="eye" class="w-4 h-4 text-purple-400"></i> 👁️ Show Scanned MCQ Paper & Key
+                </button>
+
+                <button type="button" onclick="triggerMcqEvaluation({{ exam.id }})" id="mcqEvalBtn" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2 text-xs cursor-pointer">
+                    <i data-lucide="zap" class="w-4 h-4"></i> ⚡ Evaluate Student MCQ Answer Scripts
+                </button>
+
+                <form method="POST" action="{% url 'question_rubric_manage' exam.id %}" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="examination_id" value="{{ exam.id }}">
+                    <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ exam.id }}'); return confirm('⚠️ Remove all scanned MCQ questions & answer keys?\n\nThis will reset the exam paper to initial state so you can re-scan as Ordinary or MCQ Question Paper.')" class="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> 🗑️ Remove All Scanned & Reset
+                    </button>
+                </form>
+
+                {% elif questions %}
+                <!-- Ordinary Descriptive Mode Buttons -->
+                <a href="{% url 'evaluation_wizard' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
+                </a>
+
+                <form method="POST" action="{% url 'question_rubric_manage' exam.id %}" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="examination_id" value="{{ exam.id }}">
+                    <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ exam.id }}'); return confirm('⚠️ Remove all scanned questions?\n\nThis will reset the exam paper to initial state so you can re-scan as Ordinary or MCQ Question Paper.')" class="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 font-extrabold text-xs rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> 🗑️ Remove All Scanned & Reset
+                    </button>
+                </form>
+
+                {% else %}
+                <!-- Initial Setup Buttons -->
+                <a href="{% url 'question_rubric_manage' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-2">
+                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan MCQ or Ordinary Paper &rarr;
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Collapsible Scanned MCQ Paper & Key Viewer Panel -->
+        {% if is_mcq_exam and questions %}
+        <div id="hubMcqViewerPanel" class="hidden p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h4 class="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
+                    <i data-lucide="list-checks" class="w-4 h-4"></i> Scanned MCQ Question Paper & Ground-Truth Answer Keys
+                </h4>
+                <span class="text-[10px] font-mono text-purple-400 font-bold">Total: {{ questions.count }} Question(s)</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+                {% for q in questions %}
+                <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                    <div class="flex items-start justify-between font-bold gap-2">
+                        <span class="text-cyan-300 font-mono">{{ q.question_number }}. {{ q.prompt_text }}</span>
+                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono shrink-0">
+                            Key: <strong>{% if q.rubric %}{{ q.rubric.ideal_answer|default:"B" }}{% else %}B{% endif %}</strong>
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5">
+                        <span>CO: <strong class="text-slate-200">{{ q.co_mapping|default:"CO1" }}</strong> | Bloom: <strong class="text-slate-200">{{ q.bloom_level|default:"C1" }}</strong></span>
+                        <span class="font-mono text-emerald-400 font-bold">{{ q.max_marks }} Marks</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Student Submissions Table -->
@@ -149,8 +249,23 @@
                 <input type="file" name="script_file" required accept=".pdf,.zip,.jpg,.jpeg,.png" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary">
             </div>
 
-            <div id="uploadStatus" class="hidden text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-medium">
-                Processing script & running AI evaluation...
+            <div id="uploadStatus" class="hidden space-y-3 p-4 rounded-xl bg-slate-950 border border-purple-500/30 text-xs">
+                <!-- Laser Scan Bar Animation -->
+                <div class="relative w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="uploadProgressBar" class="h-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400 w-1/4 transition-all duration-300"></div>
+                </div>
+                
+                <div class="flex items-center justify-between font-mono">
+                    <span id="uploadStatusText" class="text-purple-300 font-bold flex items-center gap-2">
+                        <i data-lucide="brain-circuit" class="w-4 h-4 text-purple-400 animate-spin"></i> 🧠 AI Vision Scanning Student Script...
+                    </span>
+                    <span id="uploadTimer" class="text-slate-400 font-bold">0.0s</span>
+                </div>
+
+                <!-- Real-time Console Log -->
+                <div id="uploadConsoleLogs" class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 font-mono text-[10px] space-y-1.5 max-h-32 overflow-y-auto">
+                    <!-- Dynamic Live Logs -->
+                </div>
             </div>
 
             <div class="flex justify-end gap-3 pt-2">
@@ -161,32 +276,190 @@
     </div>
 </div>
 
+<!-- MCQ Student Script Evaluation Result Modal -->
+<div id="mcqEvaluationResultModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-3xl w-full p-6 rounded-2xl shadow-2xl space-y-5 border border-purple-500/30 bg-slate-900/95 max-h-[90vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-4 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center font-bold">
+                    <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-base text-white flex items-center gap-2">
+                        MCQ Student Script AI Evaluation Result
+                    </h3>
+                    <p class="text-xs text-slate-400">Examination: <strong class="text-purple-300">{{ exam.title }}</strong></p>
+                </div>
+            </div>
+            <button onclick="closeMcqEvalModal()" class="text-slate-400 hover:text-white transition-colors">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Summary Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+            <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Total Score</span>
+                <span id="mcqTotalScore" class="text-lg font-black text-emerald-400 font-mono">0.0 / 0.0</span>
+                <span id="mcqPercentage" class="text-[10px] font-bold text-slate-400 block">(0.0%)</span>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Correct</span>
+                <span id="mcqTotalCorrect" class="text-lg font-black text-emerald-400 font-mono">0</span>
+                <span class="text-[10px] font-bold text-emerald-500/80 block">Matches Key</span>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Incorrect</span>
+                <span id="mcqTotalIncorrect" class="text-lg font-black text-rose-400 font-mono">0</span>
+                <span class="text-[10px] font-bold text-rose-500/80 block">Mismatch</span>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
+                <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Unattempted</span>
+                <span id="mcqTotalUnattempted" class="text-lg font-black text-amber-400 font-mono">0</span>
+                <span class="text-[10px] font-bold text-amber-500/80 block">Blank</span>
+            </div>
+        </div>
+
+        <!-- Question Breakdown Table -->
+        <div class="overflow-y-auto flex-1 border border-slate-800 rounded-xl bg-slate-950/90">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-900 text-slate-400 uppercase font-semibold sticky top-0 border-b border-slate-800">
+                    <tr>
+                        <th class="px-4 py-3">Question #</th>
+                        <th class="px-4 py-3">Detected Answer</th>
+                        <th class="px-4 py-3">Assigned Answer Key</th>
+                        <th class="px-4 py-3">Verdict</th>
+                        <th class="px-4 py-3 text-right">Marks Awarded</th>
+                    </tr>
+                </thead>
+                <tbody id="mcqBreakdownBody" class="divide-y divide-slate-800/60 font-mono text-slate-200">
+                    <!-- Dynamic Rows -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div class="flex justify-end gap-3 pt-2 border-t border-slate-800 shrink-0">
+            <button type="button" onclick="closeMcqEvalModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-extrabold transition-all">Close</button>
+            <button type="button" onclick="window.location.reload()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-extrabold shadow-lg transition-all">Done & Refresh Hub</button>
+        </div>
+    </div>
+</div>
+
 <script>
+let uploadTimerInterval = null;
+
+function appendUploadLog(msg, type = 'info') {
+    const logsContainer = document.getElementById('uploadConsoleLogs');
+    if (!logsContainer) return;
+
+    const entry = document.createElement('div');
+    entry.className = "flex items-start gap-1.5 font-mono text-[10px]";
+
+    const now = new Date();
+    const timeStr = `[${now.toTimeString().split(' ')[0]}.${String(now.getMilliseconds()).padStart(3, '0')}]`;
+
+    let colorClass = "text-slate-300";
+    let icon = "➔";
+
+    if (type === 'success') { colorClass = "text-emerald-400 font-bold"; icon = "✓"; }
+    else if (type === 'stage') { colorClass = "text-purple-300 font-bold"; icon = "🤖"; }
+    else if (type === 'warning') { colorClass = "text-amber-400 font-bold"; icon = "⚠️"; }
+    else if (type === 'error') { colorClass = "text-rose-400 font-bold"; icon = "❌"; }
+
+    entry.innerHTML = `<span class="text-slate-500 shrink-0">${timeStr}</span> <span class="${colorClass}">${icon} ${msg}</span>`;
+    logsContainer.appendChild(entry);
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+}
+
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const statusDiv = document.getElementById('uploadStatus');
+    const progressBar = document.getElementById('uploadProgressBar');
+    const statusText = document.getElementById('uploadStatusText');
+    const timerEl = document.getElementById('uploadTimer');
+    const logsContainer = document.getElementById('uploadConsoleLogs');
+
     statusDiv.classList.remove('hidden');
-    statusDiv.innerText = "Ingesting pages & running AI evaluation...";
+    if (logsContainer) logsContainer.innerHTML = '';
+    
+    if (progressBar) progressBar.style.width = '15%';
+    if (statusText) statusText.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4 text-purple-400 animate-spin"></i> 🧠 Ingesting Student Script & Initializing Vision Engine...`;
+    if (window.lucide) lucide.createIcons();
+
+    const startTime = Date.now();
+    if (uploadTimerInterval) clearInterval(uploadTimerInterval);
+    uploadTimerInterval = setInterval(() => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        if (timerEl) timerEl.innerText = `${elapsed}s`;
+    }, 100);
+
+    appendUploadLog("📁 Ingesting student answer script document...", "success");
+    appendUploadLog("🤖 Initializing Spatial Vision & HTR Tick Detection Engine...", "stage");
 
     try {
+        if (progressBar) progressBar.style.width = '45%';
+        appendUploadLog("🔍 Scanning student script pages & extracting option choices...", "info");
+
         const resp = await fetch("{% url 'upload_student_submission' exam.id %}", {
             method: 'POST',
             body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
         });
         const data = await resp.json();
-        if(data.success) {
-            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold";
-            statusDiv.innerText = "Evaluation completed successfully! Reloading...";
-            setTimeout(() => window.location.reload(), 1000);
+
+        if (data.success) {
+            if (progressBar) progressBar.style.width = '75%';
+            appendUploadLog("✓ Student script ingested successfully!", "success");
+
+            {% if is_mcq_exam %}
+            appendUploadLog("⚡ Comparing detected responses against Ground-Truth Answer Key...", "stage");
+
+            fetch(`/api/exam/{{ exam.id }}/evaluate-quiz/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ scheme: 'ALPHA_UPPER', marks_per_question: 10.0 })
+            })
+            .then(r => r.json())
+            .then(evalData => {
+                clearInterval(uploadTimerInterval);
+                if (progressBar) progressBar.style.width = '100%';
+                appendUploadLog("🎉 MCQ AI Evaluation Complete! Opening Score Breakdown...", "success");
+
+                setTimeout(() => {
+                    document.getElementById('uploadModal').classList.add('hidden');
+                    statusDiv.classList.add('hidden');
+                    if (evalData.status === 'success') {
+                        showMcqEvaluationModal(evalData);
+                    } else {
+                        alert(`❌ MCQ Evaluation Error: ${evalData.error || 'Evaluation failed.'}`);
+                        window.location.reload();
+                    }
+                }, 600);
+            })
+            .catch(err => {
+                clearInterval(uploadTimerInterval);
+                alert(`❌ Network error evaluating quiz: ${err.message}`);
+                window.location.reload();
+            });
+            {% else %}
+            clearInterval(uploadTimerInterval);
+            if (progressBar) progressBar.style.width = '100%';
+            appendUploadLog("🎉 Evaluation Complete! Reloading workspace...", "success");
+            setTimeout(() => window.location.reload(), 800);
+            {% endif %}
         } else {
-            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold";
-            statusDiv.innerText = "Error: " + data.error;
+            clearInterval(uploadTimerInterval);
+            appendUploadLog(`❌ Upload Error: ${data.error}`, "error");
         }
     } catch(err) {
-        statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold";
-        statusDiv.innerText = "Submission failed: " + err.message;
+        clearInterval(uploadTimerInterval);
+        appendUploadLog(`❌ Submission failed: ${err.message}`, "error");
     }
 });
 
@@ -235,43 +508,76 @@ async function deleteSubmission(subId, studentName) {
 }
 
 function triggerMcqEvaluation(examId) {
-    const btn = document.getElementById('mcqEvalBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Evaluating MCQ Papers...`;
-        lucide.createIcons();
+    const modal = document.getElementById('uploadModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
+}
 
-    fetch(`/api/exam/${examId}/evaluate-quiz/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({ scheme: 'ALPHA_UPPER', marks_per_question: 1.0 })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') {
-            alert(`✅ MCQ Evaluation Completed Successfully!\nTotal Score: ${data.summary.total_score} / ${data.summary.max_score} (${data.summary.percentage}%)\nCorrect: ${data.summary.total_correct}, Incorrect: ${data.summary.total_incorrect}, Rejected: ${data.summary.total_rejected}`);
-            window.location.reload();
+function showMcqEvaluationModal(data) {
+    const modal = document.getElementById('mcqEvaluationResultModal');
+    const summary = data.summary || {};
+    const breakdown = data.question_breakdown || [];
+
+    document.getElementById('mcqTotalScore').innerText = `${summary.total_score || 0.0} / ${summary.max_score || 0.0}`;
+    document.getElementById('mcqPercentage').innerText = `(${summary.percentage || 0.0}%)`;
+    document.getElementById('mcqTotalCorrect').innerText = summary.total_correct || 0;
+    document.getElementById('mcqTotalIncorrect').innerText = summary.total_incorrect || 0;
+    document.getElementById('mcqTotalUnattempted').innerText = summary.total_not_attempted || 0;
+
+    const tbody = document.getElementById('mcqBreakdownBody');
+    tbody.innerHTML = '';
+
+    breakdown.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition-colors';
+
+        const detected = (item.detected_answer && item.detected_answer.length > 0) ? item.detected_answer.join(', ') : 'None';
+        const correct = item.correct_answer || 'N/A';
+        const verdict = item.verdict || 'UNATTEMPTED';
+        const marks = item.marks_awarded || 0.0;
+
+        let verdictBadge = '';
+        if (verdict === 'CORRECT') {
+            verdictBadge = `<span class="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">✓ CORRECT (+${marks})</span>`;
+        } else if (verdict === 'INCORRECT') {
+            verdictBadge = `<span class="px-2.5 py-1 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold">✗ INCORRECT (${marks})</span>`;
+        } else if (verdict === 'REJECTED') {
+            verdictBadge = `<span class="px-2.5 py-1 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">⚠️ MULTIPLE MARKS</span>`;
         } else {
-            alert(`❌ MCQ Evaluation Error: ${data.error || 'Evaluation failed.'}`);
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i> ⚡ Evaluate MCQ / Quiz (AI Engine)`;
-                lucide.createIcons();
-            }
+            verdictBadge = `<span class="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">- NOT ATTEMPTED</span>`;
         }
-    })
-    .catch(err => {
-        alert(`❌ Network error: ${err.message}`);
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i> ⚡ Evaluate MCQ / Quiz (AI Engine)`;
-            lucide.createIcons();
-        }
+
+        tr.innerHTML = `
+            <td class="px-4 py-3 font-extrabold text-cyan-300">${item.question_number}</td>
+            <td class="px-4 py-3 font-bold">${detected}</td>
+            <td class="px-4 py-3 font-bold text-purple-300">${correct}</td>
+            <td class="px-4 py-3">${verdictBadge}</td>
+            <td class="px-4 py-3 text-right font-extrabold ${marks > 0 ? 'text-emerald-400' : 'text-slate-400'}">${marks}</td>
+        `;
+        tbody.appendChild(tr);
     });
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    lucide.createIcons();
+}
+
+function closeMcqEvalModal() {
+    const modal = document.getElementById('mcqEvaluationResultModal');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+}
+
+function toggleSavedMcqViewerInHub() {
+    const panel = document.getElementById('hubMcqViewerPanel');
+    if (panel) {
+        panel.classList.toggle('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
 }
 </script>
 {% endblock %}

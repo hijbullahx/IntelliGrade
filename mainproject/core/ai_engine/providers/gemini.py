@@ -24,7 +24,7 @@ class GeminiProvider(BaseAIProvider):
         "max_images": 16
     }
 
-    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
+    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
         self.api_key = api_key
         self.model_name = model_name
 
@@ -466,6 +466,6 @@ Return ONLY raw JSON in this schema:
                 "mark_distribution": {"core_concept": float(max_marks * 0.5), "accuracy": float(max_marks * 0.5)}
             }
 
-    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    def extract_ocr_text(self, image_bytes: bytes, mime_type: str = "image/jpeg", timeout: Optional[float] = None) -> str:
         prompt = "Transcribe all written and printed academic text, questions, matrices, course codes, marks, and tables from this document image word for word."
-        return self._call_api(prompt, image_bytes=image_bytes, mime_type=mime_type)
+        return self._call_api(prompt, image_bytes=image_bytes, mime_type=mime_type, timeout=timeout)

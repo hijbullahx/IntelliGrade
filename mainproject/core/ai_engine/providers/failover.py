@@ -97,10 +97,10 @@ class FailoverAIProvider(BaseAIProvider):
         # Legacy fallback when task_type is None or strategy is unmapped
         if has_imgs:
             order_priority = {
-                GroqProvider: 1,
-                OpenRouterProvider: 2,
-                GeminiProvider: 3,
-                OpenAIProvider: 4
+                GeminiProvider: 1,
+                OpenAIProvider: 2,
+                OpenRouterProvider: 3,
+                GroqProvider: 4
             }
             available = [
                 p for p in self._chain
@@ -122,6 +122,7 @@ class FailoverAIProvider(BaseAIProvider):
             return available
 
     def _execute_with_failover(self, method_name: str, *args, **kwargs) -> Any:
+        passed_timeout = kwargs.get('timeout')
         task_type = kwargs.pop('task_type', None)
         image_count = self._extract_image_count(args, kwargs)
         has_images = bool(image_count > 0 or kwargs.get('image_bytes') or kwargs.get('extra_files') or (args and any(isinstance(a, bytes) for a in args)))
@@ -143,12 +144,12 @@ class FailoverAIProvider(BaseAIProvider):
             elif method_name == 'analyze_question_full':
                 task_type = TaskType.COMPLEX_REASONING
 
-        # Per-task-type budget overrides — vision grading needs much more time
+        # Per-task-type budget overrides — vision grading needs adequate window
         _TASK_BUDGETS = {
-            'answer_grading': 120.0,
-            'answer_visual_read': 120.0,
-            'complex_reasoning': 90.0,
-            'ocr_text': 60.0,
+            'answer_grading': 30.0,
+            'answer_visual_read': 30.0,
+            'complex_reasoning': 30.0,
+            'ocr_text': 16.0,
         }
         env_budget = float(getattr(settings, 'AI_TOTAL_TIMEOUT_BUDGET', None) or os.environ.get('AI_TOTAL_TIMEOUT_BUDGET', 16.0))
         task_key = task_type.value if task_type else None
@@ -206,7 +207,10 @@ class FailoverAIProvider(BaseAIProvider):
                 last_error = f"Global AI timeout budget exhausted ({total_budget:.1f}s)"
                 break
 
-            provider_timeout = min(float(os.environ.get('AI_REQUEST_TIMEOUT', 6.0)), remaining_budget)
+            if passed_timeout is not None:
+                provider_timeout = min(float(passed_timeout), remaining_budget)
+            else:
+                provider_timeout = min(float(os.environ.get('AI_REQUEST_TIMEOUT', 8.0)), remaining_budget)
             call_kwargs['timeout'] = provider_timeout
 
             attempt = 0

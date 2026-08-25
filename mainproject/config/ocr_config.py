@@ -38,7 +38,7 @@ def get_easyocr_max_dimension() -> Optional[int]:
         except Exception:
             return None
 
-    if detect_runtime_environment() == 'CODESPACES' and not is_cuda_available():
+    if not is_cuda_available():
         return 1024
 
     return None

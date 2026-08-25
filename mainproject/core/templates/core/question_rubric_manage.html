@@ -37,7 +37,7 @@
             </div>
             
             <div class="flex items-center gap-3 w-full md:w-auto">
-                {% if selected_exam and questions %}
+                {% if selected_exam %}
                 <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
                     <i data-lucide="check-square" class="w-4 h-4"></i> Evaluate Answer Scripts
                 </a>
@@ -126,6 +126,70 @@
             </div>
         </div>
     </div>
+
+    <!-- Dedicated MCQ Examination Control Hub (Shows when examination is selected) -->
+    {% if selected_exam %}
+    <div class="glass-card p-5 rounded-2xl border border-purple-500/30 bg-slate-900/90 shadow-xl space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase font-mono tracking-wider">
+                        ✓ Configured MCQ Examination
+                    </span>
+                    <span class="text-xs font-bold text-slate-300 font-mono">
+                        {{ questions.count }} Question(s) Saved
+                    </span>
+                </div>
+                <h3 class="font-extrabold text-base text-white flex items-center gap-2">
+                    MCQ Examination Control & Student Script Hub
+                </h3>
+                <p class="text-xs text-slate-400">
+                    Review configured MCQ questions, option choices & answer keys, or launch AI evaluation for student answer scripts.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+                <!-- Button 1: View Configured MCQ Paper & Keys -->
+                <button type="button" onclick="toggleSavedMcqViewer()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-purple-300 font-extrabold text-xs rounded-xl border border-purple-500/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="eye" class="w-4 h-4 text-purple-400"></i> View Configured MCQ Paper & Keys
+                </button>
+
+                <!-- Button 2: Scan & Evaluate Student Answer Scripts -->
+                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
+                    <i data-lucide="check-square" class="w-4 h-4"></i> ⚡ Evaluate Student Answer Scripts &rarr;
+                </a>
+            </div>
+        </div>
+
+        <!-- Collapsible Saved MCQ Viewer Panel -->
+        <div id="savedMcqViewerPanel" class="hidden p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h4 class="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
+                    <i data-lucide="list-checks" class="w-4 h-4"></i> Finalized MCQ Questions & Ground-Truth Answer Keys
+                </h4>
+                <span class="text-[10px] font-mono text-purple-400 font-bold">Total: {{ questions.count }} Question(s)</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+                {% for q in questions %}
+                <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                    <div class="flex items-start justify-between font-bold gap-2">
+                        <span class="text-cyan-300 font-mono">{{ q.question_number }}. {{ q.prompt_text }}</span>
+                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono shrink-0">
+                            Key: <strong>{% if q.rubric %}{{ q.rubric.ideal_answer|default:"B" }}{% else %}B{% endif %}</strong>
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5">
+                        <span>CO: <strong class="text-slate-200">{{ q.co_mapping|default:"CO1" }}</strong> | Bloom: <strong class="text-slate-200">{{ q.bloom_level|default:"C1" }}</strong></span>
+                        <span class="font-mono text-emerald-400 font-bold">{{ q.max_marks }} Marks</span>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-500 italic text-center py-3">No MCQ questions configured yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Scanned Paper Unfinalized Live Preview Panel -->
     <div id="scannedPaperPreview" class="hidden glass-card p-6 rounded-2xl border-2 border-purple-500/40 space-y-4 bg-slate-900/60 backdrop-blur-md shadow-2xl">
@@ -1181,10 +1245,34 @@ function stopScan() {
 }
 
 function quitScan() {
+    window.currentStagedScanData = null;
     currentStagedScanData = null;
     stagedSupplementaryFile = null;
-    document.getElementById('scannedPaperPreview').classList.add('hidden');
-    document.getElementById('scannedQuestionsContainer').innerHTML = '';
+    uploadedQPFiles = [];
+
+    const previewBox = document.getElementById('scannedPaperPreview');
+    const modalPreviewBox = document.getElementById('modalScannedPreviewBox');
+    const container = document.getElementById('scannedQuestionsContainer');
+    const modalContainer = document.getElementById('modalScannedQuestionsContainer');
+    if (previewBox) previewBox.classList.add('hidden');
+    if (modalPreviewBox) modalPreviewBox.classList.add('hidden');
+    if (container) container.innerHTML = '';
+    if (modalContainer) modalContainer.innerHTML = '';
+
+    const modalFileInput = document.getElementById('modalQPFileInput');
+    if (modalFileInput) modalFileInput.value = '';
+    const mcqFileInput = document.getElementById('mcqScanFileInput');
+    if (mcqFileInput) mcqFileInput.value = '';
+
+    updateScanProgress(0, "Ready");
+    const scanLog = document.getElementById('scanLogConsole');
+    if (scanLog) scanLog.innerHTML = '';
+
+    const scanCompletedControls = document.getElementById('scanCompletedControls');
+    const scanInProgressControls = document.getElementById('scanInProgressControls');
+    if (scanCompletedControls) scanCompletedControls.classList.add('hidden');
+    if (scanInProgressControls) scanInProgressControls.classList.remove('hidden');
+
     closeScanProgressModal();
 }
 
@@ -1195,18 +1283,16 @@ function closeScanProgressModal() {
 }
 
 function viewScannedItems() {
-    if (!currentStagedScanData || !currentStagedScanData.data) {
+    if (!currentStagedScanData || (!currentStagedScanData.data && !currentStagedScanData.questions)) {
         alert("No scanned paper data available to view.");
         return;
     }
 
     renderScannedPaperPreview(currentStagedScanData);
     
-    // Expand and scroll modal preview
     const modalPreviewContainer = document.getElementById('modalScannedPreviewBox');
     if (modalPreviewContainer) {
         modalPreviewContainer.classList.remove('hidden');
-        renderModalInlinePreview(currentStagedScanData);
     }
 }
 
@@ -1293,12 +1379,15 @@ function renderScannedPaperPreview(data) {
         itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200';
 
         const qNum = q.question_number || q.q_num || ('Q' + (idx + 1));
-        const promptText = q.prompt_text || '';
+        const promptText = q.prompt_text || q.question_text || '';
         const defaultMark = q.allocated_marks || q.marks || 10.0;
-        const keyVal = q.key || 'B';
+        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().toUpperCase().trim();
         const optsList = q.options || [];
 
-        const coPoBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">[CO1, C2, PO1]</span>`;
+        const coVal = q.co || 'CO1';
+        const bloomVal = q.bloom_level || 'C1';
+        const poVal = q.po || 'PO1';
+        const coPoBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">[${coVal}, ${bloomVal}, ${poVal}]</span>`;
 
         let optsHtml = '';
         if (optsList && optsList.length > 0) {
@@ -1313,12 +1402,15 @@ function renderScannedPaperPreview(data) {
             <div class="flex items-center gap-2">
                 <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
                 <div class="flex items-center gap-1">
-                    ${['A', 'B', 'C', 'D'].map(optKey => `
+                    ${['A', 'B', 'C', 'D'].map(optKey => {
+                        const isChecked = (optKey === keyVal) ? 'checked' : '';
+                        return `
                         <label class="cursor-pointer">
-                            <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${optKey === keyVal ? 'checked' : ''} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
+                            <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
                             <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
                         </label>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
             <div class="flex items-center gap-1">
@@ -1359,6 +1451,15 @@ function updateMcqKeyFromPreview(qNum, keyVal) {
     const cleanNum = String(qNum).replace(/\D/g, '');
     const optRadio = document.querySelector(`input[name="mcq_opt_q${cleanNum}"][value="${keyVal}"]`);
     if (optRadio) optRadio.checked = true;
+
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum || (q.question_number || q.q_num) === `Q${cleanNum}`);
+        if (targetQ) {
+            targetQ.correct_answer = keyVal;
+            targetQ.key = keyVal;
+        }
+    }
 }
 
 function updateMcqMarkFromPreview(qNum, markVal) {
@@ -1378,6 +1479,23 @@ function finalizeScannedPaper() {
     const formData = new FormData();
     formData.append('examination_id', "{{ selected_exam.id }}");
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        if (qList && qList.length > 0) {
+            formData.append('staged_questions_json', JSON.stringify(qList.map(q => ({
+                question_number: q.question_number || q.q_num,
+                prompt_text: q.prompt_text || q.question_text,
+                allocated_marks: q.marks || q.allocated_marks || 10.0,
+                ideal_answer: q.correct_answer || q.key || 'B',
+                key: q.correct_answer || q.key || 'B',
+                co_mapping: q.co || 'CO1',
+                bloom_level: q.bloom_level || 'C1',
+                po_mapping: q.po || 'PO1',
+                options: q.options || []
+            }))));
+        }
+    }
 
     if (stagedSupplementaryFile) {
         formData.append('supplementary_file', stagedSupplementaryFile);
@@ -2164,6 +2282,14 @@ function runMcqStudentEvaluation(examId) {
             if (window.lucide) lucide.createIcons();
         }
     });
+}
+
+function toggleSavedMcqViewer() {
+    const panel = document.getElementById('savedMcqViewerPanel');
+    if (panel) {
+        panel.classList.toggle('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
 }
 </script>
 {% endblock %}

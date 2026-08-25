@@ -37,10 +37,18 @@ def evaluate_quiz_submission(
 
     for q_id, correct_ans in answer_key.items():
         det_info = detected_results.get(q_id, {"detected": [], "status": "NOT_ATTEMPTED", "mark_type": "None"})
-        
-        det_status = det_info.get("status", "NOT_ATTEMPTED")
-        det_list = det_info.get("detected", [])
-        mark_type = det_info.get("mark_type", "None")
+        if isinstance(det_info, list):
+            det_list = det_info
+            det_status = "VALID" if det_list else "NOT_ATTEMPTED"
+            mark_type = "Checkmark" if det_list else "None"
+        elif isinstance(det_info, dict):
+            det_status = det_info.get("status", "NOT_ATTEMPTED")
+            det_list = det_info.get("detected", [])
+            mark_type = det_info.get("mark_type", "None")
+        else:
+            det_status = "NOT_ATTEMPTED"
+            det_list = []
+            mark_type = "None"
 
         # Normalize correct answer to a set of strings for exact matching
         if isinstance(correct_ans, (list, tuple, set)):

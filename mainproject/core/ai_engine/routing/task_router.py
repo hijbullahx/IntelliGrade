@@ -46,14 +46,14 @@ class TaskRouter:
     """
 
     TASK_CHAINS: Dict[TaskType, List[Type[BaseAIProvider]]] = {
-        TaskType.OCR_TEXT: [GroqProvider, OpenRouterProvider, GeminiProvider],
-        TaskType.ROUTINE_PARSE: [GroqProvider, OpenRouterProvider, GeminiProvider],
-        TaskType.QUESTION_MAPPING: [GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.ANSWER_VISUAL_READ: [GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.ANSWER_GRADING: [GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.FEEDBACK_GENERATION: [GroqProvider, OpenRouterProvider, GeminiProvider],
-        TaskType.REPORT_SUMMARY: [GroqProvider, OpenRouterProvider, GeminiProvider],
-        TaskType.COMPLEX_REASONING: [GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
+        TaskType.OCR_TEXT: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
+        TaskType.ROUTINE_PARSE: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
+        TaskType.QUESTION_MAPPING: [GeminiProvider, GroqProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
+        TaskType.ANSWER_GRADING: [GeminiProvider, GroqProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.FEEDBACK_GENERATION: [GeminiProvider, GroqProvider, OpenRouterProvider],
+        TaskType.REPORT_SUMMARY: [GeminiProvider, GroqProvider, OpenRouterProvider],
+        TaskType.COMPLEX_REASONING: [GeminiProvider, OpenAIProvider, GroqProvider, OpenRouterProvider],
     }
 
     TASK_MAX_IMAGES: Dict[TaskType, int] = {
