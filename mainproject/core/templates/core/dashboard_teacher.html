@@ -16,8 +16,8 @@
         </div>
     </div>
 
-    <!-- Stat Metrics Grid (3 Cards) -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+    <!-- Stat Metrics Grid (2 Cards) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border-l-4 border-l-brand-500">
             <div class="flex items-center justify-between">
                 <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Assigned Exams</span>
@@ -28,19 +28,6 @@
             <div class="mt-4">
                 <span class="text-3xl font-extrabold theme-text-primary tracking-tight">{{ stats.total_exams }}</span>
                 <span class="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-1 font-medium"><i data-lucide="shield-check" class="w-3 h-3"></i> Assigned by Chief Controller</span>
-            </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl relative overflow-hidden group border-l-4 border-l-amber-500">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Pending AI Reviews</span>
-                <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
-                    <i data-lucide="clock" class="w-5 h-5"></i>
-                </div>
-            </div>
-            <div class="mt-4">
-                <span class="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">{{ stats.pending_reviews }}</span>
-                <span class="text-xs theme-text-muted flex items-center gap-1 mt-1 font-medium">Action required</span>
             </div>
         </div>
 
