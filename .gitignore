@@ -27,6 +27,7 @@ __pycache__/
 *.class
 *.so
 .Python
+Portable_AI
 
 # ==========================================
 # Virtual Environments
