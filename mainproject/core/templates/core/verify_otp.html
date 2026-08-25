@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Verify Security OTP | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto py-12">
+    
+    <div class="glass-card p-8 rounded-3xl space-y-6 shadow-2xl relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-500 to-orange-500 p-0.5 mx-auto shadow-lg shadow-amber-500/20 flex items-center justify-center">
+                <div class="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                    <i data-lucide="shield-check" class="w-7 h-7 text-amber-400"></i>
+                </div>
+            </div>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Verify Security OTP</h1>
+            <p class="theme-text-muted text-xs">Enter the 6-digit verification OTP code dispatched to your institutional email address.</p>
+            {% if reset_identifier %}
+            <p class="text-[11px] font-mono text-sky-400 bg-sky-500/10 py-1 px-3 rounded-full inline-block">{{ reset_identifier }}</p>
+            {% endif %}
+        </div>
+
+        {% if messages %}
+        <div class="space-y-2">
+            {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs {% if message.tags == 'error' %}bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400{% else %}bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if error %}
+        <div class="p-3 rounded-xl text-xs bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Form -->
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-xs font-semibold theme-text-secondary mb-1.5 text-center">6-Digit Security Code</label>
+                <div class="relative">
+                    <input type="text" name="otp" maxlength="6" placeholder="000000" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-center text-xl tracking-[0.5em] font-mono font-bold theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none" required autofocus>
+                </div>
+                <p class="text-[10px] text-slate-500 text-center mt-1.5">Security OTP is valid for 15 minutes.</p>
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-600/20 transition-all hover:scale-[1.02] flex items-center justify-center gap-2">
+                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Validate OTP Code
+            </button>
+        </form>
+
+        <div class="text-center pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+            <a href="{% url 'forgot_password' %}" class="text-sky-500 hover:underline">
+                Resend Code
+            </a>
+            <a href="{% url 'student_login' %}" class="theme-text-secondary hover:underline">
+                Cancel & Return
+            </a>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

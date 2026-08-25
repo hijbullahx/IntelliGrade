@@ -37,7 +37,7 @@ ALLOWED_HOSTS = get_env_list(
 
 DJANGO_SITE_URL = get_env_value('DJANGO_SITE_URL', fallback_names=('SITE_URL', 'BASE_URL', 'APP_URL', 'PUBLIC_URL'))
 DJANGO_PUBLIC_URL = get_env_value('DJANGO_PUBLIC_URL', fallback_names=('PUBLIC_URL', 'APP_URL', 'BASE_URL', 'SITE_URL'))
-SITE_URL = DJANGO_SITE_URL or DJANGO_PUBLIC_URL or ''
+SITE_URL = os.getenv('SITE_URL', DJANGO_SITE_URL or DJANGO_PUBLIC_URL or 'http://127.0.0.1:8000')
 PUBLIC_URL = DJANGO_PUBLIC_URL or DJANGO_SITE_URL or ''
 BASE_URL = PUBLIC_URL or SITE_URL
 APP_URL = PUBLIC_URL or SITE_URL
@@ -136,15 +136,23 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Production & Institutional Email Configuration (intelligrade@dsr.iubat.ac.bd)
-EMAIL_BACKEND = os.getenv('DJANGO_EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend' if os.getenv('EMAIL_HOST_USER') else 'django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1')
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1')
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', os.getenv('DJANGO_EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend' if os.getenv('EMAIL_HOST_USER') else 'django.core.mail.backends.console.EmailBackend'))
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'mail.dsr.iubat.ac.bd')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 465))
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'True').lower() in ('true', '1')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False').lower() in ('true', '1')
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'intelligrade@dsr.iubat.ac.bd')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'IntelliGrade Support <intelligrade@dsr.iubat.ac.bd>')
 SERVER_EMAIL = os.getenv('SERVER_EMAIL', 'intelligrade@dsr.iubat.ac.bd')
+
+# Cache configuration for Security OTP Lifecycle
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'intelligrade-security-cache',
+    }
+}
 
 # Production Security & Session Hardening
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('true', '1')

@@ -321,12 +321,6 @@ def student_register(request):
         )
 
         messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
-        # Send welcome email asynchronously
-        try:
-            from core.services.email_service import EmailService
-            EmailService.send_account_creation_email(user, raw_password=password)
-        except Exception as _e_mail:
-            pass
         return redirect('student_login')
 
     departments = Department.objects.filter(is_active=True)
@@ -588,11 +582,19 @@ def add_student(request):
             }
         )
 
-        # Console Simulation of Sending Welcome Email with Credentials
-        print(f"\n[EMAIL SYSTEM SIMULATION]")
-        print(f"To: {email}")
-        print(f"Subject: Welcome to IntelliGrade - Student Access Credentials")
-        print(f"Body: Hello {full_name},\nYour student account has been registered by the Chief Exam Controller.\nStudent ID: {student_id}\nPassword: {password}\nLogin Portal: http://127.0.0.1:8000/student/login/\n")
+        # Dispatch official welcome email with credentials
+        dept_name = dept_obj.name if dept_obj else ""
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Student",
+                department_name=dept_name,
+                login_url_path="/student/login/"
+            )
+        except Exception as _e_mail:
+            pass
 
         messages.success(request, f"Student '{full_name}' ({student_id}) registered successfully! Welcome email sent to {email}.")
         return redirect('exam_controller_dashboard')
@@ -614,13 +616,22 @@ def approve_student(request, profile_id):
         profile.is_approved = True
         profile.save()
 
-        # Console Simulation of Sending Approval Email
-        print(f"\n[EMAIL SYSTEM SIMULATION]")
-        print(f"To: {profile.user.email}")
-        print(f"Subject: Account Approved - IntelliGrade Student Portal Access")
-        print(f"Body: Hello {profile.user.first_name},\nYour self-registration request for Student ID {profile.user.username} has been approved by the Chief Exam Controller.\nYou can now log in at http://127.0.0.1:8000/student/login/\n")
+        # Dispatch official approval welcome email
+        dept_name = profile.department.name if profile.department else ""
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=profile.user,
+                raw_password=None,
+                role_name="Student",
+                department_name=dept_name,
+                login_url_path="/student/login/",
+                is_approval=True
+            )
+        except Exception as _e_mail:
+            pass
 
-        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated!")
+        messages.success(request, f"Student account '{profile.user.get_full_name()}' (ID: {profile.user.username}) approved and activated! Official welcome email dispatched.")
     return redirect('pending_students')
 
 
@@ -781,11 +792,17 @@ def add_faculty(request):
             }
         )
 
-        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated.")
-        # Send welcome email asynchronously
+        messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated and welcome email sent.")
+        # Send welcome email asynchronously with role & portal link
         try:
             from core.services.email_service import EmailService
-            EmailService.send_account_creation_email(user, raw_password=password)
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Faculty Member / Examiner",
+                department_name=dept_obj.name if dept_obj else "",
+                login_url_path="/teacher/login/"
+            )
         except Exception as _e_mail:
             pass
         if redirect_after:
@@ -833,7 +850,18 @@ def add_dept_head(request):
             }
         )
 
-        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated.")
+        messages.success(request, f"Department Head '{full_name}' ({username}) registered successfully! Credentials activated and welcome email sent.")
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(
+                user=user,
+                raw_password=password,
+                role_name="Department Head",
+                department_name=dept_obj.name if dept_obj else "",
+                login_url_path="/dept-head/login/"
+            )
+        except Exception as _e_mail:
+            pass
         return redirect('exam_controller_dashboard')
 
     departments = Department.objects.filter(is_active=True)
@@ -1288,6 +1316,20 @@ def exam_create(request):
                 created_by=request.user
             )
 
+        if assigned_faculty:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=assigned_faculty,
+                    exam_title=exam.title,
+                    course_code=course.code,
+                    course_title=course.title,
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
+
         faculty_str = f" (Assigned Examiner: {assigned_faculty.get_full_name() or assigned_faculty.username})" if assigned_faculty else ""
         messages.success(request, f"Examination '{exam.title}' for {course.code} saved successfully!{faculty_str}")
 
@@ -1712,7 +1754,23 @@ def add_course(request):
             return redirect('add_course')
 
         dept_obj = Department.objects.filter(code=dept_code).first()
-        Course.objects.create(title=title, code=code, department=dept_obj)
+        course = Course.objects.create(title=title, code=code, department=dept_obj)
+        instructor_ids = request.POST.getlist('instructors') or request.POST.getlist('instructor')
+        if instructor_ids:
+            instructors = User.objects.filter(id__in=instructor_ids)
+            course.instructors.set(instructors)
+            for instructor in instructors:
+                try:
+                    from core.services.email_service import EmailService
+                    EmailService.send_course_assigned_to_teacher_notification(
+                        teacher_user=instructor,
+                        course_code=course.code,
+                        course_title=course.title,
+                        department_name=dept_obj.name if dept_obj else ""
+                    )
+                except Exception as _e:
+                    pass
+
         messages.success(request, f"Course '{title}' ({code}) registered successfully!")
         if redirect_after:
             return redirect(redirect_after)
@@ -1745,6 +1803,22 @@ def edit_course(request, course_id):
         course.code = code
         course.department = dept_obj
         course.save()
+
+        instructor_ids = request.POST.getlist('instructors')
+        if instructor_ids:
+            instructors = User.objects.filter(id__in=instructor_ids)
+            course.instructors.set(instructors)
+            for instructor in instructors:
+                try:
+                    from core.services.email_service import EmailService
+                    EmailService.send_course_assigned_to_teacher_notification(
+                        teacher_user=instructor,
+                        course_code=course.code,
+                        course_title=course.title,
+                        department_name=dept_obj.name if dept_obj else ""
+                    )
+                except Exception as _e:
+                    pass
 
         messages.success(request, f"Course '{title}' ({code}) updated successfully!")
         return redirect('courses_list')
@@ -1797,6 +1871,20 @@ def edit_exam(request, exam_id):
         exam.status = status
         exam.assigned_faculty = assigned_faculty
         exam.save()
+
+        if assigned_faculty:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=assigned_faculty,
+                    exam_title=exam.title,
+                    course_code=exam.course.code if exam.course else "",
+                    course_title=exam.course.title if exam.course else "",
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
 
         messages.success(request, f"Examination '{title}' updated successfully!")
         return redirect('exams_list')
@@ -1875,21 +1963,19 @@ def api_publish_exam(request):
 
         faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
 
-        # Dispatch exam-assigned notification to enrolled students
-        try:
-            from core.services.email_service import EmailService
-            enrolled = Profile.objects.filter(role=Profile.Role.STUDENT, department=course.department)
-            for prof in enrolled:
-                if prof.user.email and '@' in prof.user.email:
-                    EmailService.send_exam_assigned_notification(
-                        student_email=prof.user.email,
-                        student_name=prof.user.get_full_name() or prof.user.username,
-                        exam_title=exam.title,
-                        course_code=course.code,
-                        exam_date=str(exam.exam_date)
-                    )
-        except Exception as _e_mail:
-            pass
+        if faculty_user:
+            try:
+                from core.services.email_service import EmailService
+                EmailService.send_exam_assigned_to_teacher_notification(
+                    teacher_user=faculty_user,
+                    exam_title=exam.title,
+                    course_code=course.code,
+                    course_title=course.title,
+                    exam_date=str(exam.exam_date),
+                    total_marks=str(exam.total_marks)
+                )
+            except Exception as _e:
+                pass
 
         return JsonResponse({
             'success': True,
@@ -3783,26 +3869,7 @@ def api_finalize_evaluation(request, submission_id):
                 teacher_user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR')
             )
-            # Send evaluation published notification to student
-            try:
-                from core.services.email_service import EmailService
-                student_email = ''
-                if submission.student and submission.student.email:
-                    student_email = submission.student.email
-                elif '@' in (submission.student_name or ''):
-                    student_email = submission.student_name
-                if student_email:
-                    pct = float(submission.percentage or 0.0)
-                    grade = 'A+' if pct >= 80 else ('A' if pct >= 75 else ('A-' if pct >= 70 else ('B+' if pct >= 65 else ('B' if pct >= 60 else ('F')))))
-                    EmailService.send_evaluation_published_notification(
-                        student_email=student_email,
-                        student_name=submission.student_name,
-                        exam_title=submission.examination.title,
-                        score=f"{submission.total_obtained_marks}/{submission.total_max_marks}",
-                        grade=grade
-                    )
-            except Exception as _e_mail:
-                pass
+
             return JsonResponse(res)
         except Exception as e:
             import traceback
@@ -4470,8 +4537,8 @@ def api_forgot_password(request):
         return JsonResponse({'success': True, 'message': 'If that email is registered, a reset OTP has been sent.'})
 
     otp_code = str(random.randint(100000, 999999))
-    cache_key = f'pwd_reset_otp_{user.pk}'
-    cache.set(cache_key, otp_code, timeout=900)  # 15 minutes
+    cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+    cache.set(f"pwd_reset_otp_{user.id}", otp_code, timeout=900)
 
     try:
         from core.services.email_service import EmailService
@@ -4507,14 +4574,204 @@ def api_verify_reset_otp(request):
     if not user:
         return JsonResponse({'success': False, 'error': 'Invalid email or OTP.'}, status=400)
 
-    cache_key = f'pwd_reset_otp_{user.pk}'
-    stored_otp = cache.get(cache_key)
+    stored_otp = cache.get(f"password_reset_otp_{user.id}") or cache.get(f"pwd_reset_otp_{user.id}")
 
     if not stored_otp or stored_otp != otp_input:
         return JsonResponse({'success': False, 'error': 'Invalid or expired OTP. Please request a new reset code.'}, status=400)
 
     user.set_password(new_password)
     user.save()
-    cache.delete(cache_key)
+    cache.delete(f"password_reset_otp_{user.id}")
+    cache.delete(f"pwd_reset_otp_{user.id}")
 
     return JsonResponse({'success': True, 'message': 'Password reset successfully. You can now sign in with your new password.'})
+
+
+def forgot_password(request):
+    """
+    Forgot Password Endpoint.
+    Accepts identifier/email.
+    Generates a random 6-digit numeric OTP.
+    Caches OTP: cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+    Stores target user id: request.session['reset_user_id'] = user.id
+    Triggers EmailService.send_password_reset_otp_email(user=user, otp_code=otp_code)
+    Redirects to OTP verification view with flash message.
+    """
+    import random
+    from django.core.cache import cache
+
+    if request.method == 'POST':
+        identifier = ''
+        if request.content_type == 'application/json' or (request.body and request.body.startswith(b'{')):
+            try:
+                data = json.loads(request.body)
+                identifier = (data.get('identifier') or data.get('email') or data.get('username') or '').strip()
+            except Exception:
+                pass
+        if not identifier:
+            identifier = (request.POST.get('identifier') or request.POST.get('email') or request.POST.get('username') or '').strip()
+
+        if not identifier:
+            msg = "Please enter your registered institutional email or ID."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return render(request, 'core/forgot_password.html')
+
+        user = User.objects.filter(email__iexact=identifier).first() or User.objects.filter(username__iexact=identifier).first()
+
+        if user:
+            otp_code = f"{random.randint(100000, 999999)}"
+            cache.set(f"password_reset_otp_{user.id}", otp_code, timeout=900)
+            cache.set(f"pwd_reset_otp_{user.id}", otp_code, timeout=900)
+            request.session['reset_user_id'] = user.id
+            request.session['reset_identifier'] = identifier
+
+            from core.services.email_service import EmailService
+            EmailService.send_password_reset_otp_email(user=user, otp_code=otp_code)
+
+            msg = "A 6-digit security OTP code has been sent to your registered institutional email."
+            messages.success(request, msg)
+
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({
+                    'success': True,
+                    'message': msg,
+                    'redirect_url': '/auth/verify-otp/'
+                })
+            return redirect('verify_otp')
+        else:
+            msg = "If that institutional ID or email is registered, a security OTP code has been dispatched."
+            messages.info(request, msg)
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': True, 'message': msg, 'redirect_url': '/auth/verify-otp/'})
+            return redirect('verify_otp')
+
+    return render(request, 'core/forgot_password.html')
+
+
+def verify_otp(request):
+    """
+    OTP Verification Endpoint.
+    Validates submitted code against cache.
+    On success: sets request.session['otp_verified'] = True and redirects to reset_password.
+    On failure: renders error message.
+    """
+    from django.core.cache import cache
+    reset_user_id = request.session.get('reset_user_id')
+
+    if request.method == 'POST':
+        otp_input = ''
+        if request.content_type == 'application/json' or (request.body and request.body.startswith(b'{')):
+            try:
+                data = json.loads(request.body)
+                otp_input = (data.get('otp') or data.get('otp_code') or '').strip()
+                if not reset_user_id and data.get('email'):
+                    u = User.objects.filter(email__iexact=data['email']).first() or User.objects.filter(username__iexact=data['email']).first()
+                    if u:
+                        reset_user_id = u.id
+                        request.session['reset_user_id'] = u.id
+            except Exception:
+                pass
+        if not otp_input:
+            otp_input = (request.POST.get('otp') or request.POST.get('otp_code') or '').strip()
+
+        if not reset_user_id:
+            msg = "Session expired or invalid reset request. Please request a new OTP."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return redirect('forgot_password')
+
+        user = User.objects.filter(pk=reset_user_id).first()
+        if not user:
+            msg = "User not found. Please request a new OTP."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return redirect('forgot_password')
+
+        cached_otp = cache.get(f"password_reset_otp_{user.id}") or cache.get(f"pwd_reset_otp_{user.id}")
+
+        if not cached_otp or str(cached_otp).strip() != str(otp_input).strip():
+            msg = "Invalid or expired OTP code. Please enter the 6-digit code sent to your email."
+            if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+                return JsonResponse({'success': False, 'error': msg}, status=400)
+            messages.error(request, msg)
+            return render(request, 'core/verify_otp.html', {'error': msg})
+
+        # OTP verified!
+        request.session['otp_verified'] = True
+        msg = "OTP verification successful. Please choose your new password."
+        messages.success(request, msg)
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json':
+            return JsonResponse({
+                'success': True,
+                'message': msg,
+                'redirect_url': '/auth/reset-password/'
+            })
+        return redirect('reset_password')
+
+    return render(request, 'core/verify_otp.html', {
+        'reset_identifier': request.session.get('reset_identifier', '')
+    })
+
+
+def reset_password(request):
+    """
+    Password Reset Endpoint.
+    Requires verified session (otp_verified=True).
+    Updates user password, cleans cache and session, and redirects to login.
+    """
+    from django.core.cache import cache
+    reset_user_id = request.session.get('reset_user_id')
+    otp_verified = request.session.get('otp_verified')
+
+    if not reset_user_id or not otp_verified:
+        messages.error(request, "Security check: Please verify your OTP code before setting a new password.")
+        return redirect('forgot_password')
+
+    user = User.objects.filter(pk=reset_user_id).first()
+    if not user:
+        messages.error(request, "User account not found.")
+        return redirect('forgot_password')
+
+    if request.method == 'POST':
+        new_password = request.POST.get('new_password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+
+        if not new_password or len(new_password) < 6:
+            msg = "Password must be at least 6 characters long."
+            messages.error(request, msg)
+            return render(request, 'core/reset_password.html', {'error': msg})
+
+        if new_password != confirm_password:
+            msg = "Passwords do not match. Please re-enter carefully."
+            messages.error(request, msg)
+            return render(request, 'core/reset_password.html', {'error': msg})
+
+        user.set_password(new_password)
+        user.save()
+
+        # Clear security tokens and session
+        cache.delete(f"password_reset_otp_{user.id}")
+        cache.delete(f"pwd_reset_otp_{user.id}")
+        request.session.pop('reset_user_id', None)
+        request.session.pop('otp_verified', None)
+        request.session.pop('reset_identifier', None)
+
+        messages.success(request, "Your password has been successfully updated. Please sign in with your new credentials.")
+
+        profile = getattr(user, 'profile', None)
+        if profile and profile.role == Profile.Role.STUDENT:
+            return redirect('student_login')
+        elif profile and profile.role == Profile.Role.TEACHER:
+            return redirect('teacher_login')
+        elif profile and profile.role == Profile.Role.DEPARTMENT_HEAD:
+            return redirect('dept_head_login')
+        elif user.is_superuser or (profile and profile.role == Profile.Role.ADMIN):
+            return redirect('exam_controller_login')
+        return redirect('landing_page')
+
+    return render(request, 'core/reset_password.html')
