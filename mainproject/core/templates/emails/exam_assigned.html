@@ -1,0 +1,18 @@
+{% extends 'emails/base_email.html' %}
+
+{% block title %}Examination Scheduled - {{ course_code }}{% endblock %}
+
+{% block content %}
+<h2 style="color: #ffffff; margin-top: 0;">New Examination Scheduled</h2>
+<p>Dear <strong>{{ student_name }}</strong>,</p>
+<p>A new examination has been published and assigned for your course <strong>{{ course_code }}</strong>.</p>
+
+<div style="background-color: #0f172a; padding: 16px; border-radius: 10px; border: 1px solid #334155; margin: 20px 0;">
+    <p style="margin: 0; color: #38bdf8; font-size: 13px; font-weight: 700;">{{ course_code }} - {{ exam_title }}</p>
+    <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 13px;"><strong>Scheduled Date:</strong> {{ exam_date }}</p>
+</div>
+
+<p>Make sure to check your course syllabus, review outcome targets (COs/POs), and be prepared for the upcoming exam session.</p>
+
+<a href="{{ portal_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary">View Examination Details</a>
+{% endblock %}

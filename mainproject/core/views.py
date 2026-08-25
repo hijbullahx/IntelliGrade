@@ -321,6 +321,12 @@ def student_register(request):
         )
 
         messages.success(request, f"Registration submitted for Student '{full_name}' (ID: {student_id})! Your account is pending approval by the Chief Exam Controller.")
+        # Send welcome email asynchronously
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(user, raw_password=password)
+        except Exception as _e_mail:
+            pass
         return redirect('student_login')
 
     departments = Department.objects.filter(is_active=True)
@@ -776,6 +782,12 @@ def add_faculty(request):
         )
 
         messages.success(request, f"Faculty Examiner '{full_name}' ({username}) registered successfully! Credentials activated.")
+        # Send welcome email asynchronously
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_account_creation_email(user, raw_password=password)
+        except Exception as _e_mail:
+            pass
         if redirect_after:
             return redirect(redirect_after)
         return redirect('faculty_list')
@@ -1862,11 +1874,30 @@ def api_publish_exam(request):
             )
 
         faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
+
+        # Dispatch exam-assigned notification to enrolled students
+        try:
+            from core.services.email_service import EmailService
+            enrolled = Profile.objects.filter(role=Profile.Role.STUDENT, department=course.department)
+            for prof in enrolled:
+                if prof.user.email and '@' in prof.user.email:
+                    EmailService.send_exam_assigned_notification(
+                        student_email=prof.user.email,
+                        student_name=prof.user.get_full_name() or prof.user.username,
+                        exam_title=exam.title,
+                        course_code=course.code,
+                        exam_date=str(exam.exam_date)
+                    )
+        except Exception as _e_mail:
+            pass
+
         return JsonResponse({
             'success': True,
             'exam_id': exam.id,
             'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
         })
+
+
 def start_exam_evaluation(request, exam_id):
     """Smart entry point for Faculty Examination Evaluation.
     If Questions & Rubric are NOT created yet for this exam, automatically directs to Paper Builder (Questions & Rubric page).
@@ -3752,6 +3783,26 @@ def api_finalize_evaluation(request, submission_id):
                 teacher_user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR')
             )
+            # Send evaluation published notification to student
+            try:
+                from core.services.email_service import EmailService
+                student_email = ''
+                if submission.student and submission.student.email:
+                    student_email = submission.student.email
+                elif '@' in (submission.student_name or ''):
+                    student_email = submission.student_name
+                if student_email:
+                    pct = float(submission.percentage or 0.0)
+                    grade = 'A+' if pct >= 80 else ('A' if pct >= 75 else ('A-' if pct >= 70 else ('B+' if pct >= 65 else ('B' if pct >= 60 else ('F')))))
+                    EmailService.send_evaluation_published_notification(
+                        student_email=student_email,
+                        student_name=submission.student_name,
+                        exam_title=submission.examination.title,
+                        score=f"{submission.total_obtained_marks}/{submission.total_max_marks}",
+                        grade=grade
+                    )
+            except Exception as _e_mail:
+                pass
             return JsonResponse(res)
         except Exception as e:
             import traceback
@@ -4348,3 +4399,122 @@ def export_course_tabulation(request, course_id):
 
     return export_course_tabulation_excel(course_id=course_id, semester=semester, section=section)
 
+
+def email_course_tabulation_report(request, course_id):
+    """
+    Emails the official OBE course tabulation Excel report to the requesting faculty member.
+    Generates the xlsx in a temp file, attaches it, dispatches asynchronously.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    course = get_object_or_404(Course, id=course_id)
+    semester = request.GET.get('semester', 'Spring 2026')
+    section = request.GET.get('section', 'C')
+    recipient_email = request.user.email or ''
+
+    if not recipient_email or '@' not in recipient_email:
+        return JsonResponse({'success': False, 'error': 'Your account does not have a valid email address configured.'}, status=400)
+
+    try:
+        import tempfile
+        import os
+        from core.services.tabulation_exporter import export_course_tabulation_excel
+        from core.services.email_service import EmailService
+
+        # Generate xlsx into a temp file
+        xlsx_response = export_course_tabulation_excel(course_id=course_id, semester=semester, section=section)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', prefix=f'OBE_{course.code}_')
+        tmp.write(xlsx_response.content)
+        tmp.close()
+
+        EmailService.send_faculty_report_summary_email(
+            faculty_email=recipient_email,
+            course_code=course.code,
+            section=section,
+            export_file_path=tmp.name
+        )
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Official OBE Tabulation Report for {course.code} (Sec {section}) is being emailed to {recipient_email}."
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def api_forgot_password(request):
+    """
+    Generates a 6-digit OTP, stores it in the Django cache for 15 minutes,
+    and dispatches a password reset email via EmailService.
+    POST body: { "email": "..." }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    import random
+    from django.core.cache import cache
+
+    try:
+        data = json.loads(request.body)
+        email_addr = (data.get('email') or '').strip()
+    except Exception:
+        email_addr = request.POST.get('email', '').strip()
+
+    if not email_addr or '@' not in email_addr:
+        return JsonResponse({'success': False, 'error': 'A valid email address is required.'}, status=400)
+
+    user = User.objects.filter(email__iexact=email_addr).first() or User.objects.filter(username__iexact=email_addr).first()
+    if not user:
+        # Respond the same to avoid email enumeration
+        return JsonResponse({'success': True, 'message': 'If that email is registered, a reset OTP has been sent.'})
+
+    otp_code = str(random.randint(100000, 999999))
+    cache_key = f'pwd_reset_otp_{user.pk}'
+    cache.set(cache_key, otp_code, timeout=900)  # 15 minutes
+
+    try:
+        from core.services.email_service import EmailService
+        EmailService.send_password_reset_otp_email(user, otp_code)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': f'Email dispatch failed: {e}'}, status=500)
+
+    return JsonResponse({'success': True, 'message': 'If that email is registered, a reset OTP has been sent.'})
+
+
+def api_verify_reset_otp(request):
+    """
+    Verifies the 6-digit OTP and sets the new password if valid.
+    POST body: { "email": "...", "otp": "123456", "new_password": "..." }
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+
+    from django.core.cache import cache
+
+    try:
+        data = json.loads(request.body)
+        email_addr = (data.get('email') or '').strip()
+        otp_input = (data.get('otp') or '').strip()
+        new_password = data.get('new_password', '')
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body.'}, status=400)
+
+    if not email_addr or not otp_input or not new_password:
+        return JsonResponse({'success': False, 'error': 'email, otp, and new_password are required.'}, status=400)
+
+    user = User.objects.filter(email__iexact=email_addr).first() or User.objects.filter(username__iexact=email_addr).first()
+    if not user:
+        return JsonResponse({'success': False, 'error': 'Invalid email or OTP.'}, status=400)
+
+    cache_key = f'pwd_reset_otp_{user.pk}'
+    stored_otp = cache.get(cache_key)
+
+    if not stored_otp or stored_otp != otp_input:
+        return JsonResponse({'success': False, 'error': 'Invalid or expired OTP. Please request a new reset code.'}, status=400)
+
+    user.set_password(new_password)
+    user.save()
+    cache.delete(cache_key)
+
+    return JsonResponse({'success': True, 'message': 'Password reset successfully. You can now sign in with your new password.'})

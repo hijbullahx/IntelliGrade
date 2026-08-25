@@ -85,4 +85,7 @@ urlpatterns = [
     path('api/exam/<int:exam_id>/fast-scan-mcq/', views.api_fast_scan_mcq_paper, name='api_fast_scan_mcq_paper'),
     path('course/<int:course_id>/tabulation/', views.course_tabulation_view, name='course_tabulation_view'),
     path('course/<int:course_id>/export-tabulation/', views.export_course_tabulation, name='export_course_tabulation'),
+    path('course/<int:course_id>/email-tabulation/', views.email_course_tabulation_report, name='email_course_tabulation_report'),
+    path('api/auth/forgot-password/', views.api_forgot_password, name='api_forgot_password'),
+    path('api/auth/verify-reset-otp/', views.api_verify_reset_otp, name='api_verify_reset_otp'),
 ]

@@ -1,0 +1,20 @@
+{% extends 'emails/base_email.html' %}
+
+{% block title %}Welcome to IntelliGrade Institutional Portal{% endblock %}
+
+{% block content %}
+<h2 style="color: #ffffff; margin-top: 0;">Welcome, {{ user.get_full_name|default:user.username }}!</h2>
+<p>Your institutional IntelliGrade account has been successfully provisioned for the IUBAT academic portal.</p>
+
+<div style="background-color: #0f172a; padding: 16px; border-radius: 10px; border-left: 4px solid #0284c7; margin: 20px 0;">
+    <p style="margin: 0; color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase;">Account Details</p>
+    <p style="margin: 4px 0 0; color: #ffffff;"><strong>Username / Email:</strong> {{ user.email|default:user.username }}</p>
+    {% if raw_password %}
+    <p style="margin: 4px 0 0; color: #38bdf8;"><strong>Temporary Password:</strong> {{ raw_password }}</p>
+    {% endif %}
+</div>
+
+<p>You can now sign in to view your courses, assigned examinations, live OBE tabulation sheets, and AI script evaluation feedback.</p>
+
+<a href="{{ login_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary">Sign In to IntelliGrade Portal</a>
+{% endblock %}
