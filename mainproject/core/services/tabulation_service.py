@@ -1,178 +1,180 @@
-import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 from django.db import transaction
-from core.models import StudentSubmission, CourseTabulation, StudentGradeRecord, Examination, SubmissionAnswer, EvaluationResult
+from core.models import Examination, StudentSubmission, CourseTabulation, StudentGradeRecord
 
-class TabulationService:
-
-    @classmethod
-    def get_letter_grade(cls, score: float) -> str:
-        """Assigns letter grade based on percentage score standard."""
-        if score >= 80.0:
-            return 'A+'
-        elif score >= 75.0:
-            return 'A'
-        elif score >= 70.0:
-            return 'A-'
-        elif score >= 65.0:
-            return 'B+'
-        elif score >= 60.0:
-            return 'B'
-        elif score >= 55.0:
-            return 'B-'
-        elif score >= 50.0:
-            return 'C+'
-        elif score >= 45.0:
-            return 'C'
-        elif score >= 40.0:
-            return 'D'
-        else:
-            return 'F'
-
-    @classmethod
-    def sync_submission_to_tabulation(cls, submission_id: int) -> StudentGradeRecord:
-        """
-        Synchronizes a student's evaluated submission into the CourseTabulation and StudentGradeRecord.
-        Aggregates question-level scores into CO and PO buckets and recomputes continuous overall marks & grades.
-        """
+def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int]) -> StudentGradeRecord:
+    """
+    Synchronizes a student's evaluated submission into CourseTabulation and StudentGradeRecord.
+    Supports receiving either a StudentSubmission instance or an integer submission ID.
+    Aggregates question-level scores, CO/PO distributions, overall score, and letter grade.
+    """
+    if isinstance(submission_or_id, StudentSubmission):
+        submission = submission_or_id
+    else:
         try:
-            submission = StudentSubmission.objects.select_related('examination__course').get(id=submission_id)
+            submission = StudentSubmission.objects.select_related('examination__course').get(id=submission_or_id)
         except StudentSubmission.DoesNotExist:
             return None
 
-        exam = submission.examination
-        if not exam or not exam.course:
-            return None
+    exam = submission.examination
+    if not exam or not exam.course:
+        return None
 
-        course = exam.course
-        student_roll = (submission.student_roll_no or '').strip()
-        student_name = (submission.student_name or '').strip()
+    course = exam.course
 
-        if not student_roll:
-            student_roll = f"STU-{submission.id}"
+    # 1. Get or Create CourseTabulation for this course
+    semester = getattr(exam, 'semester', None) or getattr(course, 'semester', None) or 'Spring 2026'
+    section = getattr(exam, 'section', None) or getattr(course, 'section', None) or 'C'
 
-        # 1. Get or create CourseTabulation
-        default_weightages = {
-            'class_test': 10.0,
-            'midterm': 25.0,
-            'final': 50.0,
-            'assignment': 10.0,
-            'attendance': 5.0
+    tabulation, _ = CourseTabulation.objects.get_or_create(
+        course=course,
+        semester=semester,
+        section=section,
+        defaults={
+            'weightage_config': {
+                'class_test': 10,
+                'midterm': 25,
+                'final': 50,
+                'assignment': 10,
+                'attendance': 5
+            }
         }
-        tabulation, _ = CourseTabulation.objects.get_or_create(
-            course=course,
-            semester='Spring 2026',
-            section='C',
-            defaults={'weightage_config': default_weightages}
-        )
+    )
 
-        # 2. Get or create StudentGradeRecord
-        grade_record, _ = StudentGradeRecord.objects.get_or_create(
-            tabulation=tabulation,
-            student_id=student_roll,
-            defaults={'student_name': student_name or student_roll}
-        )
-        if student_name and grade_record.student_name != student_name:
-            grade_record.student_name = student_name
+    # 2. Extract Student Identity
+    student_id = (submission.student_roll_no or submission.student_name or f"STU-{submission.id}").strip()
+    student_name = (submission.student_name or "Unknown Student").strip()
 
-        # 3. Aggregate all evaluated submissions for this student in this course
-        all_submissions = StudentSubmission.objects.filter(
-            examination__course=course,
-            student_roll_no=student_roll
-        ).select_related('examination')
+    # 3. Aggregate Question-level Marks & CO/PO Distributions for ALL submissions of this student in this course
+    all_subs = StudentSubmission.objects.filter(
+        examination__course=course
+    ).filter(
+        student_roll_no=student_id
+    ).select_related('examination')
 
-        exam_scores = grade_record.exam_scores or {}
-        co_scores = {}
-        po_scores = {}
+    if not all_subs.exists():
+        all_subs = [submission]
 
-        category_totals = {
-            'class_test': [],
-            'midterm': [],
-            'final': [],
-            'assignment': []
-        }
+    co_scores = {}
+    po_scores = {}
+    exam_scores = {}
+    category_percentages = {
+        'class_test': [],
+        'midterm': [],
+        'final': [],
+        'assignment': []
+    }
 
-        for sub in all_submissions:
-            sub_exam = sub.examination
-            exam_key = f"exam_{sub_exam.id}"
-            
-            # Map exam title/type to category
-            ex_type = (getattr(sub_exam, 'exam_type', '') or sub_exam.title or '').upper()
-            if 'MID' in ex_type:
-                cat = 'midterm'
-            elif 'FINAL' in ex_type:
-                cat = 'final'
-            elif 'ASSIGN' in ex_type:
-                cat = 'assignment'
-            else:
-                cat = 'class_test'
+    for sub in all_subs:
+        sub_exam = sub.examination
+        ex_title = sub_exam.title.upper()
+        if 'MID' in ex_title:
+            exam_type_key = 'midterm'
+        elif 'QUIZ' in ex_title or 'TEST' in ex_title or 'CLASS' in ex_title:
+            exam_type_key = 'class_test'
+        elif 'ASSIGN' in ex_title:
+            exam_type_key = 'assignment'
+        else:
+            exam_type_key = 'final'
 
-            sub_pct = float(sub.percentage or 0.0)
-            category_totals[cat].append(sub_pct)
+        q_breakdown = {}
+        total_sub_obtained = 0.0
+        total_sub_max = 0.0
 
-            q_breakdown = {}
-            for sa in sub.answers.all().select_related('question', 'evaluation_result'):
+        # Try sub.answers.all() first
+        answers = sub.answers.all().select_related('question', 'evaluation_result')
+        if answers.exists():
+            for sa in answers:
                 q = sa.question
                 er = getattr(sa, 'evaluation_result', None)
-                marks_obtained = float(er.obtained_marks) if er else 0.0
-                max_marks = float(er.maximum_marks) if er else float(q.max_marks or 10.0)
+                marks = float(er.obtained_marks or 0.0) if er else 0.0
+                max_m = float(er.maximum_marks or 10.0) if er else float(q.max_marks or 10.0)
+
+                total_sub_obtained += marks
+                total_sub_max += max_m
 
                 q_num = q.question_number or f"Q{q.id}"
-                q_breakdown[q_num] = {
-                    'obtained': marks_obtained,
-                    'max': max_marks,
-                    'co': q.co_mapping or 'CO1',
-                    'po': q.po_mapping or ['PO1']
-                }
+                q_breakdown[q_num] = marks
 
-                # CO Bucket
-                co_tag = (q.co_mapping or 'CO1').upper().strip()
-                co_scores[co_tag] = round(co_scores.get(co_tag, 0.0) + marks_obtained, 2)
+                # CO Mapping
+                co_tag = (getattr(q, 'co_mapping', None) or getattr(q, 'co', None) or getattr(q, 'co_mapped', None) or 'CO1')
+                co_tag = str(co_tag).upper().strip()
+                co_scores[co_tag] = round(co_scores.get(co_tag, 0.0) + marks, 2)
 
-                # PO Bucket
-                po_tags = q.po_mapping if isinstance(q.po_mapping, list) else [q.po_mapping or 'PO1']
-                for po_item in po_tags:
-                    p_tag = str(po_item).upper().strip()
-                    po_scores[p_tag] = round(po_scores.get(p_tag, 0.0) + marks_obtained, 2)
+                # PO Mapping
+                po_tags = getattr(q, 'po_mapping', None) or getattr(q, 'po', None) or getattr(q, 'po_mapped', None) or ['PO1']
+                if not isinstance(po_tags, list):
+                    po_tags = [po_tags]
+                for p_item in po_tags:
+                    p_tag = str(p_item).upper().strip()
+                    po_scores[p_tag] = round(po_scores.get(p_tag, 0.0) + marks, 2)
 
-            exam_scores[exam_key] = {
-                'exam_id': sub_exam.id,
-                'exam_title': sub_exam.title,
-                'category': cat,
-                'total_obtained': float(sub.total_obtained_marks or 0.0),
-                'total_max': float(sub.total_max_marks or 100.0),
-                'percentage': sub_pct,
-                'questions': q_breakdown
-            }
+        if total_sub_max <= 0:
+            total_sub_obtained = float(sub.total_obtained_marks or 0.0)
+            total_sub_max = float(sub.total_max_marks or 100.0)
 
-        # 4. Compute overall weighted score (normalized to evaluated categories)
-        weights = tabulation.weightage_config or default_weightages
-        weighted_sum = 0.0
-        active_weight_sum = 0.0
+        sub_pct = round((total_sub_obtained / max(1.0, total_sub_max)) * 100.0, 2)
+        category_percentages[exam_type_key].append(sub_pct)
 
-        for cat_name, scores in category_totals.items():
-            if scores:
-                avg_pct = sum(scores) / len(scores)
-                w_factor = float(weights.get(cat_name, 0.0))
-                weighted_sum += (avg_pct * (w_factor / 100.0))
-                active_weight_sum += w_factor
+        exam_scores[str(sub_exam.id)] = {
+            'exam_title': sub_exam.title,
+            'exam_type': exam_type_key,
+            'obtained': total_sub_obtained,
+            'max_marks': total_sub_max,
+            'percentage': sub_pct,
+            'breakdown': q_breakdown
+        }
 
-        if active_weight_sum > 0:
-            overall_score = (weighted_sum / (active_weight_sum / 100.0))
-        else:
-            overall_score = 0.0
+    # 4. Get or Create StudentGradeRecord
+    record, _ = StudentGradeRecord.objects.get_or_create(
+        tabulation=tabulation,
+        student_id=student_id,
+        defaults={'student_name': student_name}
+    )
+    record.student_name = student_name
+    record.exam_scores = exam_scores
+    record.co_scores = co_scores
+    record.po_scores = po_scores
 
-        # Add attendance bonus (default 5% if configured)
-        attendance_bonus = float(weights.get('attendance', 5.0))
-        overall_score = round(min(100.0, overall_score), 2)
+    # 5. Calculate Weighted Overall Marks & Letter Grade
+    weights = tabulation.weightage_config or {
+        'class_test': 10, 'midterm': 25, 'final': 50, 'assignment': 10, 'attendance': 5
+    }
 
-        letter_grade = cls.get_letter_grade(overall_score)
+    weighted_sum = 0.0
+    active_weights = 0.0
 
-        grade_record.exam_scores = exam_scores
-        grade_record.co_scores = co_scores
-        grade_record.po_scores = po_scores
-        grade_record.overall_score = overall_score
-        grade_record.letter_grade = letter_grade
-        grade_record.save()
+    for cat_key, pct_list in category_percentages.items():
+        if pct_list:
+            avg_cat_pct = sum(pct_list) / len(pct_list)
+            w = float(weights.get(cat_key, 0.0))
+            weighted_sum += (avg_cat_pct * (w / 100.0))
+            active_weights += w
 
-        return grade_record
+    if active_weights > 0:
+        overall = (weighted_sum / (active_weights / 100.0))
+    else:
+        overall = 0.0
+
+    overall = round(min(100.0, overall), 2)
+    record.overall_score = overall
+
+    if overall >= 80: record.letter_grade = 'A+'
+    elif overall >= 75: record.letter_grade = 'A'
+    elif overall >= 70: record.letter_grade = 'A-'
+    elif overall >= 65: record.letter_grade = 'B+'
+    elif overall >= 60: record.letter_grade = 'B'
+    elif overall >= 55: record.letter_grade = 'B-'
+    elif overall >= 50: record.letter_grade = 'C+'
+    elif overall >= 45: record.letter_grade = 'C'
+    elif overall >= 40: record.letter_grade = 'D'
+    else: record.letter_grade = 'F'
+
+    record.save()
+    return record
+
+
+class TabulationService:
+    @staticmethod
+    def sync_submission_to_tabulation(submission_or_id):
+        return sync_submission_to_tabulation(submission_or_id)

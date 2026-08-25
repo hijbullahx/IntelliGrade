@@ -4297,6 +4297,7 @@ Return ONLY a valid JSON array matching this exact schema:
 def course_tabulation_view(request, course_id):
     """
     Renders live datatable showing real-time marks of all students across all exams in the course.
+    Includes auto-sync backfill for any existing evaluated submissions upon page load.
     """
     if not request.user.is_authenticated:
         messages.error(request, "Authentication required.")
@@ -4312,6 +4313,18 @@ def course_tabulation_view(request, course_id):
             section='C',
             weightage_config={'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
         )
+
+    # Auto-sync backfill all existing evaluated submissions for this course upon page load
+    from core.services.tabulation_service import sync_submission_to_tabulation
+    evaluated_subs = StudentSubmission.objects.filter(
+        examination__course=course
+    )
+    
+    for sub in evaluated_subs:
+        try:
+            sync_submission_to_tabulation(sub)
+        except Exception as e_backfill:
+            print(f"[TABULATION BACKFILL WARNING] {e_backfill}")
 
     grade_records = StudentGradeRecord.objects.filter(tabulation=tabulation).order_by('student_id')
 
