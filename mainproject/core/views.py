@@ -2879,7 +2879,7 @@ def evaluate_answer_scripts_list(request, exam_id):
         messages.warning(request, f"Cannot evaluate scripts: No Question Paper or Rubrics are attached to '{exam.title}' yet. Please set up the question paper first.")
         return redirect('question_rubric_manage', exam_id=exam.id)
 
-    questions = exam.questions.all().select_related('rubric').order_by('id')
+    questions = exam.questions.all().select_related('rubric').prefetch_related('figures_rel', 'tables_rel', 'formulas_rel').order_by('question_number', 'id')
     submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
 
     is_mcq_exam = any(

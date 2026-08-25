@@ -663,7 +663,11 @@
                 <div class="my-3 space-y-2">
                     {% for fig in q.figures_rel.all %}
                     <div class="inline-block p-2 rounded-xl bg-slate-50 border border-slate-200 text-center max-w-full">
+                        {% if fig.image %}
                         <img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-64 object-contain mx-auto rounded-lg shadow-sm border border-slate-200">
+                        {% elif fig.thumbnail %}
+                        <img src="{{ fig.thumbnail.url }}" alt="{{ fig.caption }}" class="max-h-64 object-contain mx-auto rounded-lg shadow-sm border border-slate-200">
+                        {% endif %}
                         <p class="text-[10px] font-bold text-slate-600 mt-1">
                             📷 {{ fig.caption|default:"Figure" }} <span class="text-slate-400 font-mono">(Page {{ fig.page_number }})</span>
                         </p>
