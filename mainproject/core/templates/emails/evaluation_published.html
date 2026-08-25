@@ -1,0 +1,23 @@
+{% extends 'emails/base_email.html' %}
+
+{% block title %}Evaluation Results Published - {{ exam_title }}{% endblock %}
+
+{% block content %}
+<h2 style="color: #ffffff; margin-top: 0;">Evaluation Results Published</h2>
+<p>Dear <strong>{{ student_name }}</strong>,</p>
+<p>Your answer script evaluation for <strong>{{ exam_title }}</strong> has been processed, verified, and officially published.</p>
+
+<div style="background-color: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #10b981; margin: 20px 0;">
+    <p style="margin: 0; color: #6ee7b7; font-size: 12px; font-weight: 700; text-transform: uppercase;">Official Result Summary</p>
+    <p style="margin: 8px 0 0; color: #ffffff; font-size: 18px; font-weight: 800;">
+        Score: <span style="color: #34d399;">{{ score }}</span> | Grade: <span style="color: #38bdf8;">{{ grade }}</span>
+    </p>
+    {% if remarks %}
+    <p style="margin: 8px 0 0; color: #94a3b8; font-size: 13px;"><em>Remarks: {{ remarks }}</em></p>
+    {% endif %}
+</div>
+
+<p>You can view your detailed question-by-question breakdown, rubrics, and feedback in the student dashboard.</p>
+
+<a href="{{ script_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary">View Evaluated Script Breakdown</a>
+{% endblock %}

@@ -44,12 +44,12 @@
         <div id="step1Content" class="space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Student Name</label>
-                    <input type="text" id="studentName" value="John Doe" placeholder="e.g. Student Name" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Student Name (Optional - Auto-Extracted via OCR)</label>
+                    <input type="text" id="studentName" value="" autocomplete="off" placeholder="Enter student name or leave blank for OCR auto-extract" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
-                    <input type="text" id="studentRoll" value="CSE-2026-001" placeholder="e.g. Roll Number" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID (Optional - Auto-Extracted via OCR)</label>
+                    <input type="text" id="studentRoll" value="" autocomplete="off" placeholder="Enter Roll / ID (e.g. 21103001) or leave blank for OCR auto-extract" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
                 </div>
             </div>
 
@@ -165,32 +165,10 @@
                 <label class="flex items-center gap-2"><input type="checkbox" id="optContrast" checked> Contrast Enhancement (CLAHE)</label>
             </div>
 
-            <!-- OCR & Evaluation Strictness -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">OCR Mode</label>
-                    <select id="optOcrMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Balanced" selected>Balanced (EasyOCR + PyMuPDF)</option>
-                        <option value="High Accuracy">High Accuracy (Multi-Engine Ensemble)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">LLM Strictness Level</label>
-                    <select id="optStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Lenient">Lenient (Give partial marks freely)</option>
-                        <option value="Balanced" selected>Balanced (Standard University Grading)</option>
-                        <option value="Strict">Strict (Exact technical accuracy)</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
-                    <select id="optEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Rubric-based" selected>Rubric-based Evaluation</option>
-                        <option value="Concept-based">Concept & Derivation Based</option>
-                        <option value="Keyword-based">Keyword Matching Based</option>
-                    </select>
-                </div>
-            </div>
+            <!-- Hidden Default Evaluation Engine Options -->
+            <input type="hidden" id="optOcrMode" value="Balanced">
+            <input type="hidden" id="optStrictness" value="Balanced">
+            <input type="hidden" id="optEvalMode" value="Rubric-based">
 
             <!-- Custom Multiline Prompt Textbox -->
             <div class="pt-2">
@@ -232,6 +210,26 @@
                     <div><span class="text-slate-400">Blank Pages:</span> <span id="pvBlankPages" class="font-bold text-white">0</span></div>
                     <div><span class="text-slate-400">Duplicates:</span> <span id="pvDuplicates" class="font-bold text-white">0</span></div>
                     <div><span class="text-slate-400">OCR Conf:</span> <span id="pvOcrConf" class="font-bold text-emerald-400">0%</span></div>
+                </div>
+            </div>
+
+            <!-- Student Information Verification Card (Manual Insert/Override Before Final Submit) -->
+            <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold theme-text-primary flex items-center gap-1.5">
+                        <i data-lucide="user-check" class="w-4 h-4 text-brand-500"></i> Student Information Verification (Verify or Manually Edit Before Final Submit)
+                    </span>
+                    <span class="text-[11px] theme-text-muted">OCR Auto-Extracted / Manual Teacher Input</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold theme-text-muted mb-1">Student Name</label>
+                        <input type="text" id="confirmStudentName" value="" placeholder="Student Name (e.g. Rahim Ahmed)" class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
+                        <input type="text" id="confirmStudentRoll" value="" placeholder="Roll / ID (e.g. 21103001)" class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
                 </div>
             </div>
 
@@ -855,11 +853,40 @@ function goToStep(stepNum) {
     const mStep = document.getElementById('stepMappingContent');
     if(mStep) mStep.classList.add('hidden');
 
+    let activeNum = 1;
+    if(stepNum === 'Mapping' || stepNum === '2.5' || stepNum === 3 || stepNum === '3') {
+        activeNum = 3;
+    } else if(stepNum === 2 || stepNum === '2') {
+        activeNum = 2;
+    } else {
+        activeNum = 1;
+    }
+
     if(stepNum === 'Mapping' || stepNum === '2.5') {
         document.getElementById('stepMappingContent').classList.remove('hidden');
     } else {
         document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
     }
+
+    // Update Wizard Progress Header Highlighting (Blue when active)
+    for (let i = 1; i <= 3; i++) {
+        const header = document.getElementById(`stepHeader${i}`);
+        if (!header) continue;
+        const circle = header.querySelector('span:first-child');
+        
+        if (i === activeNum) {
+            header.className = "text-brand-500 font-extrabold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-extrabold shadow-md shadow-brand-500/30";
+        } else if (i < activeNum) {
+            header.className = "text-emerald-500 font-bold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold";
+        } else {
+            header.className = "theme-text-muted flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted flex items-center justify-center text-xs font-bold";
+        }
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function closeEvalProgressModal() {
@@ -1001,6 +1028,18 @@ async function analyzeQuestionMapping() {
         if(data.success) {
             currentMappingData = data.mappings;
             renderMappingTable(data);
+
+            if (data.student_name && data.student_name !== 'Pending OCR Extraction') {
+                document.getElementById('confirmStudentName').value = data.student_name;
+            } else if (document.getElementById('studentName').value) {
+                document.getElementById('confirmStudentName').value = document.getElementById('studentName').value;
+            }
+
+            if (data.student_roll_no) {
+                document.getElementById('confirmStudentRoll').value = data.student_roll_no;
+            } else if (document.getElementById('studentRoll').value) {
+                document.getElementById('confirmStudentRoll').value = document.getElementById('studentRoll').value;
+            }
 
             const finalConf = (data.mappings && data.mappings.length > 0)
                 ? (data.mappings.reduce((acc, m) => acc + (m.confidence || 0), 0) / data.mappings.length * 100).toFixed(1)
@@ -1192,6 +1231,8 @@ async function confirmQuestionMappingAndStart() {
     }));
 
     const options = {
+        student_name: (document.getElementById('confirmStudentName') ? document.getElementById('confirmStudentName').value : '') || document.getElementById('studentName').value,
+        roll_no: (document.getElementById('confirmStudentRoll') ? document.getElementById('confirmStudentRoll').value : '') || document.getElementById('studentRoll').value,
         ink_color: document.querySelector('input[name="inkColor"]:checked').value,
         deskew: document.getElementById('optDeskew').checked,
         shadow_removal: document.getElementById('optShadow').checked,

@@ -9,9 +9,9 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
         <div>
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold mb-2">
-                <i data-lucide="user-check" class="w-3.5 h-3.5"></i> Student Portal
+                <i data-lucide="user-check" class="w-3.5 h-3.5"></i> Student Workspace
             </div>
-            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Welcome, {{ stats.student_name }} 👋</h1>
+            <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Welcome back, {{ stats.student_name|default:request.user.get_full_name|default:request.user.username }} 👋</h1>
             <p class="theme-text-muted text-sm mt-1">Student &bull; <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ stats.dept_name }}</span></p>
         </div>
         <div class="flex items-center gap-3">
@@ -21,85 +21,198 @@
         </div>
     </div>
 
-    <!-- Metrics -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Enrolled Courses</span>
+    <!-- Student Performance Metrics Cards (Clickable Toggles) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <!-- 1. Evaluated Examinations Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-brand-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Evaluated Examinations</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.enrolled_courses }}</span>
-                <i data-lucide="book" class="w-6 h-6 text-emerald-500"></i>
+                <button type="button" onclick="toggleStudentSection('scripts-results-section', 'scripts-chevron')" class="text-3xl font-extrabold text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view Evaluated Scripts & Scores">
+                    <span>{{ stats.completed_exams }}</span>
+                    <i data-lucide="chevron-down" id="scripts-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2.5 rounded-xl bg-brand-500/10 text-brand-500">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i>
+                </div>
             </div>
+            <p class="text-[11px] theme-text-muted mt-2">Click count to view graded answer sheets & feedback</p>
         </div>
 
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Evaluated Exams</span>
+        <!-- 2. Course-Wise Performance & Grade Card -->
+        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-emerald-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Course-Wise Grades & Performance</span>
             <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold theme-text-primary">{{ stats.completed_exams }}</span>
-                <i data-lucide="check-circle" class="w-6 h-6 text-brand-500"></i>
+                <button type="button" onclick="toggleStudentSection('scripts-results-section', 'gpa-chevron')" class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view course-by-course score breakdown">
+                    <span>{{ stats.gpa_avg }}</span>
+                    <i data-lucide="chevron-down" id="gpa-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <i data-lucide="award" class="w-5 h-5"></i>
+                </div>
             </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Cumulative GPA</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-emerald-500 dark:text-emerald-400">{{ stats.gpa_avg }}</span>
-                <i data-lucide="award" class="w-6 h-6 text-amber-500"></i>
-            </div>
-        </div>
-
-        <div class="glass-card p-5 rounded-2xl">
-            <span class="text-xs font-medium theme-text-muted">Class Standing</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-cyan-500 dark:text-cyan-400">{{ stats.rank }}</span>
-                <i data-lucide="trending-up" class="w-6 h-6 text-cyan-500"></i>
-            </div>
+            <p class="text-[11px] theme-text-muted mt-2">Click score to view course script breakdowns</p>
         </div>
     </div>
 
-    <!-- Exam Results Table & AI Feedback -->
-    <div class="space-y-4">
-        <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
-            <i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-500"></i> Published Examination Results
-        </h2>
+    <!-- Collapsible Student Evaluated Answer Scripts & Results Section -->
+    <div id="scripts-results-section" class="space-y-4 hidden transition-all duration-300">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-500"></i> Your Evaluated Scripts & Course Results
+            </h2>
+            <button type="button" onclick="toggleStudentSection('scripts-results-section', 'scripts-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Results
+            </button>
+        </div>
 
-        <div class="glass-card rounded-2xl overflow-hidden space-y-4 p-6">
-            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+        {% for result in evaluated_results %}
+        <div class="glass-card rounded-2xl overflow-hidden space-y-4 p-6 shadow-xl border border-slate-200/80 dark:border-slate-800/80">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
                 <div>
-                    <h3 class="text-base font-bold theme-text-primary">CSE 411: Software Engineering Final Exam</h3>
-                    <p class="text-xs theme-text-muted">Evaluated on Jul 20, 2026 &bull; Evaluator: Prof. Dr. Al-Amin</p>
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="px-2.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 font-mono text-xs font-bold border border-brand-500/20">
+                            {{ result.course_code }}
+                        </span>
+                        <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                            {{ result.status_label }}
+                        </span>
+                    </div>
+                    <h3 class="text-base font-bold theme-text-primary">{{ result.course_title }} &bull; {{ result.exam_title }}</h3>
+                    <p class="text-xs theme-text-muted mt-0.5">Evaluated on {{ result.evaluated_at|date:"M d, Y" }}</p>
                 </div>
-                <div class="text-right">
-                    <span class="text-2xl font-black text-emerald-500 dark:text-emerald-400">88.5 <span class="text-sm font-normal theme-text-muted">/ 100</span></span>
-                    <span class="block text-xs font-bold text-emerald-500 dark:text-emerald-400">Grade: A</span>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <span class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {{ result.obtained_marks }} <span class="text-sm font-normal theme-text-muted">/ {{ result.total_marks }}</span>
+                        </span>
+                        <span class="block text-xs font-bold text-emerald-500 dark:text-emerald-400">Grade: {{ result.grade }} ({{ result.percentage }}%)</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Question Breakdown Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-brand-600 dark:text-brand-300">Question 1 (a) - Software Architecture</span>
-                        <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">8.5 / 10.0</span>
+            {% if result.answers %}
+            <div class="space-y-2 pt-1">
+                <h4 class="text-xs font-bold theme-text-muted uppercase tracking-wider">Question-by-Question Scoring Breakdown</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for ans in result.answers %}
+                    <div class="p-4 rounded-xl bg-slate-100/70 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-brand-600 dark:text-brand-300">Question {{ ans.question_number }}</span>
+                            <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 font-mono">{{ ans.obtained_marks }} / {{ ans.maximum_marks }}</span>
+                        </div>
+                        {% if ans.question_text %}
+                        <p class="text-xs theme-text-secondary line-clamp-2">{{ ans.question_text }}</p>
+                        {% endif %}
+                        {% if ans.feedback_text %}
+                        <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-200">
+                            <strong>AI & Instructor Feedback:</strong> {{ ans.feedback_text }}
+                        </div>
+                        {% endif %}
                     </div>
-                    <p class="text-xs theme-text-secondary">"Microservices architecture breaks an application into small, independent services..."</p>
-                    <div class="p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-[11px] text-brand-700 dark:text-brand-200">
-                        <strong>AI & Instructor Feedback:</strong> Excellent definition of Microservices and Monoliths. Missed full component interaction diagram.
-                    </div>
-                </div>
-
-                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-brand-600 dark:text-brand-300">Question 1 (b) - Design Patterns</span>
-                        <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400">10.0 / 10.0</span>
-                    </div>
-                    <p class="text-xs theme-text-secondary">"Singleton pattern ensures a class has only one instance and provides a global access point..."</p>
-                    <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-200">
-                        <strong>AI & Instructor Feedback:</strong> Perfect code sample and thread-safety explanation provided!
-                    </div>
+                    {% endfor %}
                 </div>
             </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="glass-card p-12 rounded-2xl text-center space-y-3">
+            <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+                <i data-lucide="file-x-2" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-base font-bold theme-text-primary">No Evaluated Answer Scripts Yet</h3>
+            <p class="theme-text-muted text-xs max-w-md mx-auto leading-relaxed">
+                Your submitted examination answer scripts will appear here automatically with detailed question mark breakdowns and instructor feedback as soon as evaluation is completed.
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Student AI Evaluation Platform Showcase & Animation Card -->
+    <div class="glass-card p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden relative">
+        <div class="grid lg:grid-cols-12 gap-8 items-center">
+            
+            <!-- Left 7 cols: Information & Actions -->
+            <div class="lg:col-span-7 space-y-4">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i> Academic Result Portal & Transparency
+                </div>
+                
+                <h2 class="text-xl md:text-2xl font-extrabold theme-text-primary tracking-tight">
+                    Automated Examination Assessment & Grade Verification
+                </h2>
+                
+                <p class="theme-text-muted text-sm leading-relaxed max-w-xl">
+                    View your graded answer scripts, question mark breakdowns, and certified instructor feedback directly from your student portal. IntelliGrade ensures accurate, fair, and transparent evaluation across all university courses.
+                </p>
+
+                <div class="pt-2 flex flex-wrap items-center gap-4">
+                    <a href="{% url 'landing_page' %}" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2">
+                        <i data-lucide="compass" class="w-4 h-4"></i> Explore Platform Capabilities &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Right 5 cols: Compact Orbiting AI Animation -->
+            <div class="lg:col-span-5 flex items-center justify-center relative py-4">
+                <div class="w-56 h-56 md:w-64 md:h-64 rounded-full bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center relative">
+                    
+                    <!-- Center Core -->
+                    <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-600 via-emerald-500 to-cyan-400 text-white flex flex-col items-center justify-center shadow-lg shadow-emerald-500/30 z-10">
+                        <i data-lucide="sparkles" class="w-7 h-7 text-white animate-pulse"></i>
+                        <span class="text-[9px] font-extrabold tracking-wider uppercase mt-1">AI EVAL</span>
+                    </div>
+
+                    <!-- Orbit Rings -->
+                    <div class="absolute inset-2 rounded-full border border-dashed border-emerald-500/30 animate-spin" style="animation-duration: 18s;"></div>
+
+                    <!-- Pipeline Orbit Items -->
+                    <div class="absolute inset-0 flex items-center justify-center animate-spin" style="animation-duration: 22s;">
+                        
+                        <!-- 1. OCR Step (Top) -->
+                        <div class="absolute top-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-emerald-500/40 shadow-md flex items-center justify-center" title="Handwriting OCR / HTR">
+                            <i data-lucide="scan-line" class="w-4 h-4 text-cyan-500"></i>
+                        </div>
+
+                        <!-- 2. Rubric Step (Right) -->
+                        <div class="absolute right-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-indigo-500/40 shadow-md flex items-center justify-center" title="Rubric Matching">
+                            <i data-lucide="file-check-2" class="w-4 h-4 text-indigo-500"></i>
+                        </div>
+
+                        <!-- 3. AI Eval Step (Bottom) -->
+                        <div class="absolute bottom-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-amber-500/40 shadow-md flex items-center justify-center" title="Confidence Audit">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                        </div>
+
+                        <!-- 4. Review Step (Left) -->
+                        <div class="absolute left-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-emerald-500/40 shadow-md flex items-center justify-center" title="Certified Grade">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+
         </div>
     </div>
 
 </div>
+
+<script>
+function toggleStudentSection(sectionId, chevronId) {
+    const section = document.getElementById(sectionId);
+    const chevron = document.getElementById(chevronId);
+    if (!section) return;
+    
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        section.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
 {% endblock %}

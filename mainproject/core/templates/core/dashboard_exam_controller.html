@@ -8,10 +8,10 @@
     <!-- Unified Exam Controller Banner -->
     <div class="glass-card p-6 rounded-2xl">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-semibold mb-2">
-            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Chief Exam Controller Office & System Control
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Chief Exam Controller Workspace
         </div>
-        <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Central Examination & System Portal</h1>
-        <p class="theme-text-muted text-sm mt-1">Unified administrative control center for college/school/department hierarchy, course rosters, exam creation, and recheck audits.</p>
+        <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Welcome back, {{ request.user.get_full_name|default:request.user.username }} 👋</h1>
+        <p class="theme-text-muted text-sm mt-1">Here is your central control dashboard for managing university structures, course rosters, faculty assignments, and examination quality control.</p>
     </div>
 
     <!-- Admin & Controller System Metrics (with Concise Embedded Actions) -->
@@ -96,10 +96,10 @@
                 <div>
                     <span class="text-[11px] font-bold uppercase tracking-wider theme-text-muted">Departments</span>
                     <div>
-                        <a href="#dept-table-section" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 hover:underline tracking-tight mt-1 inline-flex items-center gap-1.5" title="Click to view Department Management Table">
+                        <button type="button" onclick="toggleDeptHierarchyTable()" class="text-2xl font-extrabold text-amber-600 dark:text-amber-400 hover:underline tracking-tight mt-1 inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view & manage System Department & Academic Hierarchy">
                             <span>{{ stats.total_departments }}</span>
-                            <i data-lucide="external-link" class="w-3.5 h-3.5 opacity-60"></i>
-                        </a>
+                            <i data-lucide="chevron-down" id="dept-chevron-icon" class="w-4 h-4 opacity-70 transition-transform"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="p-2 rounded-xl bg-amber-500/10 text-amber-500">
@@ -164,8 +164,77 @@
 
     </div>
 
-    <!-- Integrated Department & Academic Hierarchy Management Section -->
-    <div id="dept-table-section" class="space-y-4">
+    <!-- IntelliGrade AI Pipeline Interactive Showcase -->
+    <div class="glass-card p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden relative">
+        <div class="grid lg:grid-cols-12 gap-8 items-center">
+            
+            <!-- Left 7 cols: Content & Direct Action Link -->
+            <div class="lg:col-span-7 space-y-4">
+                <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 text-xs font-semibold">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-brand-500"></i> AI Evaluation Engine & Workflow
+                </div>
+                
+                <h2 class="text-xl md:text-2xl font-extrabold theme-text-primary tracking-tight">
+                    End-to-End Automated Examination & Assessment Pipeline
+                </h2>
+                
+                <p class="theme-text-muted text-sm leading-relaxed max-w-xl">
+                    IntelliGrade digitizes handwritten student answer scripts via hybrid Gemini 2.5 Flash Vision & EasyOCR, auto-evaluates against faculty question rubrics, and enforces an 80% confidence threshold for human-in-the-loop verification.
+                </p>
+
+                <div class="pt-2 flex flex-wrap items-center gap-4">
+                    <a href="{% url 'landing_page' %}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2">
+                        <i data-lucide="compass" class="w-4 h-4"></i> Explore Platform Capabilities &rarr;
+                    </a>
+                </div>
+            </div>
+
+            <!-- Right 5 cols: Compact Orbiting AI Animation -->
+            <div class="lg:col-span-5 flex items-center justify-center relative py-4">
+                <div class="w-56 h-56 md:w-64 md:h-64 rounded-full bg-brand-500/5 dark:bg-brand-500/10 border border-brand-500/20 flex items-center justify-center relative">
+                    
+                    <!-- Center Core -->
+                    <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-400 text-white flex flex-col items-center justify-center shadow-lg shadow-brand-500/30 z-10">
+                        <i data-lucide="cpu" class="w-7 h-7 text-white animate-pulse"></i>
+                        <span class="text-[9px] font-extrabold tracking-wider uppercase mt-1">AI CORE</span>
+                    </div>
+
+                    <!-- Orbit Rings -->
+                    <div class="absolute inset-2 rounded-full border border-dashed border-brand-500/30 animate-spin" style="animation-duration: 18s;"></div>
+
+                    <!-- Pipeline Orbit Items -->
+                    <div class="absolute inset-0 flex items-center justify-center animate-spin" style="animation-duration: 22s;">
+                        
+                        <!-- 1. OCR Step (Top) -->
+                        <div class="absolute top-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-brand-500/40 shadow-md flex items-center justify-center" title="Handwriting OCR / HTR">
+                            <i data-lucide="scan-line" class="w-4 h-4 text-cyan-500"></i>
+                        </div>
+
+                        <!-- 2. Rubric Step (Right) -->
+                        <div class="absolute right-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-indigo-500/40 shadow-md flex items-center justify-center" title="Rubric Matching">
+                            <i data-lucide="file-check-2" class="w-4 h-4 text-indigo-500"></i>
+                        </div>
+
+                        <!-- 3. AI Eval Step (Bottom) -->
+                        <div class="absolute bottom-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-amber-500/40 shadow-md flex items-center justify-center" title="Confidence Audit">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                        </div>
+
+                        <!-- 4. Review Step (Left) -->
+                        <div class="absolute left-2 w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-emerald-500/40 shadow-md flex items-center justify-center" title="Certified Grade">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Integrated Department & Academic Hierarchy Management Section (Hidden by default until Department Card count is clicked) -->
+    <div id="dept-table-section" class="space-y-4 hidden transition-all duration-300">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
                 <i data-lucide="building-2" class="w-5 h-5 text-amber-500"></i> System Department & Academic Hierarchy Management
@@ -174,6 +243,9 @@
                 <a href="{% url 'add_structure' %}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all">
                     <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Dept / School / College
                 </a>
+                <button type="button" onclick="toggleDeptHierarchyTable()" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Section
+                </button>
             </div>
         </div>
 
@@ -258,128 +330,22 @@
         </div>
     </div>
 
-    <!-- AI Engine Configuration & Parameters Control Panel -->
-    <div class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-xl border-l-4 border-l-purple-500">
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-            <div>
-                <h2 class="text-base font-bold theme-text-primary flex items-center gap-2">
-                    <i data-lucide="cpu" class="w-5 h-5 text-purple-500"></i> AI Engine System Configuration & Control Panel
-                </h2>
-                <p class="text-xs theme-text-muted mt-0.5">Configure active AI LLM provider, OCR engines, model versions, and feedback RAG memory settings.</p>
-            </div>
-            <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-500 text-xs font-bold border border-purple-500/20 flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                Active Provider: {{ ai_config.get_provider_display }}
-            </span>
-        </div>
-
-        <form method="POST" action="{% url 'ai_config_view' %}" class="space-y-6">
-            {% csrf_token %}
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                <!-- 1. AI Provider -->
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-2">Active LLM Provider</label>
-                    <select name="provider" id="providerSelect" onchange="updateModelDropdown()" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none">
-                        <option value="GEMINI" {% if ai_config.provider == 'GEMINI' %}selected{% endif %}>Google Gemini AI</option>
-                        <option value="OPENAI" {% if ai_config.provider == 'OPENAI' %}selected{% endif %}>OpenAI GPT</option>
-                        <option value="MOCK" {% if ai_config.provider == 'MOCK' %}selected{% endif %}>Mock Testing Provider (Zero Credentials)</option>
-                    </select>
-                </div>
-
-                <!-- 2. Dynamic Model Version Dropdown -->
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-2">Selected Model Version</label>
-                    <select name="model_version" id="modelVersionSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none font-mono">
-                        <!-- Populated dynamically via JS based on active provider -->
-                    </select>
-                </div>
-
-                <!-- 3. OCR Engine -->
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-2">OCR Pipeline Engine</label>
-                    <select name="ocr_engine" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none">
-                        <option value="AUTO" {% if ai_config.ocr_engine == 'AUTO' %}selected{% endif %}>Auto-Detect Hybrid (Paddle & PyTesseract Fallback)</option>
-                        <option value="PADDLE" {% if ai_config.ocr_engine == 'PADDLE' %}selected{% endif %}>PaddleOCR Primary</option>
-                        <option value="TESSERACT" {% if ai_config.ocr_engine == 'TESSERACT' %}selected{% endif %}>PyTesseract Fallback</option>
-                    </select>
-                </div>
-
-            </div>
-
-            <!-- Toggles & Custom Instructions -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <div class="space-y-3 flex flex-col justify-center">
-                    <label class="flex items-center gap-2 text-xs theme-text-primary font-bold cursor-pointer">
-                        <input type="checkbox" name="preprocess_image" {% if ai_config.preprocess_image %}checked{% endif %} class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500">
-                        <span>Enable OCR Image Preprocessing (Deskew/Noise Filtering)</span>
-                    </label>
-
-                    <label class="flex items-center gap-2 text-xs theme-text-primary font-bold cursor-pointer">
-                        <input type="checkbox" name="enable_rag_learning" {% if ai_config.enable_rag_learning %}checked{% endif %} class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500">
-                        <span>Enable Feedback RAG Learning (Few-Shot Teacher Exemplars)</span>
-                    </label>
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-2">Custom System Prompt Instructions</label>
-                    <textarea name="prompt_template" rows="2" placeholder="Optional custom evaluation instructions injected into AI prompts..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none font-mono">{{ ai_config.prompt_template }}</textarea>
-                </div>
-            </div>
-
-            <div class="flex items-center justify-end pt-2">
-                <button type="submit" class="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2">
-                    <i data-lucide="save" class="w-4 h-4"></i> Save AI Engine Settings
-                </button>
-            </div>
-        </form>
-    </div>
-
 </div>
 
 <script>
-const modelsMap = {
-    'GEMINI': [
-        { value: 'gemini-flash-latest', label: 'gemini-flash-latest (Recommended Production Model)' },
-        { value: 'gemini-2.0-flash', label: 'gemini-2.0-flash (Next Gen Multimodal)' },
-        { value: 'gemini-2.5-flash', label: 'gemini-2.5-flash (Complex Multimodal)' }
-    ],
-    'OPENAI': [
-        { value: 'gpt-4o-mini', label: 'gpt-4o-mini (Fast & Cost-Effective)' },
-        { value: 'gpt-4o', label: 'gpt-4o (High-Precision Multimodal)' },
-        { value: 'gpt-4-turbo', label: 'gpt-4-turbo (Legacy Turbo)' }
-    ],
-    'MOCK': [
-        { value: 'mock-model-v1', label: 'mock-model-v1 (Simulated Evaluation)' }
-    ]
-};
-
-const currentGeminiModel = "{{ ai_config.gemini_model_name|default:'gemini-flash-latest' }}";
-const currentOpenAIModel = "{{ ai_config.openai_model_name|default:'gpt-4o-mini' }}";
-
-function updateModelDropdown() {
-    const providerSelect = document.getElementById('providerSelect');
-    const modelSelect = document.getElementById('modelVersionSelect');
-    if (!providerSelect || !modelSelect) return;
-
-    const provider = providerSelect.value;
-    const availableModels = modelsMap[provider] || [];
-
-    modelSelect.innerHTML = '';
-    let selectedValue = (provider === 'GEMINI') ? currentGeminiModel : (provider === 'OPENAI' ? currentOpenAIModel : 'mock-model-v1');
-
-    availableModels.forEach(m => {
-        const option = document.createElement('option');
-        option.value = m.value;
-        option.textContent = m.label;
-        if (m.value === selectedValue) {
-            option.selected = true;
-        }
-        modelSelect.appendChild(option);
-    });
+function toggleDeptHierarchyTable() {
+    const section = document.getElementById('dept-table-section');
+    const chevron = document.getElementById('dept-chevron-icon');
+    if (!section) return;
+    
+    if (section.classList.contains('hidden')) {
+        section.classList.remove('hidden');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        section.classList.add('hidden');
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    }
 }
-
-document.addEventListener('DOMContentLoaded', updateModelDropdown);
 </script>
 {% endblock %}

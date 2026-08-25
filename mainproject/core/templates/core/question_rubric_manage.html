@@ -82,64 +82,118 @@
     </div>
     {% else %}
 
-    <!-- 2 Reference Document Upload Options Grid -->
-    <div class="glass-card p-6 rounded-2xl space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
-                <i data-lucide="upload-cloud" class="w-4.5 h-4.5 text-brand-500"></i> Course Reference Document Upload Options
-            </h3>
-            <span class="text-[11px] theme-text-muted">PDF, Image, or Word Document Format Supported</span>
-        </div>
-
-        <form method="POST" enctype="multipart/form-data" class="space-y-4">
-            {% csrf_token %}
-            <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
-
-            <!-- Question Paper File Upload & AI Scan -->
-            <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-wrap items-center justify-between gap-4">
-                <div class="space-y-1.5 flex-1 min-w-[280px]">
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
-                            <i data-lucide="file-text" class="w-4 h-4 text-purple-500"></i> Upload Question Paper Document (Image or PDF)
-                        </span>
-                    </div>
-
-                    <input type="file" name="question_paper_file" id="qpFileInput" onchange="handleQPFileSelect(this)" class="w-full text-xs theme-text-secondary file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
-
-                    <div id="qpStatusBadge">
-                        {% if selected_exam.question_paper_file %}
-                        <div class="flex items-center gap-2 text-xs">
-                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px] border border-emerald-500/20">
-                                ✓ Document Saved on Exam: {{ selected_exam.question_paper_file.name|default:"File" }}
-                            </span>
-                            <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-500 font-bold hover:underline inline-flex items-center gap-1">
-                                <i data-lucide="external-link" class="w-3 h-3"></i> View Saved Document
-                            </a>
-                            <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ selected_exam.id }}'); return confirm('Remove saved Question Paper document and all associated questions from this exam?')" class="text-[11px] text-rose-500 hover:text-rose-600 font-bold underline ml-2">
-                                🗑️ Remove Document & Questions
-                            </button>
-                        </div>
-                        {% else %}
-                        <span class="text-[11px] theme-text-muted italic">No Question Paper document uploaded yet for this examination.</span>
-                        {% endif %}
-                    </div>
+    <!-- AI Question Paper Extraction Banner (Modal Trigger) -->
+    <div class="glass-card p-6 rounded-2xl border border-purple-500/20 shadow-lg space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1.5 flex-1">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 text-xs font-semibold">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> AI Vision & HTR Question Extractor
                 </div>
+                <h3 class="font-extrabold text-base theme-text-primary tracking-tight">
+                    Scan & Extract Question Paper with AI Engine
+                </h3>
+                <p class="theme-text-muted text-xs leading-relaxed max-w-xl">
+                    Click below to upload or capture your Question Paper (PDF or Image). IntelliGrade AI will automatically extract questions, diagrams, matrices, and rubrics for your review before saving.
+                </p>
 
-                <div class="flex items-center gap-3">
-                    <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/25 transition-all flex items-center gap-2">
-                        <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Questions (AI Engine)
-                    </button>
-                    <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
-                        <i data-lucide="upload" class="w-3.5 h-3.5"></i> Save Document
-                    </button>
+                <div id="qpStatusBadge" class="pt-1">
+                    {% if selected_exam.question_paper_file or questions %}
+                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs">
+                        {% csrf_token %}
+                        <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+                        <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] border border-emerald-500/20">
+                            ✓ Paper Configured: {{ questions.count }} Question(s) Saved
+                        </span>
+                        {% if selected_exam.question_paper_file %}
+                        <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-600 dark:text-purple-400 font-bold hover:underline inline-flex items-center gap-1">
+                            <i data-lucide="external-link" class="w-3 h-3"></i> View Saved Document
+                        </a>
+                        {% endif %}
+                        <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ selected_exam.id }}'); return confirm('Remove saved Question Paper document and all associated questions from this exam?')" class="text-[11px] text-rose-500 hover:text-rose-600 font-bold underline ml-2 cursor-pointer">
+                            🗑️ Reset & Remove Saved Paper
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="text-[11px] theme-text-muted italic">No Question Paper document uploaded or configured yet for this examination.</span>
+                    {% endif %}
                 </div>
             </div>
-        </form>
+
+            <div class="flex items-center gap-3 shrink-0">
+                <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2.5 cursor-pointer">
+                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Question Paper (AI Engine)
+                </button>
+            </div>
+        </div>
     </div>
+
+    <!-- Dedicated MCQ Examination Control Hub (Shows when examination is selected) -->
+    {% if selected_exam %}
+    <div class="glass-card p-5 rounded-2xl border border-purple-500/30 bg-slate-900/90 shadow-xl space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase font-mono tracking-wider">
+                        ✓ Configured MCQ Examination
+                    </span>
+                    <span class="text-xs font-bold text-slate-300 font-mono">
+                        {{ questions.count }} Question(s) Saved
+                    </span>
+                </div>
+                <h3 class="font-extrabold text-base text-white flex items-center gap-2">
+                    MCQ Examination Control & Student Script Hub
+                </h3>
+                <p class="text-xs text-slate-400">
+                    Review configured MCQ questions, option choices & answer keys, or launch AI evaluation for student answer scripts.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 shrink-0">
+                <!-- Button 1: View Configured MCQ Paper & Keys -->
+                <button type="button" onclick="toggleSavedMcqViewer()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-purple-300 font-extrabold text-xs rounded-xl border border-purple-500/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="eye" class="w-4 h-4 text-purple-400"></i> View Configured MCQ Paper & Keys
+                </button>
+
+                <!-- Button 2: Scan & Evaluate Student Answer Scripts -->
+                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
+                    <i data-lucide="check-square" class="w-4 h-4"></i> ⚡ Evaluate Student Answer Scripts &rarr;
+                </a>
+            </div>
+        </div>
+
+        <!-- Collapsible Saved MCQ Viewer Panel -->
+        <div id="savedMcqViewerPanel" class="hidden p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h4 class="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
+                    <i data-lucide="list-checks" class="w-4 h-4"></i> Finalized MCQ Questions & Ground-Truth Answer Keys
+                </h4>
+                <span class="text-[10px] font-mono text-purple-400 font-bold">Total: {{ questions.count }} Question(s)</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+                {% for q in questions %}
+                <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+                    <div class="flex items-start justify-between font-bold gap-2">
+                        <span class="text-cyan-300 font-mono">{{ q.question_number }}. {{ q.prompt_text }}</span>
+                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono shrink-0">
+                            Key: <strong>{% if q.rubric %}{{ q.rubric.ideal_answer|default:"B" }}{% else %}B{% endif %}</strong>
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5">
+                        <span>CO: <strong class="text-slate-200">{{ q.co_mapping|default:"CO1" }}</strong> | Bloom: <strong class="text-slate-200">{{ q.bloom_level|default:"C1" }}</strong></span>
+                        <span class="font-mono text-emerald-400 font-bold">{{ q.max_marks }} Marks</span>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-500 italic text-center py-3">No MCQ questions configured yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Scanned Paper Unfinalized Live Preview Panel -->
     <div id="scannedPaperPreview" class="hidden glass-card p-6 rounded-2xl border-2 border-purple-500/40 space-y-4 bg-slate-900/60 backdrop-blur-md shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/60 pb-3">
             <div class="flex items-center gap-2.5">
                 <span class="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold text-xs flex items-center gap-1.5">
                     <i data-lucide="eye" class="w-4 h-4"></i> 🔍 Scanned Paper Preview (Unfinalized Staged Extract)
@@ -147,12 +201,23 @@
                 <span class="text-xs text-slate-400 italic font-mono" id="scannedPaperFileName"></span>
             </div>
             <div class="flex items-center gap-2">
-                <button type="button" onclick="finalizeScannedPaper()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5">
-                    <i data-lucide="check-circle-2" class="w-4 h-4"></i> ✅ Finalize & Save Paper
+                <button type="button" onclick="finalizeScannedPaper()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i> ✅ Everything Looks Good: Save & Finalize Paper
                 </button>
-                <button type="button" onclick="quitScan()" class="px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-xl transition-all flex items-center gap-1">
-                    <i data-lucide="x" class="w-3.5 h-3.5"></i> 🚪 Quit Scan
+                <button type="button" onclick="quitScan()" class="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i> 🗑️ Cancel & Remove Staged Data
                 </button>
+            </div>
+        </div>
+        <!-- Manual Paper / Examination Information Input Bar (Verify & Edit Before Final Submit) -->
+        <div class="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/80 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+                <label class="block text-[11px] font-bold text-slate-400 mb-1">Examination Title / Paper Name (Verify/Edit)</label>
+                <input type="text" id="scanExamTitle" value="{{ selected_exam.title }}" placeholder="e.g. CSE 4383 Midterm Exam Paper" class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold text-xs focus:ring-2 focus:ring-purple-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-[11px] font-bold text-slate-400 mb-1">Course Code & Department (Verify/Edit)</label>
+                <input type="text" id="scanCourseCode" value="{{ selected_exam.course.code }} - {{ selected_exam.course.title }}" placeholder="e.g. CSE 4383 - Data Structures" class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold text-xs focus:ring-2 focus:ring-purple-500 outline-none">
             </div>
         </div>
 
@@ -171,22 +236,49 @@
                 <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
 
                 <!-- Builder Header & Sticky Action Controls -->
-                <div class="glass-card p-5 rounded-2xl flex items-center justify-between gap-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
-                    <div>
-                        <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
-                            <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
-                        </h3>
-                        <p class="text-[10px] theme-text-muted">Fill manually or write question text & click AI Auto-Analyze</p>
+                <div class="glass-card p-5 rounded-2xl space-y-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
+                                <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
+                            </h3>
+                            <p class="text-[10px] theme-text-muted">Choose creation method below: Fill fields manually or write prompt & auto-analyze</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if questions %}
+                            <button type="button" onclick="openIUBATPreviewModal()" class="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                                <i data-lucide="printer" class="w-3.5 h-3.5 text-white"></i> Preview Paper
+                            </button>
+                            {% else %}
+                            <button type="button" disabled title="Paper preview will activate after questions are scanned or saved." class="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-300 dark:border-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 opacity-60 cursor-not-allowed">
+                                <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-400"></i> Preview Paper (Inactive)
+                            </button>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="analyzeQuestionFullAI()" id="aiFullAnalyzeBtn" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-1.5">
-                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Analyze
-                        </button>
-                        <button type="button" onclick="openIUBATPreviewModal()" class="px-3 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-xl text-xs font-bold transition-all flex items-center gap-1">
-                            <i data-lucide="printer" class="w-3.5 h-3.5 text-cyan-500"></i> Preview Paper
-                        </button>
-                        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center gap-1">
-                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Save
+
+                    <!-- Creation Method Selection Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                        <div class="p-3 rounded-xl border-2 border-brand-500/50 bg-brand-500/5 flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-brand-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                            <div>
+                                <span class="font-extrabold text-xs theme-text-primary block">Method 1: Direct Manual Entry</span>
+                                <span class="text-[10px] theme-text-muted">Type prompt, criteria, marks & taxonomy manually</span>
+                            </div>
+                        </div>
+                        <div class="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                            <div>
+                                <span class="font-extrabold text-xs theme-text-primary block">Method 2: AI Auto-Analyze</span>
+                                <span class="text-[10px] theme-text-muted">Type question prompt & click ✨ AI Auto-Analyze</span>
+                            </div>
+                        </div>
+                        <button type="button" onclick="openMcqModal()" class="p-3 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all flex items-center gap-2.5 cursor-pointer text-left w-full">
+                            <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                            <div>
+                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400 block flex items-center gap-1">Method 3: MCQ Quiz System &rarr;</span>
+                                <span class="text-[10px] theme-text-muted">Insert MCQ Key &rarr; Grade by Student ID</span>
+                            </div>
                         </button>
                     </div>
                 </div>
@@ -225,6 +317,7 @@
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Question Category (Multi-Select)</label>
                             <select name="question_type" id="qTypeSelect" multiple class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs theme-text-primary h-24 focus:ring-2 focus:ring-purple-500 outline-none">
+                                <option value="MCQ" class="font-extrabold text-purple-600 dark:text-purple-400">⚡ MCQ / Multiple Choice Quiz</option>
                                 <option value="Theory" selected>Theory</option>
                                 <option value="Explanation" selected>Explanation</option>
                                 <option value="Numerical">Numerical Problem</option>
@@ -267,7 +360,12 @@
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold theme-text-secondary mb-1">Question Statement / Prompt Text</label>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-bold theme-text-secondary">Question Statement / Prompt Text</label>
+                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer" title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
+                                <i data-lucide="sparkles" class="w-3 h-3"></i> ✨ AI Auto-Analyze Question Text
+                            </button>
+                        </div>
                         <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
                     </div>
 
@@ -350,7 +448,7 @@
                         </div>
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Estimated Solving Time</label>
-                            <input type="text" name="estimated_time" id="qTime" value="15 mins" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-amber-500 outline-none">
+                            <input type="text" name="estimated_time" id="qTime" value="" placeholder="e.g. 15 mins" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-amber-500 outline-none">
                         </div>
                     </div>
 
@@ -412,6 +510,12 @@
                     <div>
                         <label class="block text-xs font-bold theme-text-secondary mb-1">Private Teacher Notes (Internal Only)</label>
                         <textarea name="teacher_notes" id="qNotes" rows="2" placeholder="Private internal grading notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Save Question & Rubric to Database
+                        </button>
                     </div>
                 </div>
             </form>
@@ -481,7 +585,8 @@
 
 <!-- Section 23: Live IUBAT Examination Paper Preview Modal -->
 <div id="iubatPreviewModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-white text-slate-900 w-full max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl space-y-6">
+    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-2xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl space-y-6">
+
         
         <!-- Action Header -->
         <div class="flex items-center justify-between border-b pb-4">
@@ -561,7 +666,8 @@
                             {{ tbl.caption|default:"Data Table" }}
                         </p>
                         {% if tbl.cell_json %}
-                        <table class="w-full text-[11px] border-collapse border border-slate-300 my-1 bg-white font-mono">
+                        <table class="w-full text-[11px] border-collapse border border-slate-300 dark:border-slate-700 my-1 bg-white dark:bg-slate-950 dark:text-slate-200 font-mono">
+
                             {% for row in tbl.cell_json %}
                             <tr>
                                 {% for cell in row %}
@@ -590,6 +696,22 @@
 </div>
 
 <script>
+function showCreationTab(mode) {
+    const aiSection = document.getElementById('aiScanSection');
+    const manualBtn = document.getElementById('tabManualBtn');
+    const aiBtn = document.getElementById('tabAiBtn');
+
+    if (mode === 'ai') {
+        aiSection.classList.remove('hidden');
+        manualBtn.className = "px-4 py-2 rounded-lg text-brand-600 hover:bg-brand-500/10 font-bold transition-all flex items-center gap-2 cursor-pointer";
+        aiBtn.className = "px-4 py-2 rounded-lg bg-purple-600 text-white font-extrabold shadow transition-all flex items-center gap-2 cursor-pointer";
+    } else {
+        aiSection.classList.add('hidden');
+        manualBtn.className = "px-4 py-2 rounded-lg bg-brand-600 text-white font-extrabold shadow transition-all flex items-center gap-2 cursor-pointer";
+        aiBtn.className = "px-4 py-2 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 font-bold transition-all flex items-center gap-2 cursor-pointer";
+    }
+}
+
 function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -1022,7 +1144,7 @@ function runAIQuestionScanFromModal() {
                 }
             })
             .catch(err => console.error("[PROGRESS POLL WARNING]", err));
-        }, 1000);
+        }, 1500);
     }
 
     const formData = new FormData();
@@ -1031,15 +1153,18 @@ function runAIQuestionScanFromModal() {
     if (hasFiles) {
         uploadedQPFiles.forEach(file => {
             formData.append('question_paper_files', file);
+            formData.append('question_paper', file);
         });
-        formData.append('question_paper_file', uploadedQPFiles[0]); // Backward compatibility
+        formData.append('question_paper_file', uploadedQPFiles[0]);
     }
     if (rawText) {
         formData.append('question_paper_text', rawText);
     }
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-    fetch("{% url 'api_scan_question_paper' %}", {
+    const scanEndpoint = `/api/exam/{{ selected_exam.id }}/fast-scan-mcq/`;
+
+    fetch(scanEndpoint, {
         method: 'POST',
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
         body: formData,
@@ -1054,7 +1179,7 @@ function runAIQuestionScanFromModal() {
             const rawRespText = await response.text();
             data = {
                 success: false,
-                error: `Server returned non-JSON response (HTTP ${response.status}): ${rawRespText.slice(0, 200)}...`
+                error: `Server returned response: ${rawRespText.slice(0, 200)}...`
             };
         }
         return { ok: response.ok, data };
@@ -1063,12 +1188,13 @@ function runAIQuestionScanFromModal() {
         if (qpScanTimerInterval) clearInterval(qpScanTimerInterval);
         if (window.qpScanProgressPollInterval) clearInterval(window.qpScanProgressPollInterval);
 
-        if (ok && data.success && data.data && data.data.questions && data.data.questions.length > 0) {
+        const qList = data.questions || (data.data ? data.data.questions : []);
+        if (ok && (data.success || data.status === 'success') && qList && qList.length > 0) {
             currentStagedScanData = data;
-            const count = data.extracted_count || data.data.questions.length;
+            const count = data.question_count || qList.length;
             updateScanProgress(100, "🎉 Scan Complete!");
-            appendScanLog(`🎉 Success! Extracted ${count} questions, ${data.figures_count || 0} figures & tables.`, 'success');
-            appendScanLog(`⚠️ Extracted paper staged in memory. Click Finalize This to commit to database or View Scanned to preview.`, 'warn');
+            appendScanLog(`🎉 Success! Extracted ${count} MCQ questions with option keys & marks.`, 'success');
+            appendScanLog(`⚠️ Extracted paper staged in memory. Click Finalize & Save to commit to database.`, 'warn');
 
             const statusBadge = document.getElementById('scanStatusBadge');
             if (statusBadge) {
@@ -1076,11 +1202,9 @@ function runAIQuestionScanFromModal() {
                 statusBadge.className = "px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5";
             }
 
-            // Switch modal to completed state
             document.getElementById('scanInProgressControls').classList.add('hidden');
             document.getElementById('scanCompletedControls').classList.remove('hidden');
             
-            // Also render page preview
             renderScannedPaperPreview(data);
             lucide.createIcons();
         } else {
@@ -1121,9 +1245,34 @@ function stopScan() {
 }
 
 function quitScan() {
+    window.currentStagedScanData = null;
     currentStagedScanData = null;
-    document.getElementById('scannedPaperPreview').classList.add('hidden');
-    document.getElementById('scannedQuestionsContainer').innerHTML = '';
+    stagedSupplementaryFile = null;
+    uploadedQPFiles = [];
+
+    const previewBox = document.getElementById('scannedPaperPreview');
+    const modalPreviewBox = document.getElementById('modalScannedPreviewBox');
+    const container = document.getElementById('scannedQuestionsContainer');
+    const modalContainer = document.getElementById('modalScannedQuestionsContainer');
+    if (previewBox) previewBox.classList.add('hidden');
+    if (modalPreviewBox) modalPreviewBox.classList.add('hidden');
+    if (container) container.innerHTML = '';
+    if (modalContainer) modalContainer.innerHTML = '';
+
+    const modalFileInput = document.getElementById('modalQPFileInput');
+    if (modalFileInput) modalFileInput.value = '';
+    const mcqFileInput = document.getElementById('mcqScanFileInput');
+    if (mcqFileInput) mcqFileInput.value = '';
+
+    updateScanProgress(0, "Ready");
+    const scanLog = document.getElementById('scanLogConsole');
+    if (scanLog) scanLog.innerHTML = '';
+
+    const scanCompletedControls = document.getElementById('scanCompletedControls');
+    const scanInProgressControls = document.getElementById('scanInProgressControls');
+    if (scanCompletedControls) scanCompletedControls.classList.add('hidden');
+    if (scanInProgressControls) scanInProgressControls.classList.remove('hidden');
+
     closeScanProgressModal();
 }
 
@@ -1134,18 +1283,16 @@ function closeScanProgressModal() {
 }
 
 function viewScannedItems() {
-    if (!currentStagedScanData || !currentStagedScanData.data) {
+    if (!currentStagedScanData || (!currentStagedScanData.data && !currentStagedScanData.questions)) {
         alert("No scanned paper data available to view.");
         return;
     }
 
     renderScannedPaperPreview(currentStagedScanData);
     
-    // Expand and scroll modal preview
     const modalPreviewContainer = document.getElementById('modalScannedPreviewBox');
     if (modalPreviewContainer) {
         modalPreviewContainer.classList.remove('hidden');
-        renderModalInlinePreview(currentStagedScanData);
     }
 }
 
@@ -1210,77 +1357,121 @@ function renderModalInlinePreview(data) {
 
 function renderScannedPaperPreview(data) {
     const previewBox = document.getElementById('scannedPaperPreview');
+    const modalPreviewBox = document.getElementById('modalScannedPreviewBox');
     const container = document.getElementById('scannedQuestionsContainer');
+    const modalContainer = document.getElementById('modalScannedQuestionsContainer');
     const fileNameLabel = document.getElementById('scannedPaperFileName');
 
+    const mcqFileInput = document.getElementById('mcqScanFileInput');
     const qpFileInput = document.querySelector('input[name="question_paper_file"]');
-    if (qpFileInput && qpFileInput.files && qpFileInput.files[0]) {
-        fileNameLabel.innerText = `File: ${qpFileInput.files[0].name}`;
+    const activeFileInput = (mcqFileInput && mcqFileInput.files && mcqFileInput.files[0]) ? mcqFileInput : qpFileInput;
+    
+    if (activeFileInput && activeFileInput.files && activeFileInput.files[0]) {
+        if (fileNameLabel) fileNameLabel.innerText = `File: ${activeFileInput.files[0].name}`;
     }
 
-    container.innerHTML = '';
+    if (container) container.innerHTML = '';
+    if (modalContainer) modalContainer.innerHTML = '';
 
-    const questions = data.data.questions || [];
+    const questions = data.data ? (data.data.questions || []) : (data.questions || []);
     questions.forEach((q, idx) => {
         const itemDiv = document.createElement('div');
-        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs font-sans text-slate-200';
+        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200';
 
-        let figsHtml = '';
-        if (q.associated_figures && q.associated_figures.length > 0) {
-            figsHtml += '<div class="my-2 space-y-1.5">';
-            q.associated_figures.forEach(fig => {
-                figsHtml += `
-                    <div class="inline-block p-2 rounded-lg bg-slate-900 border border-slate-700 text-center">
-                        <img src="${fig.image_url || fig.thumbnail_url || ''}" alt="${fig.caption || 'Figure'}" class="max-h-48 object-contain mx-auto rounded border border-slate-700">
-                        <p class="text-[10px] font-bold text-slate-400 mt-1">📷 ${fig.caption || 'Figure'} (Page ${fig.page_number || 1})</p>
-                    </div>
-                `;
-            });
-            figsHtml += '</div>';
+        const qNum = q.question_number || q.q_num || ('Q' + (idx + 1));
+        const promptText = q.prompt_text || q.question_text || '';
+        const defaultMark = q.allocated_marks || q.marks || 10.0;
+        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().toUpperCase().trim();
+        const optsList = q.options || [];
+
+        const coVal = q.co || 'CO1';
+        const bloomVal = q.bloom_level || 'C1';
+        const poVal = q.po || 'PO1';
+        const coPoBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">[${coVal}, ${bloomVal}, ${poVal}]</span>`;
+
+        let optsHtml = '';
+        if (optsList && optsList.length > 0) {
+            optsHtml = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300">
+                ${optsList.map(opt => `<div class="font-medium">${opt}</div>`).join('')}
+            </div>`;
         }
 
-        let tblsHtml = '';
-        if (q.associated_tables && q.associated_tables.length > 0) {
-            tblsHtml += '<div class="my-2 space-y-1.5">';
-            q.associated_tables.forEach(tbl => {
-                tblsHtml += `
-                    <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 overflow-x-auto">
-                        <p class="text-[10px] font-bold text-cyan-400 mb-1">
-                            ${tbl.element_type === 'MATRIX' ? '🔢 Matrix Grid' : '📊 Table'} ${tbl.caption || ''}
-                        </p>
-                `;
-                if (tbl.cell_json && Array.isArray(tbl.cell_json)) {
-                    tblsHtml += '<table class="w-full text-[11px] border-collapse border border-slate-700 font-mono bg-slate-950">';
-                    tbl.cell_json.forEach(row => {
-                        tblsHtml += '<tr>';
-                        row.forEach(cell => {
-                            tblsHtml += `<td class="border border-slate-700 px-3 py-1 text-center font-bold text-slate-200">${cell}</td>`;
-                        });
-                        tblsHtml += '</tr>';
-                    });
-                    tblsHtml += '</table>';
-                }
-                tblsHtml += '</div>';
-            });
-            tblsHtml += '</div>';
-        }
+        let keySelectHtml = `
+        <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+            <div class="flex items-center gap-2">
+                <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
+                <div class="flex items-center gap-1">
+                    ${['A', 'B', 'C', 'D'].map(optKey => {
+                        const isChecked = (optKey === keyVal) ? 'checked' : '';
+                        return `
+                        <label class="cursor-pointer">
+                            <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
+                            <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
+                        </label>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <span class="text-[11px] text-slate-400 font-bold">Mark:</span>
+                <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateMcqMarkFromPreview('${qNum}', this.value)" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono font-bold text-center focus:ring-2 focus:ring-purple-500 outline-none">
+            </div>
+        </div>`;
 
         itemDiv.innerHTML = `
-            <div class="flex items-start justify-between font-bold">
-                <span class="text-sm text-cyan-300 font-mono">${q.question_number || 'Q' + (idx+1)}. ${q.prompt_text || ''}</span>
-                <span class="font-mono text-purple-400 font-extrabold text-sm ml-4">[${q.allocated_marks || 10} Marks]</span>
+            <div class="flex items-start justify-between font-bold gap-3">
+                <div class="flex-1 space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-cyan-300 font-mono font-extrabold">${qNum}.</span>
+                        ${coPoBadge}
+                    </div>
+                    <input type="text" id="preview_prompt_${qNum}" value="${promptText.replace(/"/g, '&quot;')}" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold w-full focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
             </div>
-            ${q.scenario ? `<p class="text-slate-400 italic text-[11px] bg-slate-900 p-2 rounded border-l-2 border-cyan-500"><strong>Scenario:</strong> ${q.scenario}</p>` : ''}
-            ${figsHtml}
-            ${tblsHtml}
+            ${optsHtml}
+            ${keySelectHtml}
         `;
-        container.appendChild(itemDiv);
+
+        if (container) container.appendChild(itemDiv.cloneNode(true));
+        if (modalContainer) modalContainer.appendChild(itemDiv);
     });
 
-    previewBox.classList.remove('hidden');
+    if (previewBox) {
+        previewBox.classList.remove('hidden');
+        previewBox.scrollIntoView({ behavior: 'smooth' });
+    }
+    if (modalPreviewBox) {
+        modalPreviewBox.classList.remove('hidden');
+    }
     lucide.createIcons();
-    previewBox.scrollIntoView({ behavior: 'smooth' });
 }
+
+function updateMcqKeyFromPreview(qNum, keyVal) {
+    const cleanNum = String(qNum).replace(/\D/g, '');
+    const optRadio = document.querySelector(`input[name="mcq_opt_q${cleanNum}"][value="${keyVal}"]`);
+    if (optRadio) optRadio.checked = true;
+
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum || (q.question_number || q.q_num) === `Q${cleanNum}`);
+        if (targetQ) {
+            targetQ.correct_answer = keyVal;
+            targetQ.key = keyVal;
+        }
+    }
+}
+
+function updateMcqMarkFromPreview(qNum, markVal) {
+    const cleanNum = String(qNum).replace(/\D/g, '');
+    const markIn = document.getElementById(`mcq_mark_q${cleanNum}`);
+    if (markIn) {
+        markIn.value = markVal;
+        recalculateMcqMarksTotal();
+    }
+}
+
+let stagedSupplementaryFile = null;
 
 function finalizeScannedPaper() {
     const btn = document.getElementById('scanAcademicBtn');
@@ -1288,6 +1479,27 @@ function finalizeScannedPaper() {
     const formData = new FormData();
     formData.append('examination_id', "{{ selected_exam.id }}");
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        if (qList && qList.length > 0) {
+            formData.append('staged_questions_json', JSON.stringify(qList.map(q => ({
+                question_number: q.question_number || q.q_num,
+                prompt_text: q.prompt_text || q.question_text,
+                allocated_marks: q.marks || q.allocated_marks || 10.0,
+                ideal_answer: q.correct_answer || q.key || 'B',
+                key: q.correct_answer || q.key || 'B',
+                co_mapping: q.co || 'CO1',
+                bloom_level: q.bloom_level || 'C1',
+                po_mapping: q.po || 'PO1',
+                options: q.options || []
+            }))));
+        }
+    }
+
+    if (stagedSupplementaryFile) {
+        formData.append('supplementary_file', stagedSupplementaryFile);
+    }
 
     fetch("{% url 'api_finalize_scanned_paper' %}", {
         method: 'POST',
@@ -1298,7 +1510,7 @@ function finalizeScannedPaper() {
     .then(data => {
         if (data.success) {
             localStorage.setItem("finalized_exam_{{ selected_exam.id }}", "true");
-            const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, and rubrics are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
+            const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, rubrics, and supplementary documents are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
             closeScanProgressModal();
             if (goEval) {
                 window.location.href = "{% url 'evaluate_answer_scripts_list' selected_exam.id %}";
@@ -1315,16 +1527,45 @@ function finalizeScannedPaper() {
 }
 
 function openSupplementaryModal() {
-    closeScanProgressModal();
     const modal = document.getElementById('supplementaryDocModal');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
 }
 
 function closeSupplementaryModal() {
     const modal = document.getElementById('supplementaryDocModal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.remove('flex');
+        modal.classList.add('hidden');
+    }
+    const scanModal = document.getElementById('scanProgressModal');
+    if (scanModal) {
+        scanModal.classList.remove('hidden');
+        scanModal.classList.add('flex');
+    }
+}
+
+function attachSupplementaryDocJS() {
+    const fileInput = document.getElementById('modalSupplementaryFileInput');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please select a supplementary document file first.');
+        return;
+    }
+
+    stagedSupplementaryFile = fileInput.files[0];
+    
+    appendScanLog(`📎 Staged Supplementary Document: ${stagedSupplementaryFile.name} (${(stagedSupplementaryFile.size/1024).toFixed(1)} KB)`, 'success');
+    appendScanLog(`ℹ️ Supplementary document staged in memory. It will be committed when you click Finalize & Save.`, 'info');
+
+    const badge = document.getElementById('modalSupplementaryStatus');
+    if (badge) {
+        badge.innerHTML = `✓ Staged Supplementary File: ${stagedSupplementaryFile.name} (${(stagedSupplementaryFile.size/1024).toFixed(1)} KB)`;
+        badge.classList.remove('hidden');
+    }
+
+    closeSupplementaryModal();
 }
 
 // Enforce Finalized Lock State on Page Load
@@ -1621,30 +1862,434 @@ function editQuestion(num, marks, prompt, criteria, ideal) {
 
 <!-- Supplementary Document Upload Modal -->
 <div id="supplementaryDocModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
+    <div class="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-4">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <h3 class="font-bold text-sm text-white flex items-center gap-2">
-                <i data-lucide="file-text" class="w-4 h-4 text-purple-400"></i> Upload Supplementary Document
+                <i data-lucide="file-plus" class="w-4 h-4 text-purple-400"></i> Attach Supplementary Document
             </h3>
-            <button type="button" onclick="closeSupplementaryModal()" class="text-slate-400 hover:text-white">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
+            <button type="button" onclick="closeSupplementaryModal()" class="text-slate-400 hover:text-white cursor-pointer">&times;</button>
         </div>
 
-        <form method="POST" enctype="multipart/form-data" class="space-y-4">
-            {% csrf_token %}
-            <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
-
+        <div class="space-y-4">
             <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Supplementary Document (Rubric / Solution Key / Reference)</label>
-                <input type="file" name="rubric_reference_file" accept=".pdf,.doc,.docx,.png,.jpg" required class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+                <label class="block text-xs font-bold text-slate-300 mb-1">Supplementary Reference Document (Rubric / Solution Key / Reference)</label>
+                <input type="file" id="modalSupplementaryFileInput" accept=".pdf,.doc,.docx,.png,.jpg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+                <p class="text-[10px] text-slate-400 mt-1">This document will be staged in memory and saved only when you click "Finalize & Save Paper".</p>
+            </div>
+
+            <div id="modalSupplementaryStatus" class="hidden text-xs p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">
+                <!-- Status rendered here -->
             </div>
 
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeSupplementaryModal()" class="px-3.5 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl">Upload Document</button>
+                <button type="button" onclick="closeSupplementaryModal()" class="px-3.5 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700 cursor-pointer">Close</button>
+                <button type="button" onclick="attachSupplementaryDocJS()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer">Attach Document</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
+
+<!-- Method 3: MCQ Question Paper & Student ID Evaluation Modal -->
+<div id="mcqSystemModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-purple-500/40 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl p-6 space-y-5 text-slate-200">
+        
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <span class="p-2 rounded-xl bg-purple-500/20 text-purple-400">
+                    <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                </span>
+                <div>
+                    <h3 class="font-extrabold text-base text-white tracking-tight">Method 3: MCQ Quiz & Answer Key Engine</h3>
+                    <p class="text-xs text-slate-400">Examination: <strong class="text-purple-400">{{ selected_exam.title }}</strong> ({{ selected_exam.course.code }}) | Max Marks: <strong class="text-emerald-400">{{ selected_exam.total_marks|default:100.0 }}</strong></p>
+                </div>
+            </div>
+            <button type="button" onclick="closeMcqModal()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer px-2">&times;</button>
+        </div>
+
+        <!-- STEP 1: Insert / Configure MCQ Questions & Answer Key (Hidden if questions exist) -->
+        <div id="mcqStep1Container" class="space-y-4 {% if questions %}hidden{% endif %}">
+            <div class="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-semibold flex items-center justify-between">
+                <span class="flex items-center gap-1.5 font-extrabold text-white">
+                    <i data-lucide="layers" class="w-4 h-4 text-purple-400"></i> Step 1: Configure MCQ Questions & Ground-Truth Answer Key
+                </span>
+                <span class="text-[11px] bg-purple-500/30 px-3 py-1 rounded-xl font-mono font-extrabold text-purple-300 border border-purple-500/30">
+                    Total Marks: <span id="calcTotalMarks">0.0</span> / {{ selected_exam.total_marks|default:100.0 }}
+                </span>
+            </div>
+
+            <!-- Creation Mode Tabs: Manual Builder vs AI Question Paper Scan -->
+            <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+                <button type="button" onclick="switchMcqMode('manual')" id="mcqTabManualBtn" class="px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer">
+                    ✍️ Manual Question & Key Builder
+                </button>
+                <button type="button" onclick="switchMcqMode('scan')" id="mcqTabScanBtn" class="px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer">
+                    🧠 AI Scan MCQ Question Paper
+                </button>
+            </div>
+
+            <!-- Mode A: AI MCQ Question Paper Scanner -->
+            <div id="mcqScanModeView" class="hidden space-y-3 p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs">
+                <label class="block font-bold text-slate-300">Upload MCQ Question Paper Document (PDF or Image)</label>
+                <input type="file" id="mcqScanFileInput" accept=".pdf,.png,.jpg,.jpeg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
+                <p class="text-[10px] text-slate-400">IntelliGrade AI will extract question texts, options (A, B, C, D), answer keys, and assigned marks from your paper document.</p>
+                <button type="button" onclick="runAiMcqQuestionScan({{ selected_exam.id }})" id="aiMcqScanBtn" class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="scan-line" class="w-4 h-4"></i> 🧠 Scan & Extract Questions with AI
+                </button>
+            </div>
+
+            <!-- Mode B: Manual Builder Configuration -->
+            <div id="mcqManualModeView" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                        <label class="block text-slate-300 font-bold mb-1">Option Label Scheme</label>
+                        <select id="mcqSchemeSelect" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="ALPHA_UPPER" selected>Alphabetic (A, B, C, D)</option>
+                            <option value="NUMERIC">Numeric (1, 2, 3, 4)</option>
+                            <option value="ROMAN_LOWER">Roman Numerals (i, ii, iii, iv)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-bold mb-1">Default Mark per Question</label>
+                        <input type="number" step="0.5" id="mcqMarksPerQ" value="1.0" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 font-bold mb-1">Number of Questions</label>
+                        <select id="mcqNumQSelect" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:ring-2 focus:ring-purple-500 outline-none">
+                            <option value="5">5 Questions</option>
+                            <option value="10" selected>10 Questions</option>
+                            <option value="15">15 Questions</option>
+                            <option value="20">20 Questions</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dynamic Key Matrix Input Grid with Individual Question Marks -->
+                <div>
+                    <div class="flex items-center justify-between text-xs font-bold text-slate-300 mb-2">
+                        <span>Select Answer Key & Mark Distribution per Question:</span>
+                        <span id="marksWarningBadge" class="text-rose-400 font-extrabold text-[11px] hidden">⚠️ Total marks exceed exam limit!</span>
+                    </div>
+                    <div id="mcqKeyGrid" class="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto p-2.5 rounded-2xl bg-slate-950 border border-slate-800">
+                        <!-- Rendered by renderMcqKeyGrid() -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+                <span class="text-[11px] text-slate-400">Save key set to enable Student ID evaluation mode.</span>
+                <button type="button" onclick="saveMcqAnswerKey({{ selected_exam.id }})" id="saveMcqKeyBtn" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="save" class="w-4 h-4"></i> 💾 Save MCQ Questions & Unlock Student Evaluation
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2: Student ID-wise Upload & Evaluation (Default View if Questions Exist) -->
+        <div id="mcqStep2Container" class="space-y-4 {% if not questions %}hidden{% endif %} border-t border-slate-800 pt-3">
+            <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    </span>
+                    <div>
+                        <span class="font-extrabold text-white block">Student ID MCQ Evaluation Mode</span>
+                        <span class="text-[10px] text-emerald-300">Question Set Established ({{ questions.count }} Questions Configured)</span>
+                    </div>
+                </div>
+                <button type="button" onclick="toggleMcqStep1()" class="px-3 py-1 bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/40 rounded-xl text-[10px] font-bold transition-all cursor-pointer">
+                    ⚙ Edit Question Set & Key
+                </button>
+            </div>
+
+            <!-- Student ID & Name Manual / Auto Insert Fields -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                    <label class="block text-slate-300 font-bold mb-1">Student Roll / ID Number <span class="text-rose-400">*</span></label>
+                    <input type="text" id="mcqStudentRoll" placeholder="e.g. CSE-2024-045" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <span class="text-[10px] text-slate-400">Type manually or let OCR auto-detect from paper.</span>
+                </div>
+                <div>
+                    <label class="block text-slate-300 font-bold mb-1">Student Full Name</label>
+                    <input type="text" id="mcqStudentName" placeholder="e.g. Rahim Ahmed" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Student Script Upload -->
+            <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">Upload Student MCQ Answer Sheet (Image or PDF)</label>
+                <input type="file" id="mcqStudentScriptFile" accept=".pdf,.png,.jpg,.jpeg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700 inline-flex items-center gap-1">
+                    <i data-lucide="list" class="w-3.5 h-3.5"></i> View All Submissions
+                </a>
+                <button type="button" onclick="runMcqStudentEvaluation({{ selected_exam.id }})" id="runMcqEvalBtn" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="zap" class="w-4 h-4"></i> ⚡ Run MCQ Evaluation & Grade Student
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function openMcqModal() {
+    const modal = document.getElementById('mcqSystemModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        renderMcqKeyGrid();
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+function closeMcqModal() {
+    const modal = document.getElementById('mcqSystemModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+function toggleMcqStep1() {
+    const st1 = document.getElementById('mcqStep1Container');
+    if (st1) st1.classList.toggle('hidden');
+}
+
+function switchMcqMode(mode) {
+    const manualBtn = document.getElementById('mcqTabManualBtn');
+    const scanBtn = document.getElementById('mcqTabScanBtn');
+    const manualView = document.getElementById('mcqManualModeView');
+    const scanView = document.getElementById('mcqScanModeView');
+
+    if (mode === 'scan') {
+        manualBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer";
+        scanBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer";
+        manualView.classList.add('hidden');
+        scanView.classList.remove('hidden');
+    } else {
+        manualBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer";
+        scanBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer";
+        manualView.classList.remove('hidden');
+        scanView.classList.add('hidden');
+    }
+}
+
+function renderMcqKeyGrid() {
+    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
+    const scheme = document.getElementById('mcqSchemeSelect').value;
+    const defaultMark = parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0;
+    const grid = document.getElementById('mcqKeyGrid');
+    if (!grid) return;
+
+    let optionLabels = ['A', 'B', 'C', 'D'];
+    if (scheme === 'NUMERIC') optionLabels = ['1', '2', '3', '4'];
+    else if (scheme === 'ROMAN_LOWER') optionLabels = ['i', 'ii', 'iii', 'iv'];
+
+    let html = '';
+    for (let i = 1; i <= numQ; i++) {
+        html += `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs gap-2">
+            <div class="flex items-center gap-2">
+                <span class="font-extrabold text-purple-400 font-mono w-10">Q${i}:</span>
+                <input type="text" id="mcq_prompt_q${i}" placeholder="Question text (optional)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-white w-48 outline-none">
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1">
+                    ${optionLabels.map(opt => `
+                        <label class="cursor-pointer">
+                            <input type="radio" name="mcq_opt_q${i}" value="${opt}" ${opt === optionLabels[1] ? 'checked' : ''} class="hidden peer">
+                            <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${opt}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                    <span class="text-[10px] text-slate-400">Mark:</span>
+                    <input type="number" step="0.5" id="mcq_mark_q${i}" value="${defaultMark}" onchange="recalculateMcqMarksTotal()" class="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-white font-mono font-bold text-center outline-none">
+                </div>
+            </div>
+        </div>`;
+    }
+    grid.innerHTML = html;
+    recalculateMcqMarksTotal();
+}
+
+function runAiMcqQuestionScan(examId) {
+    const fileInput = document.getElementById('mcqScanFileInput');
+    closeMcqModal();
+    openScanQuestionModal();
+
+    if (fileInput && fileInput.files && fileInput.files.length > 0) {
+        addQPFilesToList(Array.from(fileInput.files));
+        setTimeout(() => {
+            runAIQuestionScanFromModal();
+        }, 300);
+    }
+}
+
+function recalculateMcqMarksTotal() {
+    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
+    const maxExamLimit = parseFloat("{{ selected_exam.total_marks|default:100.0 }}") || 100.0;
+    let sum = 0.0;
+
+    for (let i = 1; i <= numQ; i++) {
+        const markInput = document.getElementById(`mcq_mark_q${i}`);
+        if (markInput) {
+            sum += parseFloat(markInput.value) || 0.0;
+        }
+    }
+
+    const calcDisp = document.getElementById('calcTotalMarks');
+    if (calcDisp) calcDisp.innerText = sum.toFixed(1);
+
+    const warnBadge = document.getElementById('marksWarningBadge');
+
+    if (sum > maxExamLimit + 0.01) {
+        if (warnBadge) warnBadge.classList.remove('hidden');
+    } else {
+        if (warnBadge) warnBadge.classList.add('hidden');
+    }
+    validateSaveMcqKeyButton();
+}
+
+function validateSaveMcqKeyButton() {
+    const saveBtn = document.getElementById('saveMcqKeyBtn');
+    if (!saveBtn) return;
+
+    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 0;
+    let hasValidContent = false;
+
+    for (let i = 1; i <= numQ; i++) {
+        const promptInput = document.getElementById(`mcq_prompt_q${i}`);
+        const checkedOpt = document.querySelector(`input[name="mcq_opt_q${i}"]:checked`);
+        if (checkedOpt || (promptInput && promptInput.value.trim() !== '')) {
+            hasValidContent = true;
+            break;
+        }
+    }
+
+    const calcSum = parseFloat(document.getElementById('calcTotalMarks') ? document.getElementById('calcTotalMarks').innerText : 0) || 0;
+    const maxExamLimit = parseFloat("{{ selected_exam.total_marks|default:100.0 }}") || 100.0;
+
+    if (!hasValidContent) {
+        saveBtn.disabled = true;
+        saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        saveBtn.title = "Please scan an MCQ Question Paper or enter questions manually before saving.";
+    } else if (calcSum > maxExamLimit + 0.01) {
+        saveBtn.disabled = true;
+        saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        saveBtn.title = "Total allocated marks exceed exam limit.";
+    } else {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        saveBtn.title = "Save MCQ Questions & Unlock Student Evaluation";
+    }
+}
+
+function saveMcqAnswerKey(examId) {
+    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
+    const scheme = document.getElementById('mcqSchemeSelect').value;
+    const defaultMark = parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0;
+
+    const question_details = {};
+    for (let i = 1; i <= numQ; i++) {
+        const checked = document.querySelector(`input[name="mcq_opt_q${i}"]:checked`);
+        const markInput = document.getElementById(`mcq_mark_q${i}`);
+        question_details[`Q${i}`] = {
+            key: checked ? checked.value : 'B',
+            marks: markInput ? parseFloat(markInput.value) || defaultMark : defaultMark
+        };
+    }
+
+    const btn = document.getElementById('saveMcqKeyBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving Key & Questions...`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    fetch(`/api/exam/${examId}/save-mcq-key/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            question_details: question_details,
+            scheme: scheme,
+            marks_per_question: defaultMark
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ ${data.message}\nStudent ID Evaluation Mode is now active for this exam!`);
+            document.getElementById('mcqStep2Container').classList.remove('hidden');
+            document.getElementById('mcqStep1Container').classList.add('hidden');
+        } else {
+            alert(`❌ Error saving key: ${data.error || 'Failed'}`);
+        }
+    })
+    .catch(err => alert(`❌ Network error: ${err.message}`))
+    .finally(() => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> 💾 Save MCQ Questions & Unlock Student Evaluation`;
+            if (window.lucide) lucide.createIcons();
+        }
+    });
+}
+
+function runMcqStudentEvaluation(examId) {
+    const roll = document.getElementById('mcqStudentRoll').value.trim();
+    const name = document.getElementById('mcqStudentName').value.trim();
+    
+    const btn = document.getElementById('runMcqEvalBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Grading Student Script...`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    fetch(`/api/exam/${examId}/evaluate-quiz/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            student_roll: roll,
+            student_name: name,
+            scheme: document.getElementById('mcqSchemeSelect').value,
+            marks_per_question: parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            alert(`✅ Student Evaluation Completed!\nStudent Roll: ${roll || 'Auto-Detected'}\nTotal Score: ${data.summary.total_score} / ${data.summary.max_score} (${data.summary.percentage}%)\nCorrect: ${data.summary.total_correct}, Incorrect: ${data.summary.total_incorrect}`);
+            window.location.href = `/teacher/exam/${examId}/evaluate-scripts/`;
+        } else {
+            alert(`❌ Evaluation Error: ${data.error || 'Failed'}`);
+        }
+    })
+    .catch(err => alert(`❌ Network Error: ${err.message}`))
+    .finally(() => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="zap" class="w-4 h-4"></i> ⚡ Run MCQ Evaluation & Grade Student`;
+            if (window.lucide) lucide.createIcons();
+        }
+    });
+}
+
+function toggleSavedMcqViewer() {
+    const panel = document.getElementById('savedMcqViewerPanel');
+    if (panel) {
+        panel.classList.toggle('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
+}
+</script>
 {% endblock %}

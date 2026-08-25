@@ -1,0 +1,18 @@
+{% extends 'emails/base_email.html' %}
+
+{% block title %}Official Course OBE Tabulation Report - {{ course_code }}{% endblock %}
+
+{% block content %}
+<h2 style="color: #ffffff; margin-top: 0;">Official Course OBE Tabulation Report</h2>
+<p>Dear Faculty Member / Department Administrator,</p>
+<p>The official real-time Outcome-Based Education (OBE) course tabulation report for <strong>{{ course_code }} (Section {{ section }})</strong> has been generated.</p>
+
+<div style="background-color: #0f172a; padding: 16px; border-radius: 10px; border-left: 4px solid #10b981; margin: 20px 0;">
+    <p style="margin: 0; color: #94a3b8; font-size: 12px; font-weight: 700; text-transform: uppercase;">Course Details</p>
+    <p style="margin: 4px 0 0; color: #ffffff;"><strong>Course Code:</strong> {{ course_code }}</p>
+    <p style="margin: 2px 0 0; color: #ffffff;"><strong>Section:</strong> {{ section }}</p>
+    <p style="margin: 2px 0 0; color: #6ee7b7;"><strong>Status:</strong> Live OBE Tabulation Synchronized</p>
+</div>
+
+<p>If attached, the official multi-sheet Excel spreadsheet (format: <code>Tabulation-{{ course_code }}-{{ section }}.xlsx</code>) is included for institutional archive and accreditation submission.</p>
+{% endblock %}

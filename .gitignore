@@ -21,6 +21,8 @@ db.sqlite3
 db.sqlite3-journal
 staticfiles/
 media/
+generate_mcq_pdf.py
+generate_test_student_sheet.py
 
 # IDE & OS files
 .vscode/
@@ -30,6 +32,9 @@ media/
 .DS_Store
 Thumbs.db
 OCR and HTR
+Materials
+
+
 
 # Agent metadata
 .gemini/
@@ -37,3 +42,5 @@ OCR and HTR
 # Debug artifacts & traces
 request_trace/
 **/request_trace/
+htr_benchmark_report.json
+htr_manifest.json

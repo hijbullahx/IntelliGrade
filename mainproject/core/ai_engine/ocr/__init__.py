@@ -1,3 +1,3 @@
-"""
-OCR Pipeline Package for preprocessing and text recognition.
-"""
+from .htr_interfaces import HTRResult, BaseHandwritingRecognizer
+
+__all__ = ['HTRResult', 'BaseHandwritingRecognizer']

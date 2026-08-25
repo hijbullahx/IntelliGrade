@@ -3,6 +3,7 @@
 Django>=4.2,<6.0
 PyMuPDF>=1.23.0
 opencv-python-headless>=4.8.0
+opencv-python>=4.8.0
 numpy>=1.24.0
 Pillow>=10.0.0
 reportlab>=4.0.0
@@ -18,3 +19,9 @@ google-generativeai>=0.3.0
 groq>=0.4.0
 openai>=1.0.0
 psycopg[binary]>=3.1.18
+tensorflow-cpu>=2.15.0
+tf_keras>=2.15.0
+editdistance>=0.8.0
+lmdb>=1.4.0
+
+

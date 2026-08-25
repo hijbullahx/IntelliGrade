@@ -44,10 +44,10 @@ class AIProviderFactory:
                 primary = OpenAIProvider(api_key=openai_key, model_name=config.openai_model_name or 'gpt-4o-mini')
 
         if primary is None:
-            if groq_key:
+            if gemini_key:
+                primary = GeminiProvider(api_key=gemini_key, model_name='gemini-flash-latest')
+            elif groq_key:
                 primary = GroqProvider(api_key=groq_key)
-            elif gemini_key:
-                primary = GeminiProvider(api_key=gemini_key)
             elif openai_key:
                 primary = OpenAIProvider(api_key=openai_key)
             else:
