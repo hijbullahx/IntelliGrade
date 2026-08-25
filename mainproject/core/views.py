@@ -2242,7 +2242,7 @@ def delete_question(request, question_id):
 
 
 def delete_all_questions(request, exam_id):
-    """Allows Faculty to remove ALL configured questions from an examination paper."""
+    """Allows Faculty to remove ALL configured questions and previous documents from an examination paper."""
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 
@@ -2257,7 +2257,22 @@ def delete_all_questions(request, exam_id):
     q_count = exam.questions.count()
     exam.questions.all().delete()
 
-    messages.success(request, f"Successfully removed all {q_count} configured exam paper items.")
+    if exam.question_paper_file:
+        try:
+            exam.question_paper_file.delete(save=False)
+        except Exception:
+            pass
+        exam.question_paper_file = None
+    exam.save()
+
+    # Clear any staged session or cache data
+    if f'staged_scan_data_{exam.id}' in request.session:
+        del request.session[f'staged_scan_data_{exam.id}']
+        request.session.modified = True
+    cache.delete(f'staged_exam_questions_{exam.id}')
+    cache.delete(f'exam_scan_progress_{exam.id}')
+
+    messages.success(request, f"Successfully removed all {q_count} configured exam paper items and reset previous question paper document.")
     return redirect('question_rubric_manage', exam_id=exam.id)
 
 

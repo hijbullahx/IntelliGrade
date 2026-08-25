@@ -39,8 +39,8 @@
             <div class="flex items-center gap-3 w-full md:w-auto">
                 {% if selected_exam %}
                     {% if questions and questions.count > 0 %}
-                    <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
-                        <i data-lucide="check-square" class="w-4 h-4"></i> Evaluate Answer Scripts
+                    <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 shrink-0 animate-pulse">
+                        <i data-lucide="check-square" class="w-4 h-4"></i> ⚡ Evaluate Student Answer Scripts &rarr;
                     </a>
                     {% else %}
                     <button type="button" disabled title="Upload, scan, and finalize the Question Paper & Rubrics before evaluating answer scripts." class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed opacity-60 flex items-center gap-2 shrink-0 border border-slate-300 dark:border-slate-700">
@@ -104,11 +104,11 @@
 
                 <div id="qpStatusBadge" class="pt-1">
                     {% if selected_exam.question_paper_file or questions %}
-                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs">
+                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs flex-wrap">
                         {% csrf_token %}
                         <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
                         <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] border border-emerald-500/20">
-                            ✓ Written Paper Configured: {{ questions.count }} Question(s) Saved
+                            ✓ Paper Configured: {{ questions.count }} Question(s) Saved
                         </span>
                         {% if selected_exam.question_paper_file %}
                         <a href="{{ selected_exam.question_paper_file.url }}" target="_blank" class="text-[11px] text-purple-600 dark:text-purple-400 font-bold hover:underline inline-flex items-center gap-1">
@@ -126,9 +126,22 @@
             </div>
 
             <div class="flex items-center gap-3 shrink-0">
+                {% if questions and questions.count > 0 %}
+                <button type="button" disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Click Reset & Re-scan to scan a new paper." class="px-5 py-3 bg-slate-800 text-slate-400 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-75 flex items-center gap-2">
+                    <i data-lucide="lock" class="w-4 h-4 text-amber-400"></i> 🔒 🧠 Scan Locked ({{ questions.count }} Qs Active)
+                </button>
+                <form method="POST" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+                    <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ selected_exam.id }}'); return confirm('Reset and remove all {{ questions.count }} configured questions and previous paper from this exam?');" class="px-4 py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer" title="Reset paper to enable scanning a new question paper">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 🗑️ Reset & Re-scan
+                    </button>
+                </form>
+                {% else %}
                 <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2.5 cursor-pointer">
                     <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Questions (AI Engine)
                 </button>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -229,9 +242,6 @@
 
         <div id="scannedQuestionsContainer" class="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
             <!-- Extracted questions rendered here -->
-        </div>
-    </div>
-
     <!-- Main Grid: IUBAT Collapsible Question Builder + Paper Question List -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -240,6 +250,32 @@
             <form method="POST" enctype="multipart/form-data" id="questionBuilderForm" class="space-y-4">
                 {% csrf_token %}
                 <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+
+                {% if questions and questions.count > 0 %}
+                <!-- Paper Finalized & Active Locked Banner -->
+                <div id="builderLockedNotice" class="glass-card p-4 rounded-2xl border-2 border-emerald-500/40 bg-slate-900/90 text-xs space-y-2.5 shadow-xl">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <h4 class="font-extrabold text-white text-xs">Paper Finalized & Active ({{ questions.count }} Questions Saved)</h4>
+                                <p class="text-[11px] text-slate-400">Questions and grading rubrics are locked to ensure grading integrity.</p>
+                            </div>
+                        </div>
+                        <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5 shrink-0 animate-pulse">
+                            <i data-lucide="check-square" class="w-3.5 h-3.5"></i> ⚡ Evaluate Student Scripts &rarr;
+                        </a>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
+                        <span class="text-slate-400 italic">"Save & Add Next Question" is disabled for this finalized paper.</span>
+                        <button type="button" onclick="toggleBuilderUnlock()" id="unlockBuilderBtn" class="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 cursor-pointer">
+                            <i data-lucide="unlock" class="w-3 h-3"></i> Unlock Builder to Manually Edit/Add
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Builder Header & Sticky Action Controls -->
                 <div class="glass-card p-5 rounded-2xl space-y-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
@@ -371,7 +407,7 @@
                     <div>
                         <div class="flex items-center justify-between mb-1">
                             <label class="block text-xs font-bold theme-text-secondary">Question Statement / Prompt Text</label>
-                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer" title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
+                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" {% if questions and questions.count > 0 %}disabled title="Paper is finalized. Unlock builder above to auto-analyze questions." class="px-3 py-1 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-[11px] rounded-lg cursor-not-allowed opacity-60 flex items-center gap-1"{% else %}class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer"{% endif %} title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
                                 <i data-lucide="sparkles" class="w-3 h-3"></i> ✨ AI Auto-Analyze Question Text
                             </button>
                         </div>
@@ -523,10 +559,10 @@
 
                     <div class="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            <button type="submit" name="action_type" value="save_and_next" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                            <button type="submit" id="saveAndNextBtn" name="action_type" value="save_and_next" {% if questions and questions.count > 0 %}disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Unlock builder above to add questions." class="w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2"{% else %}class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"{% endif %}>
                                 <i data-lucide="plus-circle" class="w-4 h-4"></i> Save & Add Next Question
                             </button>
-                            <button type="submit" name="action_type" value="save_only" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                            <button type="submit" id="saveOnlyBtn" name="action_type" value="save_only" {% if questions and questions.count > 0 %}disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Unlock builder above to edit." class="w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2"{% else %}class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"{% endif %}>
                                 <i data-lucide="check-circle-2" class="w-4 h-4"></i> Save Question & Rubric
                             </button>
                         </div>
@@ -543,6 +579,22 @@
 
         <!-- Right Col: List of Questions Configured for Selected Exam -->
         <div class="lg:col-span-5 space-y-4">
+            {% if questions and questions.count > 0 %}
+            <!-- Primary Evaluation Call to Action Card -->
+            <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-teal-950/90 to-slate-900/90 border-2 border-emerald-500/50 shadow-xl space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-emerald-400 font-extrabold text-xs flex items-center gap-1.5">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i> Paper Configured ({{ questions.count }} Questions)
+                    </span>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px]">READY FOR GRADING</span>
+                </div>
+                <p class="text-[11px] text-slate-300 leading-relaxed">Questions, maximum marks, and marking rubrics are saved in the system. Proceed to upload and grade student answer scripts.</p>
+                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="check-square" class="w-4 h-4"></i> ⚡ Evaluate Student Answer Scripts &rarr;
+                </a>
+            </div>
+            {% endif %}
+
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
                     <i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Configured Exam Paper Items ({{ questions|length }})
@@ -1729,7 +1781,60 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 });
 
+let isBuilderUnlocked = false;
+function toggleBuilderUnlock() {
+    isBuilderUnlocked = !isBuilderUnlocked;
+    const saveNext = document.getElementById('saveAndNextBtn');
+    const saveOnly = document.getElementById('saveOnlyBtn');
+    const aiBtn = document.getElementById('aiFullAnalyzeBtn');
+    const unlockBtn = document.getElementById('unlockBuilderBtn');
+
+    if (isBuilderUnlocked) {
+        if (saveNext) {
+            saveNext.disabled = false;
+            saveNext.className = "w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer";
+            saveNext.title = "";
+        }
+        if (saveOnly) {
+            saveOnly.disabled = false;
+            saveOnly.className = "w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer";
+            saveOnly.title = "";
+        }
+        if (aiBtn) {
+            aiBtn.disabled = false;
+            aiBtn.className = "px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer";
+            aiBtn.title = "Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy";
+        }
+        if (unlockBtn) {
+            unlockBtn.innerHTML = `<i data-lucide="lock" class="w-3 h-3 text-amber-400"></i> Lock Builder (Disable Manual Save)`;
+        }
+    } else {
+        if (saveNext) {
+            saveNext.disabled = true;
+            saveNext.className = "w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2";
+            saveNext.title = "Examination paper is already finalized. Unlock builder above to add questions.";
+        }
+        if (saveOnly) {
+            saveOnly.disabled = true;
+            saveOnly.className = "w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2";
+            saveOnly.title = "Examination paper is already finalized. Unlock builder above to edit questions.";
+        }
+        if (aiBtn) {
+            aiBtn.disabled = true;
+            aiBtn.className = "px-3 py-1 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-[11px] rounded-lg cursor-not-allowed opacity-60 flex items-center gap-1";
+            aiBtn.title = "Paper is finalized. Unlock builder above to auto-analyze questions.";
+        }
+        if (unlockBtn) {
+            unlockBtn.innerHTML = `<i data-lucide="unlock" class="w-3 h-3 text-cyan-400"></i> Unlock Builder to Manually Edit/Add`;
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
 function editQuestion(num, marks, prompt, criteria, ideal) {
+    if (!isBuilderUnlocked && {% if questions and questions.count > 0 %}true{% else %}false{% endif %}) {
+        toggleBuilderUnlock();
+    }
     document.getElementById('qNumber').value = num;
     document.getElementById('qMarks').value = marks;
     document.getElementById('qPrompt').value = prompt;
