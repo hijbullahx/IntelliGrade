@@ -2937,7 +2937,7 @@ def evaluate_answer_scripts_list(request, exam_id):
 
 
 def upload_student_submission(request, exam_id):
-    """Handles PDF, ZIP, or Image upload for a student answer script."""
+    """Handles Single Image, Multi-page PDF, or Batch ZIP upload for student answer scripts."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
 
@@ -2948,39 +2948,65 @@ def upload_student_submission(request, exam_id):
         roll_no = request.POST.get('roll_no', '').strip()
         script_file = request.FILES.get('script_file')
 
-        if not student_name or student_name.lower() == 'student':
-            if roll_no:
-                student_name = f"Student ({roll_no})"
-            else:
-                student_name = "Pending OCR Extraction"
-
         if not script_file:
             return JsonResponse({'success': False, 'error': 'No script file provided.'}, status=400)
 
-        sub = StudentSubmission.objects.create(
-            examination=exam,
-            student_name=student_name,
-            student_roll_no=roll_no,
-            script_file=script_file
-        )
-
         try:
-            # Process & Evaluate Submission asynchronously / synchronously
-            evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
-                submission_id=sub.id,
+            from core.ai_engine.services.submission_processor import SubmissionProcessor
+            from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+            # Ingest uploaded script(s) (handles ZIP unpacking, 300 DPI PDF rendering, or single image)
+            submissions = SubmissionProcessor.process_uploaded_file(
+                examination=exam,
+                uploaded_file=script_file,
+                student_name=student_name,
+                roll_no=roll_no,
                 user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR')
             )
 
-            return JsonResponse({
-                'success': True,
-                'submission_id': evaluated_sub.id,
-                'total_obtained': float(evaluated_sub.total_obtained_marks),
-                'total_max': float(evaluated_sub.total_max_marks),
-                'percentage': evaluated_sub.percentage,
-                'requires_manual_review': evaluated_sub.requires_manual_review,
-                'message': 'Student script successfully processed and AI evaluated.'
-            })
+            if not submissions:
+                return JsonResponse({'success': False, 'error': 'No valid answer scripts found in uploaded file.'}, status=400)
+
+            evaluated_results = []
+            for sub in submissions:
+                evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
+                    submission_id=sub.id,
+                    user=request.user,
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                evaluated_results.append({
+                    'submission_id': evaluated_sub.id,
+                    'student_name': evaluated_sub.student_name,
+                    'student_roll_no': evaluated_sub.student_roll_no,
+                    'total_obtained': float(evaluated_sub.total_obtained_marks or 0.0),
+                    'total_max': float(evaluated_sub.total_max_marks or 0.0),
+                    'percentage': float(evaluated_sub.percentage or 0.0),
+                    'requires_manual_review': evaluated_sub.requires_manual_review
+                })
+
+            if len(evaluated_results) == 1:
+                first = evaluated_results[0]
+                return JsonResponse({
+                    'success': True,
+                    'submission_id': first['submission_id'],
+                    'student_name': first['student_name'],
+                    'student_roll_no': first['student_roll_no'],
+                    'total_obtained': first['total_obtained'],
+                    'total_max': first['total_max'],
+                    'percentage': first['percentage'],
+                    'requires_manual_review': first['requires_manual_review'],
+                    'message': 'Student script successfully processed and AI evaluated.'
+                })
+            else:
+                return JsonResponse({
+                    'success': True,
+                    'is_batch': True,
+                    'batch_count': len(evaluated_results),
+                    'submissions': evaluated_results,
+                    'message': f'Batch processing complete: {len(evaluated_results)} student scripts evaluated successfully.'
+                })
+
         except Exception as e_eval:
             import traceback
             traceback.print_exc()

@@ -100,7 +100,7 @@ class WorkingCopyManager:
         elif submission.script_file and os.path.exists(submission.script_file.path):
             doc = fitz.open(submission.script_file.path)
             for page_idx, page in enumerate(doc, 1):
-                pix = page.get_pixmap(dpi=200)
+                pix = page.get_pixmap(dpi=300, colorspace=fitz.csRGB)
                 out_path = cls.get_working_image_path(submission_id, page_idx, version=1)
                 pix.save(out_path)
 

@@ -143,6 +143,10 @@ class AIScriptEvaluator:
         if confirmed_mappings:
             from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
             QuestionMappingOrchestrator.confirm_mapping_and_evaluate(submission.id, confirmed_mappings, user=user, ip_address=ip_address)
+        else:
+            pages = list(submission.pages.all().order_by('page_number'))
+            stored_questions = safe_normalize_collection(submission.examination.questions.all().order_by('question_number'))
+            cls._segment_answers_v3(submission, pages, stored_questions)
 
         answers = list(submission.answers.all().order_by('question__question_number'))
 
@@ -166,6 +170,13 @@ class AIScriptEvaluator:
         from core.ai_engine.services.workflow import SubmissionWorkflow
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.AI_EVALUATED, force=True)
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.UNDER_REVIEW, force=True)
+
+        # Sync Real-time Course Tabulation & OBE Grade Record
+        try:
+            from core.services.tabulation_service import TabulationService
+            TabulationService.sync_submission_to_tabulation(submission.id)
+        except Exception as e_sync:
+            print(f"[TABULATION SYNC WARNING] {e_sync}")
 
         cls._log_audit(submission, user, "EVALUATION_V3_COMPLETED", {
             "obtained_marks": total_obtained,
@@ -791,25 +802,23 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
   "question_id": "{q_dto.id}",
   "transcribed_text": "<exact_transcription_of_student_handwritten_solution_formulas_and_diagrams>",
-  "obtained_marks": <float_sum_of_awarded_criterion_marks>,
+  "step_breakdown": [
+    {{
+      "step_description": "<Formula / Definition / Derivation / Calculation / Result>",
+      "allocated_marks": <max_step_marks>,
+      "awarded_marks": <awarded_step_marks>,
+      "comment": "<evaluation_evidence_and_deduction_reason>"
+    }}
+  ],
+  "obtained_marks": <float_sum_of_awarded_marks>,
   "maximum_marks": {q_dto.marks},
   "percentage": <float_percentage>,
   "strengths": [<list_of_strings>],
   "mistakes": [<list_of_strings>],
   "missing_points": [<list_of_strings>],
   "expected_points": [<list_of_strings>],
-  "rubric_breakdown": [
-    {{
-      "criterion": "<criterion_name>",
-      "max_marks": <max_criterion_marks>,
-      "awarded_marks": <awarded_criterion_marks>,
-      "evidence_found": "<exact_visual_evidence_in_image>",
-      "missing_or_incorrect": "<omission_or_error_details_or_none>",
-      "comments": "<justification_text>"
-    }}
-  ],
   "co_attainment": {{"{q_dto.co or 'CO1'}": <percentage_attained_0_to_100>}},
-  "feedback_text": "<step_by_step_marking_justification>",
+  "feedback": "<constructive_evaluation_summary>",
   "confidence_score": <float_between_0.0_and_1.0>,
   "requires_manual_review": <true_or_false>
 }}
@@ -1063,8 +1072,21 @@ Return ONLY JSON without markdown commentary.
                 answer.save(update_fields=['extracted_text'])
 
             raw_m = eval_data.get('obtained_marks', eval_data.get('ai_suggested_marks', 0.0))
-            rubric_breakdown = eval_data.get('rubric_breakdown', [])
-            if rubric_breakdown and isinstance(rubric_breakdown, list):
+            raw_breakdown = eval_data.get('step_breakdown') or eval_data.get('rubric_breakdown') or eval_data.get('partial_marking_breakdown') or []
+
+            rubric_breakdown = []
+            if isinstance(raw_breakdown, dict):
+                for k, v in raw_breakdown.items():
+                    rubric_breakdown.append({
+                        'step_description': str(k).capitalize(),
+                        'allocated_marks': float(v),
+                        'awarded_marks': float(v),
+                        'comment': 'Evaluated criterion'
+                    })
+            elif isinstance(raw_breakdown, list):
+                rubric_breakdown = raw_breakdown
+
+            if rubric_breakdown:
                 sum_awarded = 0.0
                 has_valid_breakdown = False
                 for r_item in rubric_breakdown:
@@ -1084,7 +1106,7 @@ Return ONLY JSON without markdown commentary.
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)
             conf = min(1.0, max(0.0, float(eval_data.get('confidence_score', eval_data.get('confidence', 0.85)))))
             req_review = bool(eval_data.get('requires_manual_review', False)) or (not used_visual_mode) or (conf < 0.70) or answer.requires_manual_review
-            feedback_val = eval_data.get('feedback_text', eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.')))
+            feedback_val = eval_data.get('feedback', eval_data.get('feedback_text', eval_data.get('ai_feedback', 'AI evaluation completed.')))
 
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
@@ -1133,10 +1155,10 @@ Return ONLY JSON without markdown commentary.
 
             EvaluationFeedback.objects.filter(evaluation_result=eval_res).delete()
             for r_item in rubric_breakdown:
-                c_name = r_item.get('criterion', r_item.get('criteria', 'Criteria'))
-                a_marks = float(r_item.get('max_marks', r_item.get('allocated', r_item.get('allocated_marks', 0.0))))
+                c_name = r_item.get('step_description') or r_item.get('criterion') or r_item.get('criteria') or 'Step / Criterion'
+                a_marks = float(r_item.get('allocated_marks', r_item.get('max_marks', r_item.get('allocated', 0.0))))
                 w_marks = float(r_item.get('awarded_marks', r_item.get('awarded', 0.0)))
-                comm = r_item.get('comments', '')
+                comm = r_item.get('comment', r_item.get('comments', r_item.get('evidence_found', '')))
                 EvaluationFeedback.objects.create(
                     evaluation_result=eval_res,
                     criteria_name=c_name,
