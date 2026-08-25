@@ -29,7 +29,8 @@ from .models import (
     StudentSubmission, SubmissionPDF, SubmissionImage, SubmissionPage,
     SubmissionAnswer, OCRResult, EvaluationResult, EvaluationFeedback,
     TeacherReview, EvaluationHistory, PromptHistory, EvaluationAuditLog,
-    AIConfiguration, AIProviderHealth, DocumentDOM, QuestionDetection, QuestionMapping
+    AIConfiguration, AIProviderHealth, DocumentDOM, QuestionDetection, QuestionMapping,
+    CourseTabulation, StudentGradeRecord
 )
 from core.utils.question_accessor import QuestionAccessor, QuestionDTO
 
@@ -4291,3 +4292,46 @@ Return ONLY a valid JSON array matching this exact schema:
         'data': {'questions': normalized_questions},
         'message': f"✓ Fast-scanned & extracted {len(normalized_questions)} MCQ question(s) successfully!"
     })
+
+
+def course_tabulation_view(request, course_id):
+    """
+    Renders live datatable showing real-time marks of all students across all exams in the course.
+    """
+    if not request.user.is_authenticated:
+        messages.error(request, "Authentication required.")
+        return redirect('landing_page')
+
+    course = get_object_or_404(Course, id=course_id)
+    tabulation = CourseTabulation.objects.filter(course=course).first()
+
+    if not tabulation:
+        tabulation = CourseTabulation.objects.create(
+            course=course,
+            semester='Spring 2026',
+            section='C',
+            weightage_config={'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
+        )
+
+    grade_records = StudentGradeRecord.objects.filter(tabulation=tabulation).order_by('student_id')
+
+    return render(request, 'core/course_tabulation.html', {
+        'course': course,
+        'tabulation': tabulation,
+        'grade_records': grade_records
+    })
+
+
+def export_course_tabulation(request, course_id):
+    """
+    Triggers openpyxl Excel exporter for official course tabulation sheet.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    from core.services.tabulation_exporter import export_course_tabulation_excel
+    semester = request.GET.get('semester', 'Spring 2026')
+    section = request.GET.get('section', 'C')
+
+    return export_course_tabulation_excel(course_id=course_id, semester=semester, section=section)
+

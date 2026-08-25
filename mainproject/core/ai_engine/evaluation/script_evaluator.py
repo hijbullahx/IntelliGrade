@@ -451,6 +451,13 @@ Return strict JSON ONLY:
         print(f"[MCQ FAST VISION INGESTION BENCHMARK]: Completed in {elapsed_sec:.3f} seconds!")
         print(f"==================================================")
 
+        # 9. Sync Real-time Course Tabulation & OBE Grade Record
+        try:
+            from core.services.tabulation_service import TabulationService
+            TabulationService.sync_submission_to_tabulation(submission.id)
+        except Exception as e_sync:
+            print(f"[TABULATION SYNC WARNING] {e_sync}")
+
         cls._write_pipeline_log(submission.id, f"=== MCQ EXCLUSIVE EVALUATION COMPLETED in {elapsed_sec:.3f}s: {total_score}/{max_possible} ({percentage}%) ===")
         return submission
 

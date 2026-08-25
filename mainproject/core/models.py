@@ -620,5 +620,42 @@ class MappingHistory(models.Model):
         return f"MappingHistory #{self.id} for Submission {self.submission.id} - {self.action_type}"
 
 
+class CourseTabulation(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='tabulations')
+    semester = models.CharField(max_length=50, default='Spring 2026')
+    section = models.CharField(max_length=20, default='C')
+    weightage_config = models.JSONField(
+        default=dict,
+        help_text="Weightages for assessment types, e.g. {'class_test': 10, 'midterm': 25, 'final': 50, 'assignment': 10, 'attendance': 5}"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('course', 'semester', 'section')
+
+    def __str__(self):
+        return f"Tabulation: {self.course.code} ({self.semester} Sec {self.section})"
+
+
+class StudentGradeRecord(models.Model):
+    tabulation = models.ForeignKey(CourseTabulation, on_delete=models.CASCADE, related_name='grade_records')
+    student_id = models.CharField(max_length=50)
+    student_name = models.CharField(max_length=150)
+    exam_scores = models.JSONField(default=dict, help_text="Exam / Assessment breakdown per question and totals")
+    co_scores = models.JSONField(default=dict, help_text="Obtained marks per Course Outcome (e.g. {'CO1': 34.0, ...})")
+    po_scores = models.JSONField(default=dict, help_text="Obtained marks per Program Outcome (e.g. {'PO1': 230.0, ...})")
+    overall_score = models.FloatField(default=0.0)
+    letter_grade = models.CharField(max_length=10, default='F')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('tabulation', 'student_id')
+
+    def __str__(self):
+        return f"GradeRecord: {self.student_name} ({self.student_id}) - {self.overall_score:.1f}% ({self.letter_grade})"
+
+
+
 
 
