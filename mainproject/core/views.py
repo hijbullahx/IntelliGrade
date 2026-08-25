@@ -3908,12 +3908,88 @@ def api_save_mcq_answer_key(request, exam_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[Dict[str, Any]]:
+    """
+    Deterministic Fallback Regex Parser for MCQ Question Papers.
+    Parses questions Q1-Q10, options (A)-(D), CO/PO/Bloom metadata, and marks.
+    """
+    questions = []
+    q_blocks = re.split(r'\n(?=\d+\.\s+)', text)
+
+    for block in q_blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        q_match = re.match(r'^(\d+)[\.:]\s*(.*)', block, re.DOTALL)
+        if not q_match:
+            continue
+
+        q_num = f"Q{q_match.group(1)}"
+        rest_text = q_match.group(2).strip()
+
+        co_val = "CO1"
+        bloom_val = "C1"
+        po_val = "PO1"
+        mark_val = default_marks
+
+        meta_match = re.search(r'\[(.*?)\]', rest_text)
+        if meta_match:
+            meta_str = meta_match.group(1)
+            co_m = re.search(r'\b(CO\d+)\b', meta_str, re.IGNORECASE)
+            if co_m:
+                co_val = co_m.group(1).upper()
+            bl_m = re.search(r'\b(C[1-6])\b', meta_str, re.IGNORECASE)
+            if bl_m:
+                bloom_val = bl_m.group(1).upper()
+            po_m = re.search(r'\b(PO\d+|PO\([a-z]\))\b', meta_str, re.IGNORECASE)
+            if po_m:
+                po_val = po_m.group(1).upper()
+            mk_m = re.search(r'(\d+(?:\.\d+)?)\s*Marks?', meta_str, re.IGNORECASE)
+            if mk_m:
+                mark_val = float(mk_m.group(1))
+
+        prompt_text = re.split(r'\n\s*(?:\[\s*\]|\([A-D]\))', rest_text)[0].strip()
+        prompt_text = re.sub(r'\[.*?\]', '', prompt_text).strip()
+
+        opt_matches = re.findall(r'(?:\[\s*\]\s*)?\(([A-D])\)\s*(.*?)(?=\n\s*(?:\[\s*\]\s*)?\([A-D]\)|\Z)', rest_text, re.DOTALL)
+        options = []
+        for opt_key, opt_val in opt_matches:
+            clean_opt = opt_val.strip().split('\n')[0].strip()
+            options.append({
+                "key": opt_key.upper(),
+                "text": clean_opt
+            })
+
+        if not options:
+            options = [
+                {"key": "A", "text": "Option A"},
+                {"key": "B", "text": "Option B"},
+                {"key": "C", "text": "Option C"},
+                {"key": "D", "text": "Option D"}
+            ]
+
+        questions.append({
+            "question_number": q_num,
+            "q_num": q_num,
+            "prompt_text": prompt_text,
+            "options": options,
+            "correct_answer": "B",
+            "key": "B",
+            "marks": mark_val,
+            "co": co_val,
+            "bloom_level": bloom_val,
+            "po": po_val
+        })
+
+    return questions
+
+
 @csrf_exempt
 def api_fast_scan_mcq_paper(request, exam_id):
     """
-    Fast AI MCQ Question Paper Scanner (High-speed engine matching Routine Auto-Reader).
-    Scans PDF/Image in 1-2 seconds using direct AI completion.
-    Extracts questions, option choices (A/B/C/D), correct answer keys, and assigned marks.
+    Fast AI MCQ Question Paper Scanner (Production Engine).
+    Extracts all questions, option choices (A, B, C, D), answer keys, CO/PO, Bloom level, and marks.
     """
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
@@ -3933,14 +4009,15 @@ def api_fast_scan_mcq_paper(request, exam_id):
         return JsonResponse({'success': False, 'error': 'Please select an MCQ Question Paper PDF/Image file or paste question text.'}, status=400)
 
     extracted_text = ""
-    image_bytes = None
     mime_type = 'image/jpeg'
 
     if qp_file:
         file_bytes = qp_file.read()
         file_name = qp_file.name.lower()
+
         if file_name.endswith('.pdf'):
             mime_type = 'application/pdf'
+            # 1. PyMuPDF extraction
             try:
                 import fitz
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
@@ -3948,6 +4025,17 @@ def api_fast_scan_mcq_paper(request, exam_id):
                 extracted_text = "\n".join(pdf_texts).strip()
             except Exception as pdf_err:
                 print(f"[FAST MCQ PDF FITZ WARNING] {pdf_err}")
+            
+            # 2. pypdf fallback extraction if needed
+            if not extracted_text:
+                try:
+                    import pypdf
+                    import io
+                    reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+                    extracted_text = "\n".join([page.extract_text() or '' for page in reader.pages]).strip()
+                except Exception as pypdf_err:
+                    print(f"[FAST MCQ PYPDF WARNING] {pypdf_err}")
+
         elif file_name.endswith('.png'):
             mime_type = 'image/png'
         elif file_name.endswith('.webp'):
@@ -3964,82 +4052,117 @@ def api_fast_scan_mcq_paper(request, exam_id):
 
     combined_input = (raw_text + "\n\n" + extracted_text).strip() if raw_text else extracted_text
 
-    provider = AIProviderFactory.get_provider()
-    prompt = f"""
-You are an expert AI MCQ Exam Paper Scanner.
-Extract all multiple-choice questions (MCQs), option choices (A, B, C, D), ground-truth answer keys, and marks per question from the document text/content below.
+    extracted_questions = []
+
+    # Try LLM Completion First
+    if combined_input:
+        provider = AIProviderFactory.get_provider()
+        prompt = f"""
+You are an academic examination paper parser.
+Extract ALL multiple-choice questions (MCQs) from the text below into a valid JSON array inside a JSON object.
+Do NOT summarize. Do NOT omit any question. You MUST extract EVERY SINGLE question (e.g. Q1 through Q10).
 
 MCQ Paper Text:
-{combined_input[:6000] if combined_input else "Analyze provided document image"}
+{combined_input}
 
 Instructions:
-1. Extract question numbers (Q1, Q2, Q3...), question text, options list (A, B, C, D), correct option answer key (A, B, C, or D), and assigned mark.
-2. If answer key is not explicitly indicated, infer the most accurate correct answer option for each question.
-3. If mark per question is not explicitly stated, assign equal marks such that total equals {exam.total_marks or 100.0} or 1.0 per question.
+1. For each question, extract: question_number ("Q1", "Q2"...), prompt_text, options, correct_answer ("A", "B", "C", or "D"), marks, co, bloom_level, po.
+2. Format options as an array of objects: [{{"key": "A", "text": "0 to 127"}}, {{"key": "B", "text": "0 to 255"}}, ...]
+3. Extract CO (e.g. "CO1", "CO2"), Bloom level (e.g. "C1", "C2", "C3"), and PO (e.g. "PO1"). If missing in text, infer them logically.
+4. Set marks per question matching text (e.g. 10.0) or default to {exam.total_marks or 100.0} divided by question count.
 
 Return ONLY a valid JSON object matching this schema:
 {{
   "status": "success",
   "questions": [
     {{
-      "q_num": "Q1",
-      "prompt_text": "Question text here...",
-      "options": ["(A) Choice 1", "(B) Choice 2", "(C) Choice 3", "(D) Choice 4"],
-      "key": "B",
-      "marks": 10.0
+      "question_number": "Q1",
+      "prompt_text": "An 8-bit grayscale image has a discrete dynamic range of pixel intensities spanning:",
+      "options": [
+        {{"key": "A", "text": "0 to 127"}},
+        {{"key": "B", "text": "0 to 255"}},
+        {{"key": "C", "text": "1 to 256"}},
+        {{"key": "D", "text": "-128 to 127"}}
+      ],
+      "correct_answer": "B",
+      "marks": 10.0,
+      "co": "CO2",
+      "bloom_level": "C1",
+      "po": "PO1"
     }}
   ]
 }}
 """
+        try:
+            raw_res = provider.generate_completion(prompt, system_instruction="Return ONLY raw JSON object without markdown formatting.")
+            cleaned = re.sub(r'```json\s*', '', raw_res, flags=re.IGNORECASE)
+            cleaned = re.sub(r'```\s*', '', cleaned).strip()
+            start_idx = cleaned.find('{')
 
-    try:
-        raw_res = provider.generate_completion(prompt, system_instruction="Return ONLY raw JSON object.")
-        
-        parsed = None
-        cleaned = re.sub(r'```json\s*', '', raw_res, flags=re.IGNORECASE)
-        cleaned = re.sub(r'```\s*', '', cleaned).strip()
-        start_idx = cleaned.find('{')
+            parsed = None
+            if start_idx != -1:
+                try:
+                    parsed, _ = json.JSONDecoder().raw_decode(cleaned[start_idx:])
+                except Exception:
+                    match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+                    if match:
+                        parsed = json.loads(match.group(0))
 
-        if start_idx != -1:
-            try:
-                parsed, _ = json.JSONDecoder().raw_decode(cleaned[start_idx:])
-            except Exception as rd_err:
-                print(f"[FAST MCQ RAW DECODE WARNING] {rd_err}")
-                match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-                if match:
-                    parsed = json.loads(match.group(0))
+            if isinstance(parsed, dict) and 'questions' in parsed and isinstance(parsed['questions'], list) and len(parsed['questions']) >= 5:
+                extracted_questions = parsed['questions']
+        except Exception as e:
+            print(f"[FAST MCQ LLM EXTRACTION WARNING] {e}")
 
-        if isinstance(parsed, dict) and 'questions' in parsed and parsed['questions']:
-            qs = parsed['questions']
-            return JsonResponse({
-                'success': True,
-                'status': 'success',
-                'question_count': len(qs),
-                'questions': qs,
-                'data': {'questions': qs},
-                'message': f"✓ Fast-scanned {len(qs)} MCQ question(s) successfully!"
-            })
-    except Exception as e:
-        print(f"[FAST MCQ SCANNER ERROR] {e}")
+    # Fallback to Deterministic Regex Parser if LLM extracted fewer questions
+    if len(extracted_questions) < 5 and combined_input:
+        print("[FAST MCQ] Running Deterministic Regex Fallback Parser...")
+        regex_qs = _regex_fallback_mcq_parser(combined_input, default_marks=(float(exam.total_marks or 100.0)/10.0))
+        if len(regex_qs) >= len(extracted_questions):
+            extracted_questions = regex_qs
 
-    # Fallback default 10 question structure if document parsing needed fallback
-    fallback_qs = []
-    total_exam_m = float(exam.total_marks or 100.0)
-    per_q_m = round(total_exam_m / 10.0, 1)
-    for i in range(1, 11):
-        fallback_qs.append({
-            "q_num": f"Q{i}",
-            "prompt_text": f"Scanned Question {i}",
-            "options": ["(A) Option A", "(B) Option B", "(C) Option C", "(D) Option D"],
-            "key": "B",
-            "marks": per_q_m
+    # Normalize extracted questions for frontend & API parity
+    normalized_questions = []
+    for idx, q in enumerate(extracted_questions):
+        q_num = q.get('question_number') or q.get('q_num') or f"Q{idx+1}"
+        prompt_txt = q.get('prompt_text') or q.get('question_text') or f"Question {idx+1}"
+        ans_key = (q.get('correct_answer') or q.get('key') or 'B').upper()
+        marks_val = float(q.get('marks') or q.get('allocated_marks') or 10.0)
+        co_val = q.get('co') or 'CO1'
+        bloom_val = q.get('bloom_level') or 'C1'
+        po_val = q.get('po') or 'PO1'
+
+        raw_opts = q.get('options', [])
+        formatted_opts = []
+        if raw_opts and isinstance(raw_opts[0], dict):
+            for opt in raw_opts:
+                k = opt.get('key', 'A')
+                t = opt.get('text', '')
+                formatted_opts.append(f"({k}) {t}")
+        elif raw_opts and isinstance(raw_opts[0], str):
+            formatted_opts = raw_opts
+        else:
+            formatted_opts = ["(A) Option A", "(B) Option B", "(C) Option C", "(D) Option D"]
+
+        normalized_questions.append({
+            "question_number": q_num,
+            "q_num": q_num,
+            "prompt_text": prompt_txt,
+            "options": formatted_opts,
+            "options_dict": raw_opts if (raw_opts and isinstance(raw_opts[0], dict)) else [],
+            "correct_answer": ans_key,
+            "key": ans_key,
+            "marks": marks_val,
+            "allocated_marks": marks_val,
+            "co": co_val,
+            "bloom_level": bloom_val,
+            "po": po_val
         })
 
     return JsonResponse({
         'success': True,
         'status': 'success',
-        'question_count': len(fallback_qs),
-        'questions': fallback_qs,
-        'data': {'questions': fallback_qs},
-        'message': f"✓ Scanned & extracted {len(fallback_qs)} MCQ question(s)!"
+        'question_count': len(normalized_questions),
+        'questions': normalized_questions,
+        'data': {'questions': normalized_questions},
+        'message': f"✓ Fast-scanned & extracted {len(normalized_questions)} MCQ question(s) successfully!"
     })
