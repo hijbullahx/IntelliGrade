@@ -149,12 +149,27 @@ class AIScriptEvaluator:
             cls._segment_answers_v3(submission, pages, stored_questions)
 
         answers = list(submission.answers.all().order_by('question__question_number'))
+        total_answers_count = len(answers)
+        total_pages_count = submission.pages.count() or 1
 
         total_obtained = 0.0
         total_max = 0.0
         has_manual_review = False
 
-        for ans in answers:
+        for a_idx, ans in enumerate(answers, 1):
+            try:
+                from core.views import _update_submission_progress_cache
+                _update_submission_progress_cache(
+                    submission_id=submission.id,
+                    processed_pages=total_pages_count,
+                    total_pages=total_pages_count,
+                    evaluated_regions=a_idx,
+                    total_regions=total_answers_count,
+                    msg=f"Evaluated Question Q{ans.question.question_number} ({a_idx}/{total_answers_count})"
+                )
+            except Exception:
+                pass
+
             eval_res = cls._evaluate_answer_v3(ans, options, user, trace_dir)
             total_obtained += float(eval_res.obtained_marks)
             total_max += float(eval_res.maximum_marks)
@@ -177,6 +192,20 @@ class AIScriptEvaluator:
             TabulationService.sync_submission_to_tabulation(submission.id)
         except Exception as e_sync:
             print(f"[TABULATION SYNC WARNING] {e_sync}")
+
+        try:
+            from core.views import _update_submission_progress_cache
+            _update_submission_progress_cache(
+                submission_id=submission.id,
+                processed_pages=total_pages_count,
+                total_pages=total_pages_count,
+                evaluated_regions=total_answers_count,
+                total_regions=total_answers_count,
+                msg="Evaluation Complete & Saved to Database",
+                status='completed'
+            )
+        except Exception:
+            pass
 
         cls._log_audit(submission, user, "EVALUATION_V3_COMPLETED", {
             "obtained_marks": total_obtained,
@@ -780,23 +809,22 @@ Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awar
 [OPTIONAL OCR TEXT (SECONDARY SUPPORTING CONTEXT)]
 {student_ocr_text or 'No OCR text available.'}
 
-[RUBRIC-GROUNDED SCORING & VISUAL EVALUATION PROTOCOL]
+[RUBRIC-GROUNDED SCORING & ZERO-SHOT GROUNDING PROTOCOL]
 1. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
-2. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
-3. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
-4. CRITERION-BY-CRITERION SCORING: Evaluate the answer strictly against each rubric criterion.
+2. ZERO-SHOT GROUNDING & ANTI-HALLUCINATION:
+   - Do NOT assume, fabricate, or hallucinate steps or formulas not visibly present in the student's handwriting.
+   - For each criterion/step in `step_breakdown`, if the required formula, definition, or derivation is NOT present in the student's handwritten answer, allocate EXACTLY 0.0 marks for that step, and set `grounding_evidence`: "NOT_FOUND".
+   - For every mark awarded (> 0.0), `grounding_evidence` MUST quote the student's exact handwritten expression, equation, or text.
+   - If the student's answer region is completely blank, illegible, or irrelevant, strictly award 0.0 total marks with constructive feedback explaining what was expected.
+3. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
+4. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
+5. CRITERION-BY-CRITERION SCORING:
    - For each criterion, state max allocated marks and awarded marks.
    - Total obtained_marks MUST equal the EXACT sum of all awarded criterion marks.
-   - Award fair partial credit for correct intermediate steps, formulas, and reasoning even if final calculation is incomplete.
-   - Distinguish clearly between:
-     (a) missing: concept/step not presented
-     (b) incorrect: wrong formula/calculation
-     (c) correct but incomplete: partial steps
-     (d) correct alternative approach: valid alternative method
-5. CONFIDENCE CALIBRATION: Confidence must reflect visual evidence quality:
+   - Award fair partial credit for correct intermediate steps, formulas, and reasoning only if visually present.
+6. CONFIDENCE CALIBRATION & MANUAL REVIEW:
    - High confidence (0.85 - 1.0): Image clean, handwriting clear, complete mapped region.
-   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting, or missing section.
-6. MANUAL REVIEW FLAGGING: Set "requires_manual_review": true if image is unreadable, crop is incomplete, confidence < 0.70, or evidence is contradictory.
+   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting. Set "requires_manual_review": true.
 
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
@@ -807,6 +835,7 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
       "step_description": "<Formula / Definition / Derivation / Calculation / Result>",
       "allocated_marks": <max_step_marks>,
       "awarded_marks": <awarded_step_marks>,
+      "grounding_evidence": "<quote_exact_handwriting_or_NOT_FOUND>",
       "comment": "<evaluation_evidence_and_deduction_reason>"
     }}
   ],
@@ -1158,7 +1187,10 @@ Return ONLY JSON without markdown commentary.
                 c_name = r_item.get('step_description') or r_item.get('criterion') or r_item.get('criteria') or 'Step / Criterion'
                 a_marks = float(r_item.get('allocated_marks', r_item.get('max_marks', r_item.get('allocated', 0.0))))
                 w_marks = float(r_item.get('awarded_marks', r_item.get('awarded', 0.0)))
+                evidence = r_item.get('grounding_evidence', '')
                 comm = r_item.get('comment', r_item.get('comments', r_item.get('evidence_found', '')))
+                if evidence and evidence != 'NOT_FOUND' and evidence not in comm:
+                    comm = f"Evidence: \"{evidence}\" | {comm}" if comm else f"Evidence: \"{evidence}\""
                 EvaluationFeedback.objects.create(
                     evaluation_result=eval_res,
                     criteria_name=c_name,

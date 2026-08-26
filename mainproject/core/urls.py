@@ -68,6 +68,7 @@ urlpatterns = [
     path('api/submission/<int:submission_id>/delete-all-images/', views.api_delete_all_submission_images, name='api_delete_all_submission_images'),
     path('api/submission/<int:submission_id>/reorder-pages/', views.api_reorder_submission_pages, name='api_reorder_submission_pages'),
     path('api/submission/<int:submission_id>/create-pdf/', views.api_create_submission_pdf, name='api_create_submission_pdf'),
+    path('api/submission/<int:submission_id>/progress/', views.api_get_submission_progress, name='api_get_submission_progress'),
     path('api/submission/<int:submission_id>/run-evaluation-v3/', views.api_run_evaluation_v3, name='api_run_evaluation_v3'),
     path('api/submission/<int:submission_id>/analyze-mapping/', views.api_analyze_question_mapping, name='api_analyze_question_mapping'),
     path('api/submission/<int:submission_id>/confirm-mapping/', views.api_confirm_question_mapping, name='api_confirm_question_mapping'),

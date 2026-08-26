@@ -2342,6 +2342,51 @@ def _update_scan_progress_cache(exam_id: int, progress: int, msg: str, status: s
     }, timeout=300)
 
 
+def _update_submission_progress_cache(submission_id: int, processed_pages: int, total_pages: int, evaluated_regions: int, total_regions: int, msg: str, status: str = 'processing'):
+    """
+    Computes submission progress dynamically based on completed pages and evaluated atomic regions:
+    progress = int((processed_pages / total_pages) * 80) + int((evaluated_regions / total_regions) * 20)
+    """
+    if not submission_id:
+        return
+    cache_key = f'submission_progress_{submission_id}'
+    t_pages = max(1, total_pages) if total_pages > 0 else 1
+    t_regs = max(1, total_regions) if total_regions > 0 else 1
+    page_part = int((processed_pages / t_pages) * 80)
+    reg_part = int((evaluated_regions / t_regs) * 20)
+    progress = min(100, page_part + reg_part) if status != 'completed' else 100
+
+    current = cache.get(cache_key) or {'logs': []}
+    logs = current.get('logs', [])
+    if msg and (not logs or logs[-1].get('msg') != msg):
+        logs.append({'msg': msg, 'type': 'info'})
+    cache.set(cache_key, {
+        'progress': progress,
+        'msg': msg,
+        'status': status,
+        'processed_pages': processed_pages,
+        'total_pages': total_pages,
+        'evaluated_regions': evaluated_regions,
+        'total_regions': total_regions,
+        'logs': logs
+    }, timeout=300)
+
+
+def api_get_submission_progress(request, submission_id):
+    """AJAX endpoint returning current real-time submission evaluation progress from Django cache."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    cache_key = f'submission_progress_{submission_id}'
+    progress_data = cache.get(cache_key) or {
+        'progress': 0,
+        'msg': 'Initializing scan...',
+        'status': 'idle',
+        'logs': []
+    }
+    return JsonResponse(progress_data)
+
+
 def api_get_scan_progress(request, exam_id):
     """AJAX endpoint returning current real-time scanning progress from Django cache."""
     if not request.user.is_authenticated:

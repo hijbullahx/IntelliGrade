@@ -141,8 +141,11 @@ class StudentQuestionHeadingDetector:
     Primary Source of Truth for student script answer segment creation.
     """
 
-    BENGALI_TO_ENG = {'১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'}
-    ROMAN_TO_INT = {'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'}
+    BENGALI_TO_ENG = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'}
+    ROMAN_TO_INT = {
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10',
+        'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15', 'XVI': '16', 'XVII': '17', 'XVIII': '18', 'XIX': '19', 'XX': '20'
+    }
 
     # Academic metadata patterns (e.g. Course Outcomes, Program Outcomes, Bloom Taxonomy)
     ACADEMIC_METADATA_PATTERNS = [
@@ -187,63 +190,67 @@ class StudentQuestionHeadingDetector:
         r'^\s*(?:Step|Part|Point|Section|Item)\s*[0-9]{1,2}\b', re.IGNORECASE
     )
 
-    # Subcontinental / Bangladeshi verbose student question heading patterns
-    SUBCONTINENTAL_HEADING_PATTERNS = [
-        # Recommended flexible pattern covering verbose heading variations:
-        # "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)", "Question No. 1"
+    # Universal student question heading patterns supporting ANY question count (1, 2, 5, 10, 20+)
+    HEADING_REGEX_PATTERNS = [
+        # "Ans to the question no. N" / "Answer to Question No. N" / "Ans to the qs no N" / "Ans to N" / "Answer to N" / "Ans to QN" / "Ans to Q.N" / "Ans - N" / "Ans: N" / "Answer No N" / "Ans. 1(a)"
         re.compile(
-            r'(?i)(?:ans(?:wer)?\s*\.?\s*)?(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
+            r'(?:ans(?:wer)?|sol(?:ution)?|soln)\s*(?:to\s*(?:the\s*)?)?(?:(?:q(?:uestion|s)?\s*\.?\s*)?(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[ivxlcdm]+|[a-z])\b',
             re.IGNORECASE
         ),
-        # Explicit Ans/Answer prefix: "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)"
+        # "Question No N" / "Q. No N" / "Q.N" / "QN" / "Question N" / "Q No: 5" / "Q 2(b)"
         re.compile(
-            r'^\s*(?:ans(?:wer)?\s*\.?\s*)(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
+            r'(?:q(?:uestion|s)?\s*\.?\s*(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[ivxlcdm]+|[a-z])\b',
             re.IGNORECASE
         ),
-        # Explicit Q/Question prefix: "Q. No. 1", "Question 2", "Q1(a)"
+        # "N নং প্রশ্নের উত্তর" / "N নং সমাধান" / "N নং উত্তর"
         re.compile(
-            r'^\s*(?:q(?:uestion)?\s*\.?\s*)(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
+            r'([0-9]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[ivxlcdm]+|[a-z])\s*(?:নং\s*)?(?:প্রশ্নের\s*)?(?:উত্তর|সমাধান)',
             re.IGNORECASE
         ),
-        # Bengali explicit heading pattern: "উত্তর/প্রশ্ন (নং) ১"
+        # "উত্তর নং N" / "প্রশ্ন নং N" / "সমাধান নং N" / "উত্তর: N"
         re.compile(
-            r'(?:উত্তর|প্রশ্ন)\s*(?:নং)?\s*[\.\:\-]?\s*([১-৯]+|[0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
+            r'(?:উত্তর|প্রশ্ন|সমাধান)\s*(?:নং\s*)?[:\-\.]?\s*([0-9]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,3}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[ivxlcdm]+|[a-z])',
             re.IGNORECASE
         ),
     ]
+    SUBCONTINENTAL_HEADING_PATTERNS = HEADING_REGEX_PATTERNS
 
     ANSWER_TOKENS = [
-        'answer', 'ans', 'ans.', 'ang', 'angto', 'ansto', 'answe', 'ansr', 'solution', 'soln', 'sol', 'উত্তর'
+        'answer', 'ans', 'ans.', 'ang', 'angto', 'ansto', 'answe', 'ansr', 'solution', 'soln', 'sol', 'উত্তর', 'সমাধান'
     ]
 
     QUESTION_TOKENS = [
-        'question', 'ques', 'quest', 'q', 'q.', 'no', 'no.', 'number', '#', 'n0', 'no!', 'nd', 'প্রশ্ন', 'নং'
+        'question', 'ques', 'quest', 'qs', 'q', 'q.', 'no', 'no.', 'number', '#', 'n0', 'no!', 'nd', 'প্রশ্ন', 'নং'
     ]
 
     @classmethod
     def find_answer_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for answer context tokens (ans, answer, angto, solution, etc.)."""
-        words = re.findall(r'[a-zA-Z\.\—\–\−]+', text.lower())
+        """Tolerant search for answer context tokens (ans, answer, angto, solution, উত্তর, সমাধান, etc.)."""
+        lower = text.lower()
+        for tok in ['উত্তর', 'সমাধান', 'answer', 'ans', 'solution', 'soln', 'sol', 'ang']:
+            if tok in lower:
+                return True, tok
+        words = re.findall(r'[\w\.\—\–\−]+', lower, re.UNICODE)
         for w in words:
             w_clean = w.strip('.')
             if w_clean in cls.ANSWER_TOKENS:
                 return True, w
-            for token in ['answer', 'solution', 'soln', 'ans', 'ang']:
-                if len(w_clean) >= 3 and (w_clean.startswith(token[:3]) or w_clean in token):
-                    return True, w
         return False, ""
 
     @classmethod
     def find_question_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for question context tokens (question, Q, No, NO!, N0, ND, etc.)."""
-        words = re.findall(r'[a-zA-Z0-9\!\#\.]+', text)
+        """Tolerant search for question context tokens (question, Q, Q1..QN, No, NO!, N0, ND, নং, প্রশ্ন, etc.)."""
+        lower = text.lower()
+        for tok in ['প্রশ্ন', 'নং', 'question', 'quest', 'ques', 'qs', 'q.', 'no.', 'number', '#']:
+            if tok in lower:
+                return True, tok
+        if re.search(r'\bQ\s*[\.\:\-]?[0-9]', text, re.IGNORECASE):
+            return True, 'Q'
+        words = re.findall(r'[\w\!\#\.]+', text, re.UNICODE)
         for w in words:
             w_lower = w.lower().strip('.!')
             if w_lower in cls.QUESTION_TOKENS:
                 return True, w
-            for token in ['question', 'quest', 'number']:
-                if len(w_lower) >= 4 and (w_lower.startswith(token[:4]) or w_lower in token):
-                    return True, w
         return False, ""
 
     @classmethod
@@ -251,14 +258,14 @@ class StudentQuestionHeadingDetector:
         """Extracts candidate question numbers from text string, returning (raw_num, normalized_num)."""
         results = []
         for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
-            m = pat.search(text)
-            if m and m.group(1):
-                raw = m.group(1).strip()
-                norm = cls.normalize_question_number(raw)
-                if norm and (raw, norm) not in results:
-                    results.append((raw, norm))
+            for m in pat.finditer(text):
+                if m and m.group(1):
+                    raw = m.group(1).strip()
+                    norm = cls.normalize_question_number(raw)
+                    if norm and (raw, norm) not in results:
+                        results.append((raw, norm))
 
-        raw_matches = re.findall(r'\b0*([1-9][0-9]?)\b|[১-৯]{1,2}|\b[IVX]{1,4}\b', text, re.IGNORECASE)
+        raw_matches = re.findall(r'\b0*([1-9][0-9]{0,2})\b|[০-৯]{1,3}|\b[IVXLCDM]{1,6}\b', text, re.IGNORECASE)
         for m in raw_matches:
             tok = m[0] if isinstance(m, tuple) and m[0] else (m if isinstance(m, str) else "")
             if not tok:
@@ -286,19 +293,30 @@ class StudentQuestionHeadingDetector:
 
     @classmethod
     def normalize_question_number(cls, raw_num: str) -> str:
-        """Normalizes Bengali, Roman, OCR typos ('l', 'I'), and leading zero strings ('01' -> '1', '02' -> '2') into standard integer string ('1', '2')."""
+        """Normalizes Bengali, Roman, OCR typos ('l', 'I'), and leading zero strings ('01' -> '1', '02' -> '2') into standard integer/subpart string ('1', '2', '1(a)')."""
         if not raw_num:
             return ""
         clean = raw_num.strip().upper()
         if clean in ['L', 'I', 'L.']:
             return '1'
-        if clean in cls.BENGALI_TO_ENG:
-            return cls.BENGALI_TO_ENG[clean]
 
-        if clean in cls.ROMAN_TO_INT:
-            return cls.ROMAN_TO_INT[clean]
+        # Translate all Bengali digits (handles single & multi-digit Bengali numbers: ১ -> 1, ১২ -> 12, ২০ -> 20)
+        translated = "".join(cls.BENGALI_TO_ENG.get(ch, ch) for ch in clean)
+        clean = translated
 
-        clean_sub = re.sub(r'^(?:Q(?:UESTION)?|ANS(?:WER)?|SOLN|SOLUTION|NO|NUMBER)?[\.\:\-\#\s]*', '', clean)
+        # Check Roman numerals
+        roman_key = re.sub(r'[\.\:\-\s]', '', clean)
+        if roman_key in cls.ROMAN_TO_INT:
+            return cls.ROMAN_TO_INT[roman_key]
+
+        clean_sub = re.sub(r'^(?:Q(?:UESTION|S)?|ANS(?:WER)?|SOLN|SOLUTION|NO|NUMBER)?[\.\:\-\#\s]*', '', clean, flags=re.IGNORECASE)
+        # Check if subpart format like 1(a), 1a, 2(b)
+        subpart_m = re.match(r'^([0-9]{1,3})\s*[\(\[]?([A-Za-z])[\)\]]?$', clean_sub)
+        if subpart_m:
+            num_part = str(int(subpart_m.group(1)))
+            letter_part = subpart_m.group(2).lower()
+            return f"{num_part}({letter_part})"
+
         clean_num = re.sub(r'[^0-9A-ZA-Z]', '', clean_sub)
         if clean_num in ['L', 'I']:
             return '1'
@@ -512,6 +530,7 @@ class StudentQuestionHeadingDetector:
                     return {
                         'is_question_heading': True,
                         'question_number': norm_num,
+                        'normalized_number': norm_num,
                         'heading_text': line_str,
                         'confidence': conf,
                         'score': boosted_score,
@@ -562,6 +581,7 @@ class StudentQuestionHeadingDetector:
             return {
                 'is_question_heading': True,
                 'question_number': norm_num,
+                'normalized_number': norm_num,
                 'heading_text': line_str,
                 'confidence': conf,
                 'score': best_score,
@@ -577,6 +597,7 @@ class StudentQuestionHeadingDetector:
         return {
             'is_question_heading': False,
             'question_number': None,
+            'normalized_number': None,
             'heading_text': line_str,
             'confidence': 0.0,
             'heading_type': 'BODY_TEXT',
@@ -610,18 +631,79 @@ class StudentQuestionHeadingDetector:
             page_height=page_height
         )
 
+    @classmethod
+    def is_potential_heading_line(cls, text: str, ymin_pct: float) -> bool:
+        """
+        Fast-Reject Body Lines:
+        - Do NOT test formulas (=, +, *, numbers, single letters like F, a+0, 210.) as heading candidates.
+        - Only evaluate lines containing explicit heading trigger tokens: ['ans', 'answer', 'question', 'q.', 'qno', 'qs', 'no.', 'নং', 'উত্তর', 'সমাধান']
+          OR isolated Roman/Arabic numeral anchors at the top 30% of the page (ymin < 0.30).
+        """
+        clean = text.strip()
+        if not clean or len(clean) > 120:
+            return False
+
+        lower = clean.lower()
+
+        # Fast check for explicit heading trigger tokens
+        for tok in ['ans', 'answer', 'question', 'q.', 'qno', 'qs', 'no.', 'no', 'নং', 'উত্তর', 'সমাধান', 'solution', 'soln', 'sol']:
+            if tok in lower:
+                return True
+
+        # Check for explicit Q prefix like "Q1", "Q.2", "Q3(a)", "Q10", "Q25"
+        if re.search(r'\bQ\s*[\.\:\-]?[0-9]{1,3}', clean, re.IGNORECASE):
+            return True
+
+        # Top 30% of page (ymin < 0.30) check for isolated numerals or anchor patterns
+        if ymin_pct < 0.30:
+            # Reject clear formulas with operators
+            if any(ch in clean for ch in ['=', '+', '*', '/', '>', '<', '^']):
+                return False
+            # Pure isolated numeral like "1.", "1)", "1:", "1", "2.", "10."
+            if re.match(r'^(?:[Qq][\.\s]*)?[0-9]{1,3}[\.\:\)\-]?$', clean):
+                return True
+            if re.match(r'^[IVXLCDM]{1,6}[\.\:\)\-]?$', clean, re.IGNORECASE):
+                return True
+
+        return False
+
+    @classmethod
+    def detect_questions_on_page(
+        cls,
+        ocr_raw_text: str,
+        word_boxes: Optional[List[Dict[str, Any]]] = None,
+        line_boxes: Optional[List[Dict[str, Any]]] = None,
+        page_height: int = 1000,
+        stored_question_numbers: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Reconstructs visual lines using LineReconstructor, performs fast-rejection candidate filtering,
+        multi-signal scoring, and returns all candidate answer headings found across the page.
+        """
+        detections = []
+        if not ocr_raw_text and not word_boxes and not line_boxes:
+            return detections
+
+        reconstructed_lines = LineReconstructor.reconstruct_lines(
+            ocr_raw_text=ocr_raw_text,
+            word_boxes=word_boxes,
+            line_boxes=line_boxes,
+            page_height=page_height
+        )
+
         candidates = []
 
-        # 1. Single reconstructed lines
+        # 1. Single reconstructed lines with Fast Rejection
         for r_line in reconstructed_lines:
             line_str = cls.normalize_ocr_text(r_line['text'])
-            if not line_str or len(line_str) > 140:
+            ymin_pct = r_line['ymin_pct']
+            if not cls.is_potential_heading_line(line_str, ymin_pct):
                 continue
 
             candidates.append({
                 'text': line_str,
                 'line_index': r_line['line_index'],
-                'ymin_pct': r_line['ymin_pct'],
+                'ymin_pct': ymin_pct,
                 'ymax_pct': r_line['ymax_pct'],
                 'bbox': r_line['bbox'],
                 'whitespace_above': r_line.get('whitespace_above', 0.0),
@@ -654,7 +736,7 @@ class StudentQuestionHeadingDetector:
                 })
 
         print(f"\n============================================================")
-        print(f"QUESTION HEADER ANALYSIS LOG")
+        print(f"QUESTION HEADER ANALYSIS LOG (Fast-Filtered {len(candidates)} Candidates)")
         print(f"============================================================")
 
         for cand in candidates:
@@ -667,20 +749,25 @@ class StudentQuestionHeadingDetector:
                 stored_question_numbers=stored_question_numbers
             )
 
+            safe_cand_text = str(text).encode('ascii', 'backslashreplace').decode('ascii')
             if decision['is_question_heading']:
                 print(f"============================================================")
                 print(f"ANSWER HEADING CANDIDATE")
                 print(f"============================================================")
+                ans_tok_safe = str(decision.get('ans_token', 'NO')).encode('ascii', 'backslashreplace').decode('ascii')
+                q_tok_safe = str(decision.get('q_token', 'NO')).encode('ascii', 'backslashreplace').decode('ascii')
+                raw_num_safe = str(decision.get('raw_num', 'N/A')).encode('ascii', 'backslashreplace').decode('ascii')
+                norm_num_safe = str(decision.get('norm_num', 'N/A')).encode('ascii', 'backslashreplace').decode('ascii')
                 print(f"Page: {cand.get('line_index', 0) + 1}")
-                print(f"Raw OCR:\n\"{text}\"")
-                print(f"Detected answer context:\n\"{decision.get('ans_token', 'NO')}\"")
-                print(f"Detected question context:\n\"{decision.get('q_token', 'NO')}\"")
-                print(f"Detected number:\n{decision.get('raw_num', 'N/A')}")
-                print(f"Normalized number:\n{decision.get('norm_num', 'N/A')}")
+                print(f"Raw OCR:\n\"{safe_cand_text}\"")
+                print(f"Detected answer context:\n\"{ans_tok_safe}\"")
+                print(f"Detected question context:\n\"{q_tok_safe}\"")
+                print(f"Detected number:\n{raw_num_safe}")
+                print(f"Normalized number:\n{norm_num_safe}")
                 print(f"Question exists:\nYES")
                 print(f"Spatial proximity:\nYES")
                 print(f"Answer heading score:\n{decision.get('score', 0)}")
-                print(f"Decision:\nACCEPT -> Q{decision['question_number']}\n")
+                print(f"Decision:\nACCEPT -> Q{norm_num_safe}\n")
 
                 detections.append({
                     'raw_text': decision['raw_text'],
@@ -701,7 +788,7 @@ class StudentQuestionHeadingDetector:
                 print(f"============================================================")
                 print(f"REJECTED BODY CANDIDATE")
                 print(f"============================================================")
-                print(f"Candidate:\n\"{text}\"")
+                print(f"Candidate:\n\"{safe_cand_text}\"")
                 print(f"Answer context:\n{ans_ctx_str}")
                 print(f"Question context:\n{q_ctx_str}")
                 print(f"Valid heading:\nNO")

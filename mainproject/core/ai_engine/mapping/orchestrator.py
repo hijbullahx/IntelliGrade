@@ -194,10 +194,14 @@ class QuestionMappingOrchestrator:
 
             sem_best_q = None
             semantic_match_score = 0.0
-            if ocr_text and len(ocr_text.strip()) > 20:
-                sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
-                sem_best_q = sem_match.get('best_question')
-                semantic_match_score = float(sem_match.get('confidence', 0.0))
+            # Only invoke SemanticQuestionMatcher if no explicit heading was detected with high confidence
+            if explicit_heading_score < 0.75 and ocr_text and len(ocr_text.strip()) > 20:
+                try:
+                    sem_match = SemanticQuestionMatcher.match_unlabelled_answer(ocr_text, stored_questions)
+                    sem_best_q = sem_match.get('best_question')
+                    semantic_match_score = float(sem_match.get('confidence', 0.0))
+                except Exception as ex_sem:
+                    print(f"[SEMANTIC MATCHER WARNING] Page {p_num}: {ex_sem}")
 
             evidence_matrix[p_num] = {
                 'page': sp,
@@ -225,8 +229,8 @@ class QuestionMappingOrchestrator:
                 detections.sort(key=lambda d: d.get('ymin_pct', 0.0))
 
                 first_det_ymin = float(detections[0].get('ymin_pct', 0.0))
-                if first_det_ymin > 0.08 and active_q_obj:
-                    # Top region prior to first explicit heading belongs to active_q_obj as continuation
+                if first_det_ymin > 0.25 and active_q_obj:
+                    # Substantial top region prior to explicit heading belongs to active_q_obj as continuation
                     top_bbox = {'ymin': 0.0, 'xmin': 0.0, 'ymax': round(first_det_ymin, 4), 'xmax': 1.0}
                     active_q_id = getattr(active_q_obj, 'id', None)
                     top_reg = AnswerRegion(
@@ -255,7 +259,12 @@ class QuestionMappingOrchestrator:
                                 matched_q = q
                                 break
 
-                    y_start = max(0.0, min(1.0, float(det.get('ymin_pct', 0.0))))
+                    # If this is the first detection on page and it's in top 25%, anchor from y=0.0 to prevent gaps
+                    if r_idx == 1 and first_det_ymin <= 0.25:
+                        y_start = 0.0
+                    else:
+                        y_start = max(0.0, min(1.0, float(det.get('ymin_pct', 0.0))))
+
                     next_y = float(detections[r_idx]['ymin_pct']) if r_idx < len(detections) else 1.0
                     next_y = max(0.0, min(1.0, next_y))
 
