@@ -83,6 +83,8 @@ class Examination(models.Model):
     question_paper_file = models.FileField(upload_to='exam_questions/%Y/%m/', blank=True, null=True, help_text="Uploaded Question Paper document or image.")
     rubric_file = models.FileField(upload_to='exam_rubrics/%Y/%m/', blank=True, null=True, help_text="Uploaded Grading Rubric document or image.")
     course_outline_file = models.FileField(upload_to='course_outlines/%Y/%m/', blank=True, null=True, help_text="Uploaded Course Syllabus / Outline document.")
+    master_solution_file = models.FileField(upload_to='exam_master_solutions/%Y/%m/', blank=True, null=True, help_text="Uploaded Master / Benchmark Solution Script (PDF or Images)")
+    master_solution_parsed = models.BooleanField(default=False, help_text="Flag indicating whether Master Solution has been OCR'd and mapped per question.")
     
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -95,6 +97,10 @@ class Question(models.Model):
     question_number = models.CharField(max_length=10)
     prompt_text = models.TextField()
     max_marks = models.DecimalField(max_digits=5, decimal_places=2)
+
+    # Master / Benchmark Golden Solution Fields
+    master_solution_text = models.TextField(blank=True, default="", help_text="Extracted step-by-step benchmark solution text for this question.")
+    master_solution_steps = models.JSONField(default=list, blank=True, help_text="Structured benchmark steps: [{'step': '1', 'desc': 'Matrix setup', 'marks': 5.0}]")
 
     @property
     def text(self) -> str:

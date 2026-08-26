@@ -2078,11 +2078,20 @@ def question_rubric_manage(request, exam_id=None):
             target_exam.save()
             messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'master_solution_file' and target_exam.master_solution_file:
+            target_exam.master_solution_file.delete(save=False)
+            target_exam.master_solution_file = None
+            target_exam.master_solution_parsed = False
+            target_exam.questions.all().update(master_solution_text="", master_solution_steps=[])
+            target_exam.save()
+            messages.success(request, f"Master Benchmark Solution document and extracted solutions removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
 
-        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Supplementary Document)
+        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Master Solution Document)
         qp_file = request.FILES.get('question_paper_file')
         rf_file = request.FILES.get('rubric_file') or request.FILES.get('rubric_reference_file')
         co_file = request.FILES.get('course_outline_file')
+        ms_file = request.FILES.get('master_solution_file')
 
         if qp_file:
             target_exam.question_paper_file = qp_file
@@ -2090,8 +2099,10 @@ def question_rubric_manage(request, exam_id=None):
             target_exam.rubric_file = rf_file
         if co_file:
             target_exam.course_outline_file = co_file
+        if ms_file:
+            target_exam.master_solution_file = ms_file
 
-        if qp_file or rf_file or co_file:
+        if qp_file or rf_file or co_file or ms_file:
             target_exam.save()
             messages.success(request, f"Reference document(s) uploaded successfully for {target_exam.course.code}!")
 
@@ -2112,6 +2123,7 @@ def question_rubric_manage(request, exam_id=None):
             cea_list = request.POST.getlist('cea_mapping')
             kw_list = [k.strip() for k in request.POST.get('keywords', '').split(',') if k.strip()]
             cm_list = [c.strip() for c in request.POST.get('common_mistakes', '').split(',') if c.strip()]
+            master_sol_input = request.POST.get('master_solution_text', '').strip()
 
             q_obj, _ = Question.objects.update_or_create(
                 examination=target_exam,
@@ -2119,6 +2131,7 @@ def question_rubric_manage(request, exam_id=None):
                 defaults={
                     'prompt_text': prompt_text,
                     'max_marks': float(max_marks) if max_marks else 10.0,
+                    'master_solution_text': master_sol_input,
                     'question_type': q_types,
                     'command_verbs': c_verbs,
                     'scenario': request.POST.get('scenario', '').strip(),
@@ -2919,6 +2932,156 @@ def api_finalize_scanned_paper(request):
         import traceback
         traceback.print_exc()
         return JsonResponse({'success': False, 'error': f'Failed to commit finalized paper: {str(e)}'}, status=500)
+
+
+def api_upload_master_solution(request, exam_id):
+    """
+    AJAX endpoint to upload a Master / Benchmark Solution Script (PDF or Images),
+    OCR all pages, run IntelliGradeMappingPipeline / StudentQuestionHeadingDetector to segment by question,
+    and persist extracted golden solutions to Question.master_solution_text and Question.master_solution_steps.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    if not is_admin and exam.assigned_faculty != request.user:
+        return JsonResponse({'error': 'Permission Denied: You are not assigned to this examination.'}, status=403)
+
+    stored_questions = list(exam.questions.all().order_by('question_number'))
+    if not stored_questions:
+        return JsonResponse({'error': 'No questions configured for this examination. Please scan or create questions first.'}, status=400)
+
+    master_files = request.FILES.getlist('master_solution_files')
+    if not master_files and request.FILES.get('master_solution_file'):
+        master_files = [request.FILES.get('master_solution_file')]
+
+    if not master_files:
+        return JsonResponse({'error': 'Please select Master / Benchmark Solution Script document or image(s) to upload.'}, status=400)
+
+    master_file = master_files[0]
+    exam.master_solution_file = master_file
+    exam.save(update_fields=['master_solution_file'])
+
+    import mimetypes
+    from core.ai_engine.document_service import DocumentService
+    from core.ai_engine.mapping.question_number_detector import StudentQuestionHeadingDetector
+    from core.ai_engine.mapping.semantic_matcher import SemanticQuestionMatcher
+    from core.utils.question_accessor import normalize_q_code, QuestionAccessor
+
+    try:
+        master_file.open('rb')
+        file_bytes = master_file.read()
+        guessed_mime, _ = mimetypes.guess_type(master_file.name)
+        mime_type = guessed_mime or ('application/pdf' if master_file.name.lower().endswith('.pdf') else 'image/jpeg')
+
+        page_texts = []
+        page_word_boxes = []
+        page_line_boxes = []
+
+        if mime_type.startswith('application/pdf') or master_file.name.lower().endswith('.pdf'):
+            try:
+                import fitz
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                for page_idx in range(len(doc)):
+                    page = doc[page_idx]
+                    pix = page.get_pixmap(dpi=200)
+                    img_bytes = pix.tobytes("png")
+                    ocr_out = DocumentService.extract_deterministic_ocr(img_bytes, page_renders=[img_bytes], mime_type='image/png')
+                    raw_text = ocr_out.get('text', '') or page.get_text()
+                    wb = ocr_out.get('word_boxes', [])
+                    lb = ocr_out.get('line_boxes', [])
+                    page_texts.append(raw_text)
+                    page_word_boxes.append(wb)
+                    page_line_boxes.append(lb)
+            except Exception as pdf_err:
+                print(f"[MASTER SOLUTION PDF READ ERROR] {pdf_err}")
+                ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[], mime_type=mime_type)
+                page_texts.append(ocr_out.get('text', ''))
+                page_word_boxes.append(ocr_out.get('word_boxes', []))
+                page_line_boxes.append(ocr_out.get('line_boxes', []))
+        else:
+            ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[file_bytes], mime_type=mime_type)
+            page_texts.append(ocr_out.get('text', ''))
+            page_word_boxes.append(ocr_out.get('word_boxes', []))
+            page_line_boxes.append(ocr_out.get('line_boxes', []))
+
+        stored_q_nums = [q.formatted_number for q in stored_questions]
+        q_map = {normalize_q_code(q.question_number): q for q in stored_questions}
+        extracted_by_q = {q_code: [] for q_code in q_map.keys()}
+
+        active_q = None
+        for p_idx, text in enumerate(page_texts):
+            wb = page_word_boxes[p_idx] if p_idx < len(page_word_boxes) else []
+            lb = page_line_boxes[p_idx] if p_idx < len(page_line_boxes) else []
+            dets = StudentQuestionHeadingDetector.detect_questions_on_page(text, wb, lb, stored_q_nums)
+
+            if dets:
+                dets_sorted = sorted(dets, key=lambda d: d.get('ymin_pct', 0.0))
+                if len(dets_sorted) == 1:
+                    det_q = normalize_q_code(dets_sorted[0]['normalized_number'])
+                    if det_q in extracted_by_q:
+                        active_q = det_q
+                        extracted_by_q[active_q].append(text)
+                else:
+                    for det in dets_sorted:
+                        det_q = normalize_q_code(det['normalized_number'])
+                        if det_q in extracted_by_q:
+                            active_q = det_q
+                            extracted_by_q[active_q].append(f"[{det_q} Solution Segment]")
+                    extracted_by_q[active_q].append(text)
+            elif active_q:
+                extracted_by_q[active_q].append(text)
+            else:
+                match = SemanticQuestionMatcher.match_unlabelled_answer(text, stored_questions)
+                best_q = match.get('best_question')
+                if best_q:
+                    active_q = normalize_q_code(QuestionAccessor.get_question_number(best_q))
+                    if active_q in extracted_by_q:
+                        extracted_by_q[active_q].append(text)
+
+        mapped_summary = []
+        for q_code, q_obj in q_map.items():
+            sol_segments = extracted_by_q.get(q_code, [])
+            joined_text = "\n\n".join(s.strip() for s in sol_segments if s.strip()).strip()
+
+            if not joined_text and len(page_texts) == 1:
+                joined_text = page_texts[0].strip()
+
+            if joined_text:
+                q_obj.master_solution_text = joined_text
+                steps = []
+                for line in joined_text.splitlines():
+                    clean_line = line.strip()
+                    if clean_line and len(clean_line) > 3:
+                        steps.append({'step': len(steps) + 1, 'description': clean_line, 'marks': round(float(q_obj.max_marks) / max(1, 4), 2)})
+                q_obj.master_solution_steps = steps[:8]
+                q_obj.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                mapped_summary.append({
+                    'question_number': q_code,
+                    'text_length': len(joined_text),
+                    'steps_count': len(q_obj.master_solution_steps),
+                    'sample_text': joined_text[:120] + "..." if len(joined_text) > 120 else joined_text
+                })
+
+        exam.master_solution_parsed = True
+        exam.save(update_fields=['master_solution_parsed'])
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Master Solution parsed successfully. Bound golden benchmark solutions to {len(mapped_summary)} question(s).",
+            'mapped_questions': mapped_summary
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': f"Failed to parse Master Solution: {str(e)}"}, status=500)
 
 
 # ==========================================

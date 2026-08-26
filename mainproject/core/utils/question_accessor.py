@@ -74,6 +74,8 @@ class QuestionDTO:
     rubric: str = ""
     ideal_answer: str = ""
     alternative_answers: str = ""
+    master_solution_text: str = ""
+    master_solution_steps: List[Dict[str, Any]] = field(default_factory=list)
     common_mistakes: List[str] = field(default_factory=list)
     figures: List[Any] = field(default_factory=list)
     tables: List[Any] = field(default_factory=list)
@@ -110,6 +112,8 @@ class QuestionDTO:
             'rubric_text': self.rubric,
             'ideal_answer': self.ideal_answer,
             'alternative_answers': self.alternative_answers,
+            'master_solution_text': self.master_solution_text,
+            'master_solution_steps': self.master_solution_steps,
             'common_mistakes': self.common_mistakes,
             'figures': self.figures,
             'tables': self.tables,
@@ -243,6 +247,18 @@ class QuestionAccessor:
         return safe_normalize_collection(forms)
 
     @classmethod
+    def get_master_solution_text(cls, question: Any) -> str:
+        """Retrieves authoritative master/benchmark solution text safely."""
+        val = safe_getattr(question, ['master_solution_text', 'master_solution', 'golden_solution'], default="")
+        return str(val).strip()
+
+    @classmethod
+    def get_master_solution_steps(cls, question: Any) -> List[Dict[str, Any]]:
+        """Retrieves structured master/benchmark solution steps."""
+        val = safe_getattr(question, ['master_solution_steps', 'master_steps', 'benchmark_steps'], default=[])
+        return safe_normalize_collection(val)
+
+    @classmethod
     def to_dto(cls, question: Any) -> QuestionDTO:
         """Converts raw Question model instance into canonical QuestionDTO."""
         q_id = safe_getattr(question, ['id'], default=0)
@@ -255,6 +271,8 @@ class QuestionAccessor:
         q_rubric = cls.get_rubric(question)
         q_ideal = cls.get_ideal_answer(question)
         q_alt = cls.get_alternative_answers(question)
+        q_master_text = cls.get_master_solution_text(question)
+        q_master_steps = cls.get_master_solution_steps(question)
         q_mistakes = cls.get_common_mistakes(question)
 
         figs = cls.get_figures(question)
@@ -272,6 +290,8 @@ class QuestionAccessor:
             rubric=q_rubric,
             ideal_answer=q_ideal,
             alternative_answers=q_alt,
+            master_solution_text=q_master_text,
+            master_solution_steps=q_master_steps,
             common_mistakes=q_mistakes,
             figures=figs,
             tables=tbls,

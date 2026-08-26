@@ -778,6 +778,18 @@ Return strict JSON ONLY:
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
         mistakes_str = ", ".join(q_dto.common_mistakes) if q_dto.common_mistakes else "None specified"
 
+        master_solution_section = ""
+        if q_dto.master_solution_text:
+            master_solution_section = f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.master_solution_text}
+"""
+        elif q_dto.ideal_answer:
+            master_solution_section = f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.ideal_answer}
+"""
+
         return f"""You are an expert academic examiner and multimodal vision evaluator for IntelliGrade.
 Carefully inspect the attached {crops_count} handwritten student answer script image(s) and evaluate the work strictly against the stored question, ideal solution, and marking rubrics.
 
@@ -792,7 +804,7 @@ Grading Rubric / Criteria: {q_dto.rubric}
 Ideal Model Answer: {q_dto.ideal_answer or 'See prompt text and rubric criteria for solution standard.'}
 Alternative Valid Approaches: {q_dto.alternative_answers or 'Accept any mathematically or logically sound alternative approach.'}
 Common Pitfalls & Deductions: {mistakes_str}
-
+{master_solution_section}
 [STORED VISUAL ATTACHMENTS FOR QUESTION]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
 Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
@@ -806,20 +818,24 @@ Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awar
 [OPTIONAL OCR TEXT (SECONDARY SUPPORTING CONTEXT)]
 {student_ocr_text or 'No OCR text available.'}
 
-[RUBRIC-GROUNDED SCORING & ZERO-SHOT GROUNDING PROTOCOL]
-1. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
-2. ZERO-SHOT GROUNDING & ANTI-HALLUCINATION:
+[STEP-BY-STEP BENCHMARK SCORING & ZERO-SHOT GROUNDING PROTOCOL]
+1. STEP-BY-STEP BENCHMARK COMPARISON:
+   - Compare the student's handwritten calculations, matrices, equations, and diagrams directly against the MASTER BENCHMARK SOLUTION above.
+   - Award allocated partial marks for each matching step or equivalent mathematical derivation.
+   - Deduct marks only where the student's steps diverge or make errors compared to the master solution.
+2. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
+3. ZERO-SHOT GROUNDING & ANTI-HALLUCINATION:
    - Do NOT assume, fabricate, or hallucinate steps or formulas not visibly present in the student's handwriting.
    - For each criterion/step in `step_breakdown`, if the required formula, definition, or derivation is NOT present in the student's handwritten answer, allocate EXACTLY 0.0 marks for that step, and set `grounding_evidence`: "NOT_FOUND".
    - For every mark awarded (> 0.0), `grounding_evidence` MUST quote the student's exact handwritten expression, equation, or text.
    - If the student's answer region is completely blank, illegible, or irrelevant, strictly award 0.0 total marks with constructive feedback explaining what was expected.
-3. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
-4. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
-5. CRITERION-BY-CRITERION SCORING:
+4. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
+5. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
+6. CRITERION-BY-CRITERION SCORING:
    - For each criterion, state max allocated marks and awarded marks.
    - Total obtained_marks MUST equal the EXACT sum of all awarded criterion marks.
    - Award fair partial credit for correct intermediate steps, formulas, and reasoning only if visually present.
-6. CONFIDENCE CALIBRATION & MANUAL REVIEW:
+7. CONFIDENCE CALIBRATION & MANUAL REVIEW:
    - High confidence (0.85 - 1.0): Image clean, handwriting clear, complete mapped region.
    - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting. Set "requires_manual_review": true.
 
@@ -863,9 +879,20 @@ Return ONLY raw JSON without markdown commentary.
         fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
         tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
+        master_solution_section = ""
+        if q_dto.master_solution_text:
+            master_solution_section = f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.master_solution_text}
+"""
+        elif q_dto.ideal_answer:
+            master_solution_section = f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.ideal_answer}
+"""
 
         return f"""You are an expert academic examiner for IntelliGrade.
-Evaluate the student's answer strictly against the stored question, figures, tables, formulas, and rubrics.
+Evaluate the student's answer strictly against the stored question, figures, tables, formulas, master solution, and rubrics.
 
 [EVALUATION SETTINGS]
 Mode: {eval_mode}
@@ -880,11 +907,16 @@ Bloom Level: {q_dto.bloom}
 Course Outcome (CO): {q_dto.co}
 Program Outcome (PO): {q_dto.po}
 Rubrics: {q_dto.rubric}
-
+{master_solution_section}
 [STORED VISUAL ATTACHMENTS]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
 Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
 Formulas: {"; ".join(form_summaries) if form_summaries else "None"}
+
+[STEP-BY-STEP BENCHMARK SCORING PROTOCOL]
+1. Compare the student's answer steps directly against the MASTER BENCHMARK SOLUTION above.
+2. Award allocated partial marks for each matching step or equivalent mathematical derivation.
+3. Deduct marks only where the student's steps diverge or make errors compared to the master solution.
 
 [STUDENT ANSWER (OCR EXTRACTED)]
 {student_ocr_text}
