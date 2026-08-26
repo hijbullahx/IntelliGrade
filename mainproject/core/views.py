@@ -810,7 +810,11 @@ def add_faculty(request):
         return redirect('faculty_list')
 
     departments = Department.objects.filter(is_active=True)
-    suggested_username = preset_name.lower().replace('dr.', '').replace('prof.', '').replace(' ', '_').strip('_') if preset_name else ''
+    suggested_username = ''
+    if preset_name:
+        clean_u = re.sub(r'\b(drs\.|drs|dr\.|dr|prof\.|prof|ms\.|ms|mr\.|mr)\b', '', preset_name, flags=re.IGNORECASE)
+        clean_u = re.sub(r'[^a-zA-Z0-9\s_]', '', clean_u)
+        suggested_username = re.sub(r'\s+', '_', clean_u).lower().strip('_')
 
     return render(request, 'core/add_faculty.html', {
         'departments': departments,
@@ -1159,7 +1163,7 @@ def scan_routine_ai(request):
             routine_text = combined_file_text
 
     provider = AIProviderFactory.get_provider()
-    from core.ai_engine.routine_parser.routine_parser import RoutineParser
+    from core.ai_engine.routine_parser.routine_parser import RoutineParser, clean_faculty_name
     routine_parser = RoutineParser()
     ai_used = True
     ai_error = None
@@ -1198,8 +1202,9 @@ def scan_routine_ai(request):
 
     for item in extracted_schedule:
         c_code = item.get('course_code')
-        c_title = item.get('course_title')
-        f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
+        c_title = item.get('course_title') or ''
+        raw_f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty') or ''
+        f_name = clean_faculty_name(raw_f_name)
         e_date = item.get('exam_date')
         e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
         t_marks = item.get('total_marks', 100.0)
