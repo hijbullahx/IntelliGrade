@@ -146,7 +146,8 @@
         </div>
     </div>
 
-    <!-- Master / Benchmark Answer Script (Golden Solution) Card -->
+    <!-- Master / Benchmark Answer Script (Golden Solution) Card (Shows only after questions are configured) -->
+    {% if selected_exam and questions and questions.count > 0 %}
     <div class="glass-card p-6 rounded-2xl border border-amber-500/20 shadow-lg space-y-4">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="space-y-1.5 flex-1">
@@ -191,6 +192,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Dedicated MCQ Examination Control Hub (Shows when examination has configured questions) -->
     {% if selected_exam and questions and questions.count > 0 %}
