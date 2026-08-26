@@ -397,10 +397,7 @@ Return strict JSON ONLY:
         # 4. Build Ground-Truth Answer Key from Examination Questions (100% Dynamic DB Resolution)
         answer_key = {}
         for q in exam.questions.all().order_by('id'):
-            q_num = str(q.question_number).upper().replace('QQ', 'Q')
-            if not q_num.startswith('Q'):
-                q_num = f"Q{q_num}"
-            
+            q_num = normalize_q_code(q.question_number)
             target_ans = get_authoritative_answer_key(q)
             answer_key[q_num] = target_ans
 
@@ -942,10 +939,11 @@ Return ONLY JSON without markdown commentary.
         is_mcq_quiz = any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types)
 
         if is_mcq_quiz:
-            print(f"[EVALUATION ROUTER] Routing Q{q_dto.number} through MCQ / Quiz Pipeline Engine...")
+            norm_q = normalize_q_code(q_dto.number)
+            print(f"[EVALUATION ROUTER] Routing {norm_q} through MCQ / Quiz Pipeline Engine...")
             from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
             correct_ans = q_dto.ideal_answer or q_dto.rubric or q_dto.text
-            q_key = f"Q{q_dto.number}"
+            q_key = norm_q
             answer_key = {q_key: str(correct_ans).strip()}
 
             detected_info = {

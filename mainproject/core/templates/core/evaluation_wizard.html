@@ -833,14 +833,54 @@ async function syncUpdatedPagesToServer() {
 }
 
 async function compileAndPreviewPdf() {
-    if(!currentSubmissionId) return alert("Please upload images first.");
-    await syncUpdatedPagesToServer();
-    const resp = await fetch(`/api/submission/${currentSubmissionId}/create-pdf/`);
-    const data = await resp.json();
-    if(data.success) {
-        window.open(data.pdf_url, '_blank');
-    } else {
-        alert("PDF Preview Error: " + data.error);
+    if(!currentSubmissionId) return alert("Please upload answer script pages first.");
+    
+    // Open new tab immediately on user click to prevent browser popup blockers
+    const newTab = window.open('', '_blank');
+    if (newTab) {
+        newTab.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Loading Full Answer Script...</title>
+                <style>
+                    body { background: #0b0f19; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .loader-card { text-align: center; background: #1e293b; padding: 32px 40px; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+                    .spinner { border: 3px solid rgba(255, 255, 255, 0.1); border-top: 3px solid #38bdf8; border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    .title { font-size: 14px; font-weight: 700; color: #f8fafc; margin-bottom: 6px; }
+                    .desc { font-size: 12px; color: #64748b; }
+                </style>
+            </head>
+            <body>
+                <div class="loader-card">
+                    <div class="spinner"></div>
+                    <div class="title">Loading Full Answer Script PDF...</div>
+                    <div class="desc">Please wait while the multi-page document is rendered.</div>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+
+    try {
+        await syncUpdatedPagesToServer();
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/create-pdf/`);
+        const data = await resp.json();
+        if(data.success && data.pdf_url) {
+            if(newTab) {
+                newTab.location.href = data.pdf_url;
+            } else {
+                window.open(data.pdf_url, '_blank');
+            }
+        } else {
+            if(newTab) newTab.close();
+            alert("PDF Preview Error: " + (data.error || "Failed to load answer script PDF."));
+        }
+    } catch(err) {
+        if(newTab) newTab.close();
+        alert("Exception opening answer script: " + err.message);
     }
 }
 
@@ -1191,11 +1231,11 @@ function renderMappingTable(data) {
 }
 
 function viewFullAnswerScriptModal(startPage = 1) {
-    if(uploadedFiles && uploadedFiles.length > 0) {
+    if(currentSubmissionId) {
+        compileAndPreviewPdf();
+    } else if(uploadedFiles && uploadedFiles.length > 0) {
         const targetIdx = Math.max(0, Math.min(startPage - 1, uploadedFiles.length - 1));
         previewPageModal(targetIdx);
-    } else if(currentSubmissionId) {
-        compileAndPreviewPdf();
     } else {
         alert("No answer script pages uploaded to view.");
     }

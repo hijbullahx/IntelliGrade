@@ -7,6 +7,19 @@ Prevents database schema coupling and AttributeError / VariableDoesNotExist cras
 from typing import Any, List, Dict, Optional
 from dataclasses import dataclass, field, asdict
 
+def normalize_q_code(q: Any) -> str:
+    """
+    Normalizes any question code/identifier string to ensure exactly a single 'Q' prefix
+    (e.g., 'QQ2' -> 'Q2', '2' -> 'Q2', 'Q2' -> 'Q2', 'Q1(a)' -> 'Q1(a)').
+    """
+    q_clean = str(q or "").strip().upper()
+    while q_clean.startswith('QQ'):
+        q_clean = q_clean[1:]
+    if not q_clean.startswith('Q') and (q_clean.isdigit() or (q_clean and q_clean[0].isdigit())):
+        q_clean = f"Q{q_clean}"
+    return q_clean
+
+
 def safe_getattr(obj: Any, fields: List[str], default: Any = "") -> Any:
     """
     Safely retrieves the first existing non-None attribute from a list of candidate field names.
@@ -130,6 +143,24 @@ class QuestionAccessor:
         """Retrieves question number identifier string (e.g., '1', 'Q1')."""
         val = safe_getattr(question, ['question_number', 'number', 'q_num', 'id'], default="1")
         return str(val).strip()
+
+    @classmethod
+    def get_clean_number(cls, question: Any) -> str:
+        """Retrieves raw question number without leading 'Q' prefix (e.g., '1', '2', '1(a)')."""
+        raw = cls.get_question_number(question)
+        import re
+        return re.sub(r'^[Qq]+[\.\:\s\-]*', '', raw).strip() or "1"
+
+    @classmethod
+    def get_formatted_number(cls, question: Any) -> str:
+        """Retrieves guaranteed single-Q formatted question label (e.g., 'Q1', 'Q2', 'Q1(a)')."""
+        clean = cls.get_clean_number(question)
+        return f"Q{clean}"
+
+    @classmethod
+    def normalize_q_code(cls, q: Any) -> str:
+        """Normalizes any question string to guaranteed single-Q code."""
+        return normalize_q_code(q)
 
     @classmethod
     def get_co(cls, question: Any) -> str:

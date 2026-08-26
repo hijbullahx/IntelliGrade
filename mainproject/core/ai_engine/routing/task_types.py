@@ -12,6 +12,7 @@ class TaskType(Enum):
     FEEDBACK_GENERATION = "feedback_gen"      # Textual student feedback generation
     REPORT_SUMMARY = "report_summary"         # Class performance summary reports
     COMPLEX_REASONING = "complex_reasoning"   # Deep multi-step academic proofs
+    GENERIC = "generic"                       # Generic AI task completion
 
 @dataclass
 class ProviderStrategy:

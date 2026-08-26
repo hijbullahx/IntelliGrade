@@ -223,7 +223,12 @@ class FailoverAIProvider(BaseAIProvider):
             if passed_timeout is not None:
                 provider_timeout = min(float(passed_timeout), remaining_budget)
             else:
-                default_to = 12.0 if isinstance(provider, (LocalOfflineVisionProvider, OllamaProvider)) else float(os.environ.get('AI_REQUEST_TIMEOUT', 8.0))
+                if isinstance(provider, OllamaProvider) and 'moondream' in str(getattr(provider, 'model_name', '')).lower():
+                    default_to = 3.5
+                elif isinstance(provider, (LocalOfflineVisionProvider, OllamaProvider)):
+                    default_to = 12.0
+                else:
+                    default_to = float(os.environ.get('AI_REQUEST_TIMEOUT', 8.0))
                 provider_timeout = min(default_to, remaining_budget)
             call_kwargs['timeout'] = provider_timeout
 

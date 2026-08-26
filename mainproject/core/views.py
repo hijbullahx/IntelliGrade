@@ -1442,7 +1442,7 @@ def script_upload(request):
                                     ai_marks = float(eval_res.get('marks_assigned') or ai_marks)
                                     ai_feedback = eval_res.get('feedback') or ai_feedback
                             except Exception as eval_err:
-                                print(f"[SCRIPT UPLOAD EVAL WARNING] Question Q{q.question_number} evaluation error: {eval_err}")
+                                print(f"[SCRIPT UPLOAD EVAL WARNING] Question {normalize_q_code(q.question_number)} evaluation error: {eval_err}")
 
                         Evaluation.objects.create(
                             segment=segment,
@@ -3087,7 +3087,7 @@ def evaluation_workspace(request, submission_id):
         q_types = [str(t).lower() for t in (q_type_raw if isinstance(q_type_raw, list) else [str(q_type_raw)])]
         if any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types):
             is_mcq = True
-            q_key = f"Q{q_dto.number}"
+            q_key = normalize_q_code(q_dto.number)
             answer_key[q_key] = str(q_dto.ideal_answer or q_dto.rubric or q_dto.text).strip()
 
             det_val = []
@@ -3433,19 +3433,52 @@ def api_reorder_submission_pages(request, submission_id):
 
 
 def api_create_submission_pdf(request, submission_id):
-    """Compiles uploaded/reordered raw images into submission_original.pdf and returns preview URL."""
+    """Compiles uploaded/reordered raw images or pages into submission_original.pdf and returns preview URL."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
 
     try:
-        raw_images = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
-        if not raw_images:
-            return JsonResponse({'success': False, 'error': 'No raw page images found.'}, status=400)
+        # 1. If SubmissionPDF already exists and valid, verify file existence
+        if hasattr(submission, 'pdf_document') and submission.pdf_document and submission.pdf_document.pdf_file:
+            pdf_path = submission.pdf_document.pdf_file.path
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                return JsonResponse({
+                    'success': True,
+                    'pdf_url': submission.pdf_document.pdf_file.url,
+                    'page_count': submission.pdf_document.page_count,
+                    'message': 'Loaded existing submission PDF.'
+                })
 
-        img_paths = [r.original_file.path for r in raw_images]
+        # 2. Gather image paths from raw_images or submission.pages
+        raw_images = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+        img_paths = []
+        if raw_images:
+            img_paths = [r.original_file.path for r in raw_images if r.original_file and os.path.exists(r.original_file.path)]
+        
+        if not img_paths:
+            pages = list(submission.pages.all().order_by('page_number'))
+            for p in pages:
+                if p.working_image_path and os.path.exists(p.working_image_path):
+                    img_paths.append(p.working_image_path)
+                elif p.page_image and os.path.exists(p.page_image.path):
+                    img_paths.append(p.page_image.path)
+
+        # 3. If no images found, fallback to submission.script_file
+        if not img_paths:
+            if submission.script_file:
+                return JsonResponse({
+                    'success': True,
+                    'pdf_url': submission.script_file.url,
+                    'page_count': submission.pages.count() or 1,
+                    'message': 'Using uploaded script PDF.'
+                })
+            return JsonResponse({'success': False, 'error': 'No page images or PDF found for this submission.'}, status=400)
+
+        # 4. Compile images into PDF
         pdf_out_path = os.path.join(settings.MEDIA_ROOT, 'submission_pdfs', f'submission_{submission.id}_original.pdf')
+        os.makedirs(os.path.dirname(pdf_out_path), exist_ok=True)
         compiled_path, page_count = ImagePreprocessingService.compile_images_to_pdf(img_paths, pdf_out_path)
 
         with open(compiled_path, 'rb') as f_pdf:
@@ -3844,9 +3877,7 @@ def api_evaluate_quiz_submission(request, exam_id):
         total_unattempted = 0
 
         for sa in eval_answers:
-            q_num = sa.question.question_number or f"Q{sa.question.id}"
-            if not str(q_num).upper().startswith('Q'):
-                q_num = f"Q{q_num}"
+            q_num = normalize_q_code(sa.question.question_number or sa.question.id)
 
             correct_key = getattr(sa.question, 'correct_answer', None)
             if not correct_key and hasattr(sa.question, 'rubric') and sa.question.rubric:

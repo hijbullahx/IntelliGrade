@@ -118,10 +118,16 @@ class Question(models.Model):
 
     class Meta:
         ordering = ['question_number']
-        unique_together = ('examination', 'question_number')
+    @property
+    def formatted_number(self) -> str:
+        """Returns guaranteed single-Q formatted question label e.g. Q1, Q2, Q1(a)."""
+        num = str(self.question_number or "1").strip()
+        import re
+        clean = re.sub(r'^[Qq]+[\.\:\s\-]*', '', num)
+        return f"Q{clean}" if clean else "Q1"
 
     def __str__(self):
-        return f"Q{self.question_number} ({self.max_marks} marks) - {self.examination.title}"
+        return f"{self.formatted_number} ({self.max_marks} marks) - {self.examination.title}"
 
 
 class Rubric(models.Model):
@@ -138,7 +144,7 @@ class Rubric(models.Model):
     common_mistakes = models.JSONField(default=list, blank=True, help_text="Common student pitfalls and deductions")
 
     def __str__(self):
-        return f"Rubric for Q{self.question.question_number} ({self.question.examination.title})"
+        return f"Rubric for {self.question.formatted_number} ({self.question.examination.title})"
 
 
 class QuestionFigure(models.Model):
@@ -156,7 +162,7 @@ class QuestionFigure(models.Model):
         ordering = ['page_number', 'display_order', 'id']
 
     def __str__(self):
-        return f"Figure '{self.caption or 'Diagram'}' for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Figure '{self.caption or 'Diagram'}' for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class QuestionTable(models.Model):
@@ -184,7 +190,7 @@ class QuestionTable(models.Model):
         ordering = ['page_number', 'display_order', 'id']
 
     def __str__(self):
-        return f"Table '{self.caption or 'Data Table'}' for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Table '{self.caption or 'Data Table'}' for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class QuestionFormula(models.Model):
@@ -200,7 +206,7 @@ class QuestionFormula(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     def __str__(self):
-        return f"Formula for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Formula for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class DocumentDOM(models.Model):
@@ -417,7 +423,7 @@ class SubmissionAnswer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Answer Q{self.question.question_number} - {self.submission.student_name}"
+        return f"Answer {self.question.formatted_number} - {self.submission.student_name}"
 
 
 class EvaluationResult(models.Model):
@@ -443,7 +449,7 @@ class EvaluationResult(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Result Q{self.submission_answer.question.question_number}: {self.obtained_marks}/{self.maximum_marks}"
+        return f"Result {self.submission_answer.question.formatted_number}: {self.obtained_marks}/{self.maximum_marks}"
 
 
 class EvaluationFeedback(models.Model):
@@ -605,7 +611,7 @@ class QuestionMapping(models.Model):
         unique_together = ('submission', 'question')
 
     def __str__(self):
-        return f"Mapping Submission #{self.submission.id} Q{self.question.question_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
+        return f"Mapping Submission #{self.submission.id} {self.question.formatted_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
 
 
 class MappingHistory(models.Model):

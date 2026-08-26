@@ -149,7 +149,7 @@ class EvaluatedScriptPDFService:
             obtained = float(eval_res.obtained_marks) if eval_res else 0.0
             max_m = float(eval_res.maximum_marks) if eval_res else QuestionAccessor.get_marks(q)
 
-            q_line = f"Q{q_num}: {q_text}  -->  MARKS: {obtained} / {max_m}"
+            q_line = f"{normalize_q_code(q_num)}: {q_text}  -->  MARKS: {obtained} / {max_m}"
             pdf_page.insert_text(fitz.Point(25, y_offset), q_line, fontsize=8.5, color=(0.1, 0.1, 0.1), fontname="helv")
 
             if eval_res and eval_res.feedback_text:
@@ -229,7 +229,7 @@ class EvaluatedScriptPDFService:
             row_rect = fitz.Rect(20, y, w - 20, y + 22)
             summary_page.draw_rect(row_rect, color=(0.85, 0.85, 0.85), fill=bg_color, width=0.5)
 
-            summary_page.insert_text(fitz.Point(30, y + 15), f"Q{q_num}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
+            summary_page.insert_text(fitz.Point(30, y + 15), f"{normalize_q_code(q_num)}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
             summary_page.insert_text(fitz.Point(60, y + 15), q_text, fontsize=8, color=(0.2, 0.2, 0.2), fontname="helv")
             summary_page.insert_text(fitz.Point(340, y + 15), f"{max_m:.1f}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
             summary_page.insert_text(fitz.Point(410, y + 15), f"{obtained:.1f}", fontsize=8, color=(0.05, 0.45, 0.2), fontname="helv")

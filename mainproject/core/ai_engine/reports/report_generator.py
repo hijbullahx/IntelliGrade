@@ -3,6 +3,7 @@ import json
 import io
 from typing import Dict, Any, List
 from core.models import StudentSubmission, Examination
+from core.utils.question_accessor import normalize_q_code
 
 class EvaluationReportGenerator:
     """
@@ -19,7 +20,7 @@ class EvaluationReportGenerator:
         writer = csv.writer(output)
 
         questions = list(examination.questions.all().order_by('question_number'))
-        q_headers = [f"Q{q.question_number} (Max {q.max_marks})" for q in questions]
+        q_headers = [f"{normalize_q_code(q.question_number)} (Max {q.max_marks})" for q in questions]
 
         # Header
         writer.writerow(["Student Name", "Roll No", "Status", "Total Obtained", "Total Max", "Percentage (%)"] + q_headers)
