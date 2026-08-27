@@ -17,10 +17,16 @@
                     <span class="theme-text-muted">•</span>
                     <span class="text-xs font-semibold theme-text-muted truncate max-w-[280px]">{{ exam.title }}</span>
                 </div>
-                <h1 class="text-base font-black theme-text-primary mt-0.5 flex items-center gap-2">
-                    <span>{{ submission.student_name }}</span>
-                    <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted">Roll: {{ submission.student_roll_no|default:"N/A" }}</span>
-                </h1>
+                <div class="flex items-center gap-2.5 mt-0.5">
+                    <h1 class="text-base font-black theme-text-primary flex items-center gap-2">
+                        <span id="displayStudentName">{{ submission.student_name }}</span>
+                        <span id="displayStudentRoll" class="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted">Roll: {{ submission.student_roll_no|default:"N/A" }}</span>
+                    </h1>
+                    <button type="button" onclick="openEditStudentModal()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm transition-all flex items-center gap-1 cursor-pointer" title="Edit Student Name & Roll Number">
+                        <i data-lucide="edit-3" class="w-3 h-3 text-brand-500"></i>
+                        <span>Edit Info</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -725,12 +731,116 @@ async function submitReview(resultId, action, qIdx) {
 }
 
 async function finalizeSubmissionEvaluation(subId) {
-    if(!confirm("Finalize Evaluation & Purge Temporary Working Files?\n\nFinal marks will be locked and report generated.")) return;
+    const curName = document.getElementById('displayStudentName') ? document.getElementById('displayStudentName').innerText.trim() : '';
+    const curRoll = document.getElementById('displayStudentRoll') ? document.getElementById('displayStudentRoll').innerText.replace('Roll:', '').trim() : '';
+    const finName = document.getElementById('finalizeStudentNameInput');
+    const finRoll = document.getElementById('finalizeStudentRollInput');
+    if (finName && curName) finName.value = curName;
+    if (finRoll && curRoll) finRoll.value = (curRoll === 'N/A' ? '' : curRoll);
+    document.getElementById('finalizeModal').classList.remove('hidden');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function openEditStudentModal() {
+    const nameElem = document.getElementById('displayStudentName');
+    const rollElem = document.getElementById('displayStudentRoll');
+    if (nameElem) document.getElementById('modalStudentNameInput').value = nameElem.innerText.trim();
+    if (rollElem) {
+        const rVal = rollElem.innerText.replace('Roll:', '').trim();
+        document.getElementById('modalStudentRollInput').value = (rVal === 'N/A' ? '' : rVal);
+    }
+    document.getElementById('editStudentModal').classList.remove('hidden');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function closeEditStudentModal() {
+    document.getElementById('editStudentModal').classList.add('hidden');
+}
+
+async function saveStudentInformation(subId) {
+    const name = document.getElementById('modalStudentNameInput').value.trim();
+    const roll = document.getElementById('modalStudentRollInput').value.trim();
+
+    if (!name) {
+        alert('Student Name cannot be empty.');
+        return;
+    }
+
+    const btn = document.getElementById('saveStudentInfoBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving...`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/update-info/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                student_name: name,
+                student_roll_no: roll
+            })
+        });
+
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById('displayStudentName').innerText = data.student_name;
+            document.getElementById('displayStudentRoll').innerText = `Roll: ${data.student_roll_no || 'N/A'}`;
+            const finName = document.getElementById('finalizeStudentNameInput');
+            const finRoll = document.getElementById('finalizeStudentRollInput');
+            if (finName) finName.value = data.student_name;
+            if (finRoll) finRoll.value = data.student_roll_no;
+            closeEditStudentModal();
+            alert('✓ ' + data.message);
+        } else {
+            alert('Error updating information: ' + (data.error || 'Unknown error'));
+        }
+    } catch(err) {
+        alert('Exception: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> Save Information`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+    }
+}
+
+function closeFinalizeModal() {
+    document.getElementById('finalizeModal').classList.add('hidden');
+}
+
+async function executeFinalizeEvaluation(subId) {
+    const name = document.getElementById('finalizeStudentNameInput').value.trim();
+    const roll = document.getElementById('finalizeStudentRollInput').value.trim();
+
+    if (!name) {
+        alert('Please provide a valid Student Name before finalizing.');
+        return;
+    }
+
+    const btn = document.getElementById('confirmFinalizeBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Finalizing & Generating Report...`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
 
     try {
         const resp = await fetch(`/api/submission/${subId}/finalize/`, {
             method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                student_name: name,
+                student_roll_no: roll
+            })
         });
         const data = await resp.json();
         if(data.success) {
@@ -738,10 +848,102 @@ async function finalizeSubmissionEvaluation(subId) {
             window.location.reload();
         } else {
             alert("Finalization Error: " + data.error);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report`;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
         }
     } catch(err) {
         alert("Finalization Exception: " + err.message);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
     }
 }
 </script>
+
+<!-- Edit Student Information Modal -->
+<div id="editStudentModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl relative space-y-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base theme-text-primary flex items-center gap-2">
+                <i data-lucide="user-check" class="w-5 h-5 text-brand-500"></i> Edit Student Information
+            </h3>
+            <button type="button" onclick="closeEditStudentModal()" class="theme-text-muted hover:theme-text-primary cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Full Name</label>
+                <input type="text" id="modalStudentNameInput" value="{{ submission.student_name }}" placeholder="e.g. John Doe" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Roll / ID Number</label>
+                <input type="text" id="modalStudentRollInput" value="{{ submission.student_roll_no }}" placeholder="e.g. 2024-CSE-042" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold font-mono focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onclick="closeEditStudentModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted rounded-xl transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="saveStudentInfoBtn" onclick="saveStudentInformation({{ submission.id }})" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                <i data-lucide="save" class="w-4 h-4"></i> Save Information
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Finalize Confirmation & Verification Modal -->
+<div id="finalizeModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl relative space-y-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                <i data-lucide="check-circle-2" class="w-5 h-5"></i> Finalize Evaluation & Lock Report
+            </h3>
+            <button type="button" onclick="closeFinalizeModal()" class="theme-text-muted hover:theme-text-primary cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+            <p class="font-bold flex items-center gap-1.5">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> Verify Student Information & Lock Marks
+            </p>
+            <p class="text-[11px] opacity-90">Verify or adjust the student's name and roll number below before generating the final evaluated PDF report.</p>
+        </div>
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Full Name</label>
+                <input type="text" id="finalizeStudentNameInput" value="{{ submission.student_name }}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Roll / ID Number</label>
+                <input type="text" id="finalizeStudentRollInput" value="{{ submission.student_roll_no }}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold font-mono focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+
+            <div class="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-between text-xs font-bold">
+                <span class="theme-text-muted">Aggregated Marks:</span>
+                <span class="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks|default:"0.0" }} / {{ submission.total_max_marks|default:"0.0" }} ({{ submission.percentage|default:"0" }}%)</span>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onclick="closeFinalizeModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted rounded-xl transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="confirmFinalizeBtn" onclick="executeFinalizeEvaluation({{ submission.id }})" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                <i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}

@@ -77,6 +77,7 @@ urlpatterns = [
     path('api/submission/<int:submission_id>/download-evaluated-pdf/', views.api_download_evaluated_pdf, name='api_download_evaluated_pdf'),
     path('api/submission/<int:submission_id>/validate-preview/', views.api_validate_preview, name='api_validate_preview'),
     path('api/submission/<int:submission_id>/finalize/', views.api_finalize_evaluation, name='api_finalize_evaluation'),
+    path('api/submission/<int:submission_id>/update-info/', views.api_update_submission_info, name='api_update_submission_info'),
     path('api/submission/<int:submission_id>/delete/', views.api_delete_submission, name='api_delete_submission'),
     path('teacher/submission/<int:submission_id>/workspace/', views.evaluation_workspace, name='evaluation_workspace'),
     path('api/evaluation-result/<int:result_id>/review/', views.review_evaluation_answer, name='review_evaluation_answer'),

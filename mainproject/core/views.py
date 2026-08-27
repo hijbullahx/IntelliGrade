@@ -4297,6 +4297,29 @@ def api_finalize_evaluation(request, submission_id):
 
     if request.method == 'POST':
         try:
+            # Allow updating student_name and student_roll_no upon finalization if provided
+            body_data = {}
+            if request.body:
+                try:
+                    body_data = json.loads(request.body.decode('utf-8'))
+                except Exception:
+                    body_data = request.POST.dict()
+            else:
+                body_data = request.POST.dict()
+
+            st_name = body_data.get('student_name', '').strip()
+            st_roll = body_data.get('student_roll_no', '').strip() or body_data.get('roll_no', '').strip()
+
+            need_save = False
+            if st_name and st_name != submission.student_name:
+                submission.student_name = st_name
+                need_save = True
+            if st_roll and st_roll != submission.student_roll_no:
+                submission.student_roll_no = st_roll
+                need_save = True
+            if need_save:
+                submission.save(update_fields=['student_name', 'student_roll_no'])
+
             from core.ai_engine.services.finalization_service import FinalizationService
             res = FinalizationService.finalize_submission(
                 submission.id,
@@ -4309,6 +4332,52 @@ def api_finalize_evaluation(request, submission_id):
             import traceback
             traceback.print_exc()
             return JsonResponse({'success': False, 'error': f'Finalization failed: {str(e)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
+
+
+def api_update_submission_info(request, submission_id):
+    """Allows teachers to update student name and roll number after evaluation, before or after finalization."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            body_data = {}
+            if request.body:
+                try:
+                    body_data = json.loads(request.body.decode('utf-8'))
+                except Exception:
+                    body_data = request.POST.dict()
+            else:
+                body_data = request.POST.dict()
+
+            st_name = body_data.get('student_name', '').strip()
+            st_roll = body_data.get('student_roll_no', '').strip() or body_data.get('roll_no', '').strip()
+
+            if st_name:
+                submission.student_name = st_name
+            if st_roll:
+                submission.student_roll_no = st_roll
+            submission.save(update_fields=['student_name', 'student_roll_no'])
+
+            # Sync with Tabulation OBE record
+            try:
+                from core.services.tabulation_service import sync_submission_to_tabulation
+                sync_submission_to_tabulation(submission)
+            except Exception as e_sync:
+                print(f"[TABULATION SYNC WARNING] {e_sync}")
+
+            return JsonResponse({
+                'success': True,
+                'student_name': submission.student_name,
+                'student_roll_no': submission.student_roll_no,
+                'message': 'Student Name and Roll Number updated successfully.'
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
     return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
 
