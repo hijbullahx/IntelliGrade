@@ -268,9 +268,8 @@ class FailoverAIProvider(BaseAIProvider):
                     # Non-transient or max attempts reached: mark cooldown and failover
                     is_auth_fail = any(term in last_error.lower() for term in ['401', '403', 'invalid api key', 'unauthenticated'])
                     status_code = 'AUTH_FAILURE' if is_auth_fail else ('RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else 'OFFLINE')
-                    self.log_health_event(provider_name, status_code, error_msg=last_error, response_time_ms=elapsed_ms)
-
-                    ProviderHealthTracker.mark_cooldown(provider.__class__, duration_seconds=60.0)
+                    cooldown_secs = 15.0 if status_code == 'RATE_LIMITED' else 60.0
+                    ProviderHealthTracker.mark_cooldown(provider.__class__, duration_seconds=cooldown_secs)
 
                     if is_auth_fail:
                         print(f"[AI PROVIDER AUTH FAILURE] {provider_name}: Authentication error ({last_error[:100]}). Immediately failing over...")

@@ -47,15 +47,15 @@ class TaskRouter:
     """
 
     TASK_CHAINS: Dict[TaskType, List[Type[BaseAIProvider]]] = {
-        TaskType.OCR_TEXT: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.ROUTINE_PARSE: [OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.QUESTION_MAPPING: [OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.ANSWER_VISUAL_READ: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.ANSWER_GRADING: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.FEEDBACK_GENERATION: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.REPORT_SUMMARY: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.COMPLEX_REASONING: [LocalOfflineVisionProvider, OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
-        TaskType.GENERIC: [OllamaProvider, GroqProvider, OpenRouterProvider, GeminiProvider, OpenAIProvider],
+        TaskType.OCR_TEXT: [GeminiProvider, GroqProvider, OpenRouterProvider, OpenAIProvider, LocalOfflineVisionProvider, OllamaProvider],
+        TaskType.ROUTINE_PARSE: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.QUESTION_MAPPING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, GroqProvider, OpenRouterProvider, OpenAIProvider, LocalOfflineVisionProvider],
+        TaskType.ANSWER_GRADING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.FEEDBACK_GENERATION: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.REPORT_SUMMARY: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.COMPLEX_REASONING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.GENERIC: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
     }
 
     TASK_MAX_IMAGES: Dict[TaskType, int] = {

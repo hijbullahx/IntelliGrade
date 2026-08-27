@@ -3810,6 +3810,8 @@ def api_upload_raw_images(request, exam_id):
                 sub.student_name = student_name
                 sub.student_roll_no = roll_no
                 sub.save()
+                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+                WorkingCopyManager.flush_submission_pipeline_cache(sub.id)
                 # Clear old raw images if re-uploading
                 sub.raw_images.all().delete()
             except StudentSubmission.DoesNotExist:
@@ -3866,17 +3868,19 @@ def api_get_submission_images(request, submission_id):
 
 
 def api_delete_all_submission_images(request, submission_id):
-    """Deletes all raw page images for a submission."""
+    """Deletes all raw page images for a submission and flushes pipeline cache."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
+    from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+    WorkingCopyManager.flush_submission_pipeline_cache(submission.id)
     submission.raw_images.all().delete()
-    return JsonResponse({'success': True, 'message': 'All page images removed.'})
+    return JsonResponse({'success': True, 'message': 'All page images and cached pipeline states removed.'})
 
 
 def api_reorder_submission_pages(request, submission_id):
-    """Updates sequence order and rotation angles for existing raw submission pages."""
+    """Updates sequence order and rotation angles for existing raw submission pages and flushes pipeline cache."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
@@ -3887,6 +3891,9 @@ def api_reorder_submission_pages(request, submission_id):
         except Exception:
             body_data = request.POST.dict()
 
+        from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+        WorkingCopyManager.flush_submission_pipeline_cache(submission.id)
+
         page_orders = body_data.get('page_orders', [])
         for order_info in page_orders:
             img_id = order_info.get('id')
@@ -3895,7 +3902,7 @@ def api_reorder_submission_pages(request, submission_id):
             if img_id:
                 SubmissionImage.objects.filter(id=img_id, submission=submission).update(sequence_order=seq, rotation_angle=rot)
 
-        return JsonResponse({'success': True, 'message': 'Page order updated.'})
+        return JsonResponse({'success': True, 'message': 'Page order updated and pipeline cache flushed.'})
 
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 

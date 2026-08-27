@@ -168,33 +168,33 @@ class AIScriptEvaluator:
         total_max = 0.0
         has_manual_review = False
 
-        import concurrent.futures
         from django.db import close_old_connections
 
-        def _eval_worker(a_item):
-            a_idx, ans_obj = a_item
+        # Rate-Safe Sequential Evaluation (Guarantees zero concurrency collisions on Groq/Cloud APIs)
+        evaluated_results = []
+        for a_idx, ans_obj in enumerate(answers, 1):
             close_old_connections()
+            if a_idx > 1:
+                time.sleep(1.2)  # 1.2s delay between questions to respect rate limit thresholds
             try:
-                res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir)
-                return (a_idx, ans_obj, res, None)
+                eval_res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir)
+                if eval_res:
+                    evaluated_results.append((a_idx, ans_obj, eval_res, None))
             except Exception as e_w:
-                return (a_idx, ans_obj, None, e_w)
+                print(f"[EVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                cls._write_pipeline_log(submission.id, f"[EVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                evaluated_results.append((a_idx, ans_obj, None, e_w))
             finally:
                 close_old_connections()
 
-        worker_inputs = list(enumerate(answers, 1))
-        max_th = min(4, max(1, len(answers)))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_th) as executor:
-            completed_evals = list(executor.map(_eval_worker, worker_inputs))
-
-        for a_idx, ans_obj, eval_res, err in completed_evals:
+        for a_idx, ans_obj, eval_res, err in evaluated_results:
             if eval_res is not None:
                 total_obtained += float(eval_res.obtained_marks)
                 total_max += float(eval_res.maximum_marks)
                 if eval_res.requires_manual_review:
                     has_manual_review = True
             elif err:
-                print(f"[PARALLEL EVAL ERROR] Q{ans_obj.question.question_number}: {err}")
+                print(f"[EVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -537,22 +537,23 @@ Return strict JSON ONLY:
         total_max = 0.0
         has_manual_review = False
 
-        import concurrent.futures
         from django.db import close_old_connections
 
-        def _reeval_worker(ans_obj):
+        # Rate-Safe Sequential Re-evaluation (Guarantees zero concurrency collisions on Groq/Cloud APIs)
+        completed_evals = []
+        for a_idx, ans_obj in enumerate(answers, 1):
             close_old_connections()
+            if a_idx > 1:
+                time.sleep(1.2)  # 1.2s delay to respect rate limit thresholds
             try:
                 res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir, is_reevaluation=True)
-                return (ans_obj, res, None)
+                completed_evals.append((ans_obj, res, None))
             except Exception as e_w:
-                return (ans_obj, None, e_w)
+                print(f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                cls._write_pipeline_log(submission.id, f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                completed_evals.append((ans_obj, None, e_w))
             finally:
                 close_old_connections()
-
-        max_th = min(4, max(1, len(answers)))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_th) as executor:
-            completed_evals = list(executor.map(_reeval_worker, answers))
 
         for ans_obj, eval_res, err in completed_evals:
             if eval_res is not None:
@@ -561,7 +562,7 @@ Return strict JSON ONLY:
                 if eval_res.requires_manual_review:
                     has_manual_review = True
             elif err:
-                print(f"[PARALLEL REEVAL ERROR] Q{ans_obj.question.question_number}: {err}")
+                print(f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -1042,6 +1043,8 @@ Return ONLY JSON without markdown commentary.
         """
         start_t = time.time()
         question = answer.question
+        raw_response = ""
+        clean_json = ""
 
         from core.models import (
             EvaluationResult, EvaluationFeedback, PromptHistory,
@@ -1114,6 +1117,7 @@ Return ONLY JSON without markdown commentary.
         eval_data = None
         used_visual_mode = False
         raw_response = ""
+        clean_json = ""
 
         from django.db import close_old_connections
         from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
@@ -1136,8 +1140,63 @@ Return ONLY JSON without markdown commentary.
         print(f"No DB transaction open during LLM API call for Q{q_dto.number} (Visual Crops: {len(crops)})")
         print("----------------------------------------")
 
-        # Step 2: Attempt Visual-First Multimodal Evaluation if crops exist
-        if crops:
+        # Check if student extracted OCR text is available for Pure Text-First Fast Evaluation (< 4KB, ~1.5s per question)
+        extracted_text = (answer.extracted_text or '').strip()
+        if (not extracted_text or len(extracted_text) <= 15 or extracted_text.startswith('[Question')) and q_map and q_map.page_numbers_json:
+            pages_dict = {p.page_number: p for p in answer.submission.pages.all()}
+            combined_parts = []
+            for p_num in sorted(q_map.page_numbers_json):
+                if p_num in pages_dict and pages_dict[p_num].ocr_raw_text:
+                    combined_parts.append(f"--- PAGE {p_num} ---\n" + pages_dict[p_num].ocr_raw_text)
+            if combined_parts:
+                extracted_text = "\n\n".join(combined_parts).strip()
+                answer.extracted_text = extracted_text
+                try:
+                    answer.save(update_fields=['extracted_text'])
+                except Exception:
+                    pass
+
+        has_valid_text = len(extracted_text) > 10 and not extracted_text.startswith('[Question')
+
+        if has_valid_text:
+            cls._write_pipeline_log(
+                answer.submission.id,
+                f"[FAST-PATH TEXT EVAL] Q{q_dto.number}: Using pre-extracted OCR text ({len(extracted_text)} chars) with Master Benchmark."
+            )
+            text_prompt = cls._build_text_evaluation_prompt(
+                q_dto=q_dto,
+                student_ocr_text=extracted_text,
+                eval_mode=eval_mode,
+                strictness=strictness,
+                custom_prompt=custom_prompt
+            )
+
+            for attempt in range(1, max_retries + 2):
+                try:
+                    close_old_connections()
+                    raw_response = ai_provider.generate_completion(
+                        prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
+                        system_instruction="You return strict JSON academic script evaluations based on Master Benchmark solutions.",
+                        task_type=TaskType.ANSWER_GRADING
+                    )
+                    close_old_connections()
+
+                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+                    clean_json = raw_response.strip() if raw_response else ""
+                    if clean_json and "```json" in clean_json:
+                        clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+                    elif clean_json and "```" in clean_json:
+                        clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+                    parsed = json.loads(clean_json) if clean_json else {}
+                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                        eval_data = parsed
+                        break
+                except Exception as e_txt:
+                    cls._write_pipeline_log(answer.submission.id, f"[TEXT EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_txt}")
+
+        # Fallback to Multimodal Visual Evaluation if text was absent or failed
+        if not eval_data and crops:
             primary_crop_bytes = cls._prepare_crop_bytes_safely(crops[0]['image_bytes'])
             extra_crops = [
                 {
@@ -1171,56 +1230,32 @@ Return ONLY JSON without markdown commentary.
                     close_old_connections()
 
                     cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
-                    clean_json = raw_response.strip()
-                    if "```json" in clean_json:
+                    clean_json = raw_response.strip() if raw_response else ""
+                    if clean_json and "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-                    elif "```" in clean_json:
+                    elif clean_json and "```" in clean_json:
                         clean_json = clean_json.split("```")[1].split("```")[0].strip()
 
-                    parsed = json.loads(clean_json)
+                    parsed = json.loads(clean_json) if clean_json else {}
                     if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
                         eval_data = parsed
                         used_visual_mode = True
                         break
                 except Exception as e_vis:
                     cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_vis}")
-
-        # Step 3: Fall back to text-only evaluation if visual evaluation was unavailable or failed
-        if not eval_data:
-            if crops:
-                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL FALLBACK] Multimodal evaluation failed for Q{q_dto.number}. Executing text-only fallback.")
-            else:
-                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL UNAVAILABLE] No image crops found for Q{q_dto.number}. Executing text-only evaluation.")
-
-            text_prompt = cls._build_text_evaluation_prompt(
-                q_dto=q_dto,
-                student_ocr_text=answer.extracted_text,
-                eval_mode=eval_mode,
-                strictness=strictness,
-                custom_prompt=custom_prompt
-            )
-
-            for attempt in range(1, max_retries + 2):
-                try:
-                    close_old_connections()
-                    raw_response = ai_provider.generate_completion(
-                        prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
-                        system_instruction="You return strict JSON academic script evaluations.",
-                        task_type=TaskType.ANSWER_GRADING
-                    )
-                    close_old_connections()
-
-                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
-                    clean_json = raw_response.strip()
-                    if "```json" in clean_json:
+                    if clean_json and "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-                    elif "```" in clean_json:
+                    elif clean_json and "```" in clean_json:
                         clean_json = clean_json.split("```")[1].split("```")[0].strip()
 
-                    parsed = json.loads(clean_json)
-                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
-                        eval_data = parsed
-                        break
+                    try:
+                        if clean_json:
+                            parsed = json.loads(clean_json)
+                            if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                                eval_data = parsed
+                                break
+                    except Exception:
+                        pass
                 except Exception as e_txt:
                     cls._write_pipeline_log(answer.submission.id, f"[TEXT EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_txt}")
 

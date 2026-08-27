@@ -140,12 +140,16 @@
                                 {% if p.resolved_image_url %}
                                 <img src="{{ p.resolved_image_url }}" 
                                      alt="Page {{ p.page_number }}" 
+                                     loading="lazy"
+                                     decoding="async"
                                      id="evidenceImg_{{ idx }}_{{ forloop.counter0 }}" 
                                      class="evidence-zoomable-img max-w-full h-auto rounded shadow-sm transition-transform duration-200 origin-top cursor-zoom-in"
                                      onclick="openImageModal('{{ p.resolved_image_url }}', 'Page {{ p.page_number }} - Q{{ q.number }}')">
                                 {% elif p.page_image %}
                                 <img src="{{ p.page_image.url }}" 
                                      alt="Page {{ p.page_number }}" 
+                                     loading="lazy"
+                                     decoding="async"
                                      id="evidenceImg_{{ idx }}_{{ forloop.counter0 }}" 
                                      class="evidence-zoomable-img max-w-full h-auto rounded shadow-sm transition-transform duration-200 origin-top cursor-zoom-in"
                                      onclick="openImageModal('{{ p.page_image.url }}', 'Page {{ p.page_number }} - Q{{ q.number }}')">
@@ -360,7 +364,7 @@
                             {% for fig in q.figures %}
                             <div class="flex items-center gap-3">
                                 <span class="font-bold text-brand-500">Figure:</span>
-                                {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-24 rounded border border-slate-300 dark:border-slate-700 cursor-pointer" onclick="openImageModal('{{ fig.image.url }}', '{{ fig.caption }}')">{% endif %}
+                                {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" loading="lazy" decoding="async" class="max-h-24 rounded border border-slate-300 dark:border-slate-700 cursor-pointer" onclick="openImageModal('{{ fig.image.url }}', '{{ fig.caption }}')">{% endif %}
                                 <span class="theme-text-muted text-[11px]">{{ fig.caption }}</span>
                             </div>
                             {% endfor %}

@@ -250,3 +250,51 @@ class WorkingCopyManager:
             print(f"[CLEANUP SUCCESS] Temporary & obsolete files cleaned up for Submission #{submission_id}.")
         except Exception as e:
             print(f"[CLEANUP WARNING] Failed cleaning temporary files for Submission #{submission_id}: {e}")
+
+    @classmethod
+    def cleanup_all_working_artifacts(cls, submission_id: int):
+        """
+        Removes all working copies, preview PDFs, compiled PDFs, and temp files for a submission.
+        """
+        try:
+            cls.ensure_directories()
+            target_dirs = [cls.TEMP_DIR, cls.WORKING_DIR, cls.PREVIEW_DIR, os.path.join(settings.MEDIA_ROOT, 'submission_pdfs'), cls.FINAL_DIR]
+            prefixes = [f"sub_{submission_id}_", f"submission_{submission_id}_", f"submission_{submission_id}."]
+            for d in target_dirs:
+                if os.path.exists(d):
+                    for fname in os.listdir(d):
+                        if any(fname.startswith(p) for p in prefixes):
+                            fpath = os.path.join(d, fname)
+                            if os.path.isfile(fpath):
+                                try:
+                                    os.remove(fpath)
+                                except Exception:
+                                    pass
+            print(f"[CACHE FLUSH] All working disk artifacts purged for Submission #{submission_id}.")
+        except Exception as e:
+            print(f"[CACHE FLUSH WARNING] Failed purging disk artifacts for Submission #{submission_id}: {e}")
+
+    @classmethod
+    def flush_submission_pipeline_cache(cls, submission_id: int):
+        """
+        Centralized cache flush and pipeline reset when images are uploaded, deleted, or reordered.
+        """
+        from core.models import StudentSubmission, SubmissionPDF
+        try:
+            sub = StudentSubmission.objects.get(id=submission_id)
+            sub.status = StudentSubmission.Status.UPLOADED
+            sub.total_obtained_marks = 0.0
+            sub.total_max_marks = 0.0
+            sub.percentage = 0.0
+            sub.requires_manual_review = False
+            sub.save(update_fields=['status', 'total_obtained_marks', 'total_max_marks', 'percentage', 'requires_manual_review'])
+
+            sub.pages.all().delete()
+            sub.answers.all().delete()
+            sub.question_mappings.all().delete()
+            SubmissionPDF.objects.filter(submission=sub).delete()
+            cls.cleanup_all_working_artifacts(submission_id)
+            print(f"[CACHE FLUSH SUCCESS] Pipeline cache completely flushed for Submission #{submission_id}.")
+        except Exception as e:
+            print(f"[CACHE FLUSH ERROR] Error flushing pipeline cache for Submission #{submission_id}: {e}")
+

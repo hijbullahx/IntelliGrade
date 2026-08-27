@@ -132,6 +132,7 @@ class GroqProvider(BaseAIProvider):
                         content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_mime};base64,{b64_ef}"}})
             messages.append({"role": "user", "content": content_list})
         else:
+            selected_model = self.model_name or "qwen/qwen3.6-27b"
             messages.append({"role": "user", "content": prompt})
 
         payload = {

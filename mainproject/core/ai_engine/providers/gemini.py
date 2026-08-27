@@ -24,9 +24,9 @@ class GeminiProvider(BaseAIProvider):
         "max_images": 16
     }
 
-    def __init__(self, api_key: str, model_name: str = "gemini-flash-latest"):
+    def __init__(self, api_key: str, model_name: str = "gemini-3.6-flash"):
         self.api_key = api_key
-        self.model_name = model_name
+        self.model_name = model_name or "gemini-3.6-flash"
 
     def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
