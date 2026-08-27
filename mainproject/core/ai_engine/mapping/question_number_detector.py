@@ -142,6 +142,10 @@ class StudentQuestionHeadingDetector:
     """
 
     BENGALI_TO_ENG = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'}
+
+    # Fix 7: Only letters a–j are valid academic sub-part identifiers.
+    # Trailing garbage OCR chars like 'v', 'q', 'z' from tokens like "Q1cq" or "YLQ4vUQ" are rejected.
+    VALID_SUBPART_LETTERS = set('abcdefghij')
     ROMAN_TO_INT = {
         'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10',
         'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15', 'XVI': '16', 'XVII': '17', 'XVIII': '18', 'XIX': '19', 'XX': '20'
@@ -206,8 +210,11 @@ class StudentQuestionHeadingDetector:
             re.IGNORECASE
         ),
         # "Question No N" / "Q. No N" / "Q.N" / "QN" / "Question N" / "Q No: 5" / "Q 2(b)"
+        # Fix 1: Require Q to be a standalone word token — not embedded inside longer OCR garbage
+        # like "Q1cq", "YLQ4vUQSUOAL". The (?:^|[\s\(\[\{]) anchor ensures Q is preceded only by
+        # whitespace, line start, or an opening bracket.
         re.compile(
-            r'(?:q(?:uestion|s)?\s*\.?\s*(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)',
+            r'(?:^|[\s\(\[\{])(?:q(?:uestion|s)?\s*\.?\s*(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)',
             re.IGNORECASE
         ),
         # "N নং প্রশ্নের উত্তর" / "N নং সমাধান" / "N নং উত্তর"
@@ -240,27 +247,34 @@ class StudentQuestionHeadingDetector:
 
     @classmethod
     def find_answer_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for answer context tokens (ans, answer, angto, solution, উত্তর, সমাধান, etc.)."""
+        """Tolerant search for answer context tokens (ans, answer, angto, solution, উত্তর, সমাধান, etc.) with word boundaries."""
         lower = text.lower()
-        for tok in ['উত্তর', 'সমাধান', 'answer', 'ans.', 'ans', 'solution', 'soln', 'sol', 'angto', 'ansto', 'amilo', "am'"]:
+        # Bengali keywords
+        for tok in ['উত্তর', 'সমাধান']:
             if tok in lower:
                 return True, tok
-        if re.search(r'\b(?:ans(?:wer)?s?|ang(?:to)?|ansto|amilo|am\'|sol(?:ution|n)?)\b', lower):
-            return True, 'ans'
+
+        # Regex with word boundaries for ASCII answer tokens
+        m = re.search(r'\b(?:ans(?:wer)?s?|ang(?:to)?|ansto|amilo|am\'|sol(?:ution|n)?)\b', lower)
+        if m:
+            return True, m.group(0)
+
         words = re.findall(r'[\w\.\—\–\−]+', lower, re.UNICODE)
         for w in words:
-            w_clean = w.strip('.')
+            w_clean = w.strip('.!\'"`')
             if w_clean in cls.ANSWER_TOKENS:
-                return True, w
+                return True, w_clean
         return False, ""
 
     @classmethod
     def find_question_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for question context tokens (question, Q, Q1..QN, No, NO!, N0, ND, নং, প্রশ্ন, etc.)."""
+        """Tolerant search for question context tokens (question, Q, Q1..QN, No, NO!, N0, ND, নং, প্রশ্ন, etc.) with word boundaries."""
         lower = text.lower()
-        for tok in ['প্রশ্ন', 'নং', 'question', 'quest', 'ques', 'qs', 'q.', 'no.', 'number', '0nq', '0no', '0n', "q'no", "9'no", '9.no', 'q.no', 'no!', "no'"]:
+        # Bengali keywords
+        for tok in ['প্রশ্ন', 'নং']:
             if tok in lower:
                 return True, tok
+
         if re.search(r'\bQ\s*[\.\:\-\'\`]?\s*[0-9]', text, re.IGNORECASE):
             return True, 'Q'
         if re.search(r'\b(?:question|questions|quest|ques|qs|q\.|q|no\.|no|number|n0|no!|no\'|0nq|0no|0n|q[\.\'\`]?no|9[\.\'\`]?no)\b', lower):
@@ -269,11 +283,12 @@ class StudentQuestionHeadingDetector:
             return True, '#'
         if re.search(r'[@\xa9]\s*[\,\.\s]*no\b', lower):
             return True, 'No'
+
         words = re.findall(r'[\w\!\#\.\'\`\@]+', text, re.UNICODE)
         for w in words:
-            w_lower = w.lower().strip('.!\'`')
+            w_lower = w.lower().strip('.!\'`"')
             if w_lower in cls.QUESTION_TOKENS:
-                return True, w
+                return True, w_lower
         return False, ""
 
     @classmethod
@@ -345,12 +360,18 @@ class StudentQuestionHeadingDetector:
             return cls.ROMAN_TO_INT[roman_key]
 
         clean_sub = re.sub(r'^(?:Q(?:UESTION|S)?|ANS(?:WER)?|SOLN|SOLUTION|NO|NUMBER)?[\.\:\-\#\s]*', '', clean, flags=re.IGNORECASE)
-        # Check if subpart format like 1(a), 1a, 2(b)
+        # Fix 7: Check if subpart format like 1(a), 1a, 2(b) — but ONLY accept letters a–j.
+        # Garbage OCR suffixes like 'v', 'q', 'z' (from tokens like "Q1cq" or "YLQ4v") are rejected
+        # and the plain question number is returned instead.
         subpart_m = re.match(r'^([0-9]{1,3})\s*[\(\[]?([A-Za-z])[\)\]]?$', clean_sub)
         if subpart_m:
             num_part = str(int(subpart_m.group(1)))
             letter_part = subpart_m.group(2).lower()
-            return f"{num_part}({letter_part})"
+            if letter_part in cls.VALID_SUBPART_LETTERS:
+                return f"{num_part}({letter_part})"
+            else:
+                # OCR garbage suffix — treat as plain question number
+                return num_part
 
         clean_num = re.sub(r'[^0-9A-ZA-Z]', '', clean_sub)
         if clean_num in ['L', 'I']:
@@ -483,6 +504,24 @@ class StudentQuestionHeadingDetector:
                 'reason': 'TOO_LONG_OR_EMPTY'
             }
 
+        # Fix 2: OCR Garbage Rejection — reject strings where less than 35% of characters
+        # are real alphabetic letters AND the string lacks explicit heading anchor keywords.
+        # This eliminates highly corrupted OCR tokens like "YLQ4vUQSUOAL Zusq0" or "Q1cq {mito"
+        # that accidentally contain a Q+digit substring.
+        if len(line_str) >= 6:  # Only apply to strings long enough to be meaningful
+            alpha_ratio = sum(1 for c in line_str if c.isalpha()) / len(line_str)
+            has_anchor = any(k in line_str.lower() for k in ['ans', 'answer', 'question', 'no.', 'উত্তর', 'সমাধান', 'প্রশ্ন'])
+            if alpha_ratio < 0.35 and not has_anchor:
+                return {
+                    'is_question_heading': False,
+                    'question_number': None,
+                    'heading_text': line_str,
+                    'confidence': 0.0,
+                    'heading_type': 'BODY_TEXT',
+                    'raw_text': text,
+                    'reason': 'OCR_GARBAGE_REJECTION'
+                }
+
         # 1. Rejection Filters for non-heading content
         if cls.is_roman_subpoint(line_str):
             return {
@@ -611,6 +650,13 @@ class StudentQuestionHeadingDetector:
         for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
             m = pat.search(line_str)
             if m and m.group(1):
+                # Fix 1 (runtime guard): Even if the pattern matched, verify the Q token is
+                # not embedded inside a longer alphanumeric OCR garbage word.
+                # e.g. "YLQ4vUQSUOAL" matches Q4 but the char before m.start() is alpha → reject.
+                match_start = m.start()
+                if match_start > 0 and line_str[match_start - 1].isalnum():
+                    continue  # Q is part of a garbage token — skip this match
+
                 raw_num = m.group(1).strip()
                 norm_num = cls.normalize_question_number(raw_num)
 
@@ -828,36 +874,45 @@ class StudentQuestionHeadingDetector:
                         'is_multiline': True
                     })
 
-        seen_q_nums = set()
+        # Fix 5: Best-score-wins deduplication — evaluate ALL candidates first, then keep the
+        # highest-scoring detection per normalized question number. Previously, the first-seen
+        # candidate won (single-line noisy match beat cleaner multi-line windows).
+        # Two passes: (1) score all candidates, (2) keep top scorer per Q number.
+        all_scored = []
         for cand in candidates:
-            text = cand['text']
-            ymin_pct = cand['ymin_pct']
+            cand_text = cand['text']
+            cand_ymin = cand['ymin_pct']
 
             decision = cls.detect_explicit_question_heading(
-                text=text,
-                ymin_pct=ymin_pct,
+                text=cand_text,
+                ymin_pct=cand_ymin,
                 stored_question_numbers=stored_question_numbers
             )
 
             if decision['is_question_heading']:
-                norm_q = decision['question_number']
-                if norm_q in seen_q_nums:
-                    continue
-                seen_q_nums.add(norm_q)
-
-                detections.append({
+                all_scored.append({
                     'raw_text': decision['raw_text'],
-                    'heading_text': text,
-                    'normalized_number': norm_q,
+                    'heading_text': cand_text,
+                    'normalized_number': decision['question_number'],
                     'confidence': decision['confidence'],
                     'score': decision.get('score', 0),
                     'line_index': cand['line_index'],
-                    'ymin_pct': ymin_pct,
+                    'ymin_pct': cand_ymin,
                     'ymax_pct': cand['ymax_pct'],
                     'bbox': cand['bbox'],
                     'classification': decision['heading_type'],
                     'method': decision['heading_type']
                 })
+
+        # Keep only the highest-scoring entry per normalized question number
+        best_by_q_num: Dict[str, Dict] = {}
+        for entry in all_scored:
+            norm_q = entry['normalized_number']
+            if norm_q not in best_by_q_num or entry['score'] > best_by_q_num[norm_q]['score']:
+                best_by_q_num[norm_q] = entry
+
+        # Restore original vertical ordering (sort by ymin_pct ascending)
+        detections.extend(sorted(best_by_q_num.values(), key=lambda e: e['ymin_pct']))
 
         return detections
 

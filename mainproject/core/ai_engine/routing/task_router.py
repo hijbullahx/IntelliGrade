@@ -74,17 +74,21 @@ class TaskRouter:
     def is_transient_error(cls, error_msg: str) -> bool:
         """
         Classifies errors into transient (eligible for single retry) vs non-transient.
-        Transient: timeout, 502 Bad Gateway, 503 Service Unavailable, temporary network failure.
-        Non-transient: 401 Auth, 403 Forbidden, 429 Rate Limit, insufficient_quota, model_not_found.
+        Transient: temporary remote network hiccup, 502 Bad Gateway, 503 Service Unavailable.
+        Non-transient: Connection Refused (dead local daemon), 401 Auth, 403 Forbidden, 429 Rate Limit, insufficient_quota.
         """
         if not error_msg or not isinstance(error_msg, str):
             return False
         err_lower = error_msg.lower()
 
+        # Immediate failover for dead local daemons / connection refused
+        if any(term in err_lower for term in ['connection refused', 'failed to establish a new connection', '10061', 'winerror 10061', 'refused']):
+            return False
+
         if any(term in err_lower for term in ['401', '403', '429', 'unauthorized', 'invalid api key', 'insufficient_quota', 'quota_exceeded', 'resource_exhausted', 'model_not_found']):
             return False
 
-        if any(term in err_lower for term in ['timeout', 'timed out', '502', '503', 'service unavailable', 'connection error', 'connection reset', 'network failure']):
+        if any(term in err_lower for term in ['timed out', 'timeout', '502', '503', 'service unavailable', 'network failure']):
             return True
 
         return False

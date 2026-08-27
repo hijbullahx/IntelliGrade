@@ -3459,6 +3459,29 @@ def evaluation_workspace(request, submission_id):
     exam = submission.examination
     answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
 
+    # Prefetch QuestionMappings and SubmissionPages for question-scoped visual binding
+    from core.models import QuestionMapping
+    q_mappings = {qm.question_id: qm for qm in QuestionMapping.objects.filter(submission=submission)}
+    all_pages = list(submission.pages.all().order_by('page_number'))
+    for p in all_pages:
+        p_img_url = None
+        try:
+            if p.page_image and hasattr(p.page_image, 'url') and p.page_image.name:
+                p_img_url = p.page_image.url
+        except Exception:
+            p_img_url = None
+
+        if not p_img_url and p.working_image_path and os.path.exists(p.working_image_path):
+            try:
+                rel_path = os.path.relpath(p.working_image_path, settings.MEDIA_ROOT).replace('\\', '/')
+                p_img_url = f"{settings.MEDIA_URL.rstrip('/')}/{rel_path.lstrip('/')}"
+            except Exception:
+                p_img_url = None
+        
+        p.resolved_image_url = p_img_url
+
+    pages_by_num = {p.page_number: p for p in all_pages}
+
     normalized_answers = []
     is_mcq = False
     mcq_detected_results = {}
@@ -3466,11 +3489,65 @@ def evaluation_workspace(request, submission_id):
 
     for ans in answers:
         q_dto = QuestionAccessor.to_dto(ans.question)
+        eval_res = getattr(ans, 'evaluation_result', None)
+        
+        # Resolve mapped pages for this question
+        qm = q_mappings.get(ans.question.id)
+        pg_nums = qm.page_numbers_json if (qm and qm.page_numbers_json) else ([ans.page.page_number] if ans.page else [])
+        mapped_pages = [pages_by_num[p] for p in pg_nums if p in pages_by_num]
+
+        # Extract and normalize structured rubric / step breakdown
+        rubric_breakdown = []
+        raw_breakdown = eval_res.rubric_breakdown_json if eval_res else None
+        if raw_breakdown:
+            if isinstance(raw_breakdown, list):
+                for idx_step, step_dict in enumerate(raw_breakdown, 1):
+                    if isinstance(step_dict, dict):
+                        rubric_breakdown.append({
+                            'step_num': idx_step,
+                            'description': str(step_dict.get('step_description') or step_dict.get('criteria') or step_dict.get('description') or f"Step {idx_step}"),
+                            'allocated': float(step_dict.get('allocated_marks') or step_dict.get('allocated') or 0.0),
+                            'awarded': float(step_dict.get('awarded_marks') or step_dict.get('awarded') or 0.0),
+                            'grounding_evidence': str(step_dict.get('grounding_evidence') or ''),
+                            'comment': str(step_dict.get('comment') or step_dict.get('comments') or '')
+                        })
+            elif isinstance(raw_breakdown, dict):
+                for idx_step, (k, v) in enumerate(raw_breakdown.items(), 1):
+                    rubric_breakdown.append({
+                        'step_num': idx_step,
+                        'description': str(k).capitalize(),
+                        'allocated': float(v) if isinstance(v, (int, float)) else 0.0,
+                        'awarded': float(v) if isinstance(v, (int, float)) else 0.0,
+                        'grounding_evidence': '',
+                        'comment': 'Evaluated criterion'
+                    })
+
+        raw_master_steps = getattr(ans.question, 'master_solution_steps', None) or getattr(q_dto, 'master_solution_steps', None) or []
+        master_steps = []
+        if isinstance(raw_master_steps, list):
+            for s_idx, s in enumerate(raw_master_steps, 1):
+                if isinstance(s, dict):
+                    master_steps.append({
+                        'step_num': str(s.get('step') or s_idx),
+                        'description': str(s.get('description') or s.get('desc') or ''),
+                        'marks': float(s.get('marks') or 0.0)
+                    })
+
+        master_text = ans.question.master_solution_text or q_dto.master_solution_text or (ans.question.rubric.ideal_answer if hasattr(ans.question, 'rubric') else '')
+
         normalized_answers.append({
             'answer': ans,
             'q': q_dto.to_dict(),
             'question_dto': q_dto,
-            'evaluation_result': getattr(ans, 'evaluation_result', None)
+            'evaluation_result': eval_res,
+            'page_numbers': pg_nums,
+            'mapped_pages': mapped_pages,
+            'master_solution_text': master_text,
+            'master_solution_steps': master_steps,
+            'rubric_breakdown': rubric_breakdown,
+            'strengths': eval_res.strengths_json if eval_res else [],
+            'mistakes': eval_res.mistakes_json if eval_res else [],
+            'missing_points': eval_res.missing_points_json if eval_res else []
         })
 
         q_type_raw = getattr(ans.question, 'question_type', [])
@@ -3481,7 +3558,6 @@ def evaluation_workspace(request, submission_id):
             answer_key[q_key] = str(q_dto.ideal_answer or q_dto.rubric or q_dto.text).strip()
 
             det_val = []
-            eval_res = getattr(ans, 'evaluation_result', None)
             if ans.extracted_text and ans.extracted_text.strip():
                 det_val = [ans.extracted_text.strip()]
             elif eval_res and "Detected:" in str(eval_res.feedback_text):
@@ -3545,6 +3621,8 @@ def evaluation_workspace(request, submission_id):
         'exam': exam,
         'answers': answers,
         'normalized_answers': normalized_answers,
+        'all_pages': all_pages,
+        'master_solution_file_url': exam.master_solution_file.url if exam.master_solution_file else None,
         'is_mcq': is_mcq,
         'mcq_summary': mcq_summary,
         'mcq_breakdown': mcq_breakdown

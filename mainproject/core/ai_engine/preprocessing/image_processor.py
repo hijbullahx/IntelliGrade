@@ -173,25 +173,28 @@ class ImagePreprocessingService:
     @classmethod
     def _remove_colored_ink(cls, img: np.ndarray, color_name: str) -> np.ndarray:
         """
-        Masks out teacher ink marks (Red, Blue, Green, Yellow, Black) using HSV thresholds.
-        Replaces masked pen marks with white background pixels.
+        Masks out teacher grading ink marks (Red or Green pen annotations ONLY) using HSV thresholds.
+        STRICT SAFETY RULE: NEVER mask or erase Blue or Black ink (student handwriting).
+        If color_name is None, Blue, Black, or unsupported, returns unaltered original image.
         """
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        if not color_name or not isinstance(color_name, str):
+            return img
+
         color = color_name.lower().strip()
+        if color in ['none', 'blue', 'black', '', 'all']:
+            return img
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         mask = None
 
         if color == 'red':
             mask1 = cv2.inRange(hsv, np.array([0, 70, 50]), np.array([10, 255, 255]))
             mask2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
             mask = cv2.bitwise_or(mask1, mask2)
-        elif color == 'blue':
-            mask = cv2.inRange(hsv, np.array([90, 70, 50]), np.array([130, 255, 255]))
         elif color == 'green':
             mask = cv2.inRange(hsv, np.array([35, 50, 50]), np.array([85, 255, 255]))
         elif color == 'yellow':
             mask = cv2.inRange(hsv, np.array([20, 100, 100]), np.array([30, 255, 255]))
-        elif color == 'black':
-            mask = cv2.inRange(hsv, np.array([0, 0, 0]), np.array([180, 255, 50]))
 
         if mask is not None:
             result = img.copy()

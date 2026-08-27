@@ -148,12 +148,11 @@
 
             <!-- Color Filtering (Teacher Pen Mark Removal) -->
             <div class="space-y-2">
-                <label class="block text-xs font-bold theme-text-muted">Ignore / Remove Teacher Ink Color</label>
+                <label class="block text-xs font-bold theme-text-muted">Ignore / Remove Teacher Annotation Markings</label>
                 <div class="flex flex-wrap gap-4 text-xs font-bold">
-                    <label class="flex items-center gap-1.5"><input type="radio" name="inkColor" value="None" checked> None (Keep all ink)</label>
-                    <label class="flex items-center gap-1.5 text-rose-500"><input type="radio" name="inkColor" value="Red"> Red Pen</label>
-                    <label class="flex items-center gap-1.5 text-blue-500"><input type="radio" name="inkColor" value="Blue"> Blue Pen</label>
-                    <label class="flex items-center gap-1.5 text-emerald-500"><input type="radio" name="inkColor" value="Green"> Green Pen</label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="inkColor" value="None" checked> None (Keep all ink — Recommended)</label>
+                    <label class="flex items-center gap-1.5 text-rose-500"><input type="radio" name="inkColor" value="Red"> Ignore Teacher Red Markings Only (Preserves student blue/black ink)</label>
+                    <label class="flex items-center gap-1.5 text-emerald-500"><input type="radio" name="inkColor" value="Green"> Ignore Teacher Green Markings</label>
                 </div>
             </div>
 

@@ -131,12 +131,13 @@ class AnswerCropService:
         all_crops = []
         pages_by_num = {p.page_number: p for p in submission.pages.all()}
 
-        # Group regions by page_number
+        # Group regions by page_number (strictly filtered to mapped page_numbers)
         regions_by_page: Dict[int, List[Dict[str, Any]]] = {}
+        valid_page_set = set(int(p) for p in page_numbers)
         for r in regions:
             p_num = r.get('page_number')
-            if p_num:
-                regions_by_page.setdefault(p_num, []).append(r)
+            if p_num and int(p_num) in valid_page_set:
+                regions_by_page.setdefault(int(p_num), []).append(r)
 
         # Iterate in sorted page order
         for p_num in sorted(page_numbers):

@@ -143,7 +143,10 @@ class OpenRouterProvider(BaseAIProvider):
                 timeout_sec = float(os.environ.get('AI_OPENROUTER_TEXT_TIMEOUT', 6.0))
         start_t = time.monotonic()
         print(f"[AI TIMING] OpenRouter model {selected_model} START (timeout={timeout_sec:.1f}s)")
+        import socket
+        old_timeout = socket.getdefaulttimeout()
         try:
+            socket.setdefaulttimeout(timeout_sec)
             with urllib.request.urlopen(req, timeout=timeout_sec) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
                 choices = res_data.get('choices', [])
@@ -164,6 +167,8 @@ class OpenRouterProvider(BaseAIProvider):
             elapsed = time.monotonic() - start_t
             print(f"[AI TIMING] OpenRouter model {selected_model} END: {elapsed:.2f}s (FAILED: {str(e)[:120]})")
             raise Exception(f"OpenRouter API Request Failed: {str(e)}")
+        finally:
+            socket.setdefaulttimeout(old_timeout)
 
     def generate_completion(self, prompt: str, system_instruction: Optional[str] = None, timeout: Optional[float] = None, **kwargs) -> str:
         return self._call_api(

@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from django.conf import settings
 
 from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, EvaluationResult
-from core.utils.question_accessor import QuestionAccessor, safe_getattr, safe_normalize_collection
+from core.utils.question_accessor import QuestionAccessor, safe_getattr, safe_normalize_collection, normalize_q_code
 
 class EvaluatedScriptPDFService:
     """

@@ -228,6 +228,8 @@ class QuestionMappingOrchestrator:
 
         # PASS 2: Order-Independent Global Optimization & Answer Region Construction
         active_q_obj = None
+        active_q_conf = 0.90   # Fix 3: track last-set heading confidence for ContinuationDetector
+        prev_page_ocr = ""     # Fix 3: track previous page text for text-flow validation
 
         for sp in pages:
             p_num = sp.page_number
@@ -267,8 +269,10 @@ class QuestionMappingOrchestrator:
                 page_regions.append(reg)
                 # Note: Not added to mapped_regions_by_q so 0 exam questions are assigned to cover page
 
-            elif detections and (explicit_heading_score >= 0.80 or len(detections) > 0):
-                # Page contains explicit answer headings! Sort by vertical ymin_pct position
+            elif detections and explicit_heading_score >= 0.75:
+                # Fix 5: Gate was previously `or len(detections) > 0` which is tautologically True
+                # and bypassed the >= 0.80 confidence threshold entirely. Now requires the top
+                # detection confidence to actually meet the minimum bar before page-splitting.
                 detections.sort(key=lambda d: d.get('ymin_pct', 0.0))
                 first_det_ymin = float(detections[0].get('ymin_pct', 0.0))
 
@@ -359,11 +363,37 @@ class QuestionMappingOrchestrator:
                         mapped_regions_by_q[q_id]['regions'].append(reg)
                         # Switch active question to newly detected question (Order-Agnostic!)
                         active_q_obj = matched_q
+                        active_q_conf = det['confidence']  # Fix 3: record confidence of new heading
 
             else:
                 # 0 explicit headings detected on this page
+
+                # Fix 4: Blank Page Guard — pages with no OCR text AND no detections are blank
+                # or unscanned pages. They must NOT be silently chained to active_q_obj at HIGH
+                # confidence. Tag as BLANK_PAGE and skip all state mutation (do not update
+                # active_q_obj, do not add to mapped_regions_by_q).
+                ocr_is_empty = not ocr_text or len(ocr_text.strip()) < 15
+                if ocr_is_empty and not detections and not sem_best_q:
+                    reg = AnswerRegion(
+                        page_number=p_num,
+                        region_id=f"p{p_num}_r1",
+                        bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                        question_id=None,
+                        question_number="BLANK_PAGE",
+                        heading_text="Blank / Unscanned Page",
+                        heading_confidence=0.0,
+                        semantic_confidence=0.0,
+                        mapping_method="BLANK_PAGE",
+                        confidence_level="UNKNOWN",
+                        requires_review=True,
+                        reason="Empty OCR + no heading + no semantic signal — blank or unscanned page"
+                    )
+                    page_regions.append(reg)
+                    unassigned_page_numbers.append(p_num)
+                    # Skip all downstream state mutation for blank pages
+
                 # Check for semantic question transition if topic has distinctly changed
-                if sem_best_q and (sem_best_q != active_q_obj) and (semantic_match_score >= 0.50 or (cover_info.get('has_metadata_header') and p_num > 1)):
+                elif sem_best_q and (sem_best_q != active_q_obj) and (semantic_match_score >= 0.50 or (cover_info.get('has_metadata_header') and p_num > 1)):
                     # A clear semantic topic transition or practical answer script section
                     sem_q_id = getattr(sem_best_q, 'id', None)
                     q_num_str = normalize_q_code(QuestionAccessor.get_question_number(sem_best_q))
@@ -388,26 +418,57 @@ class QuestionMappingOrchestrator:
                     active_q_obj = sem_best_q
 
                 elif active_q_obj:
-                    # Seamless Continuation of active question across multiple pages
+                    # Fix 3: Validate continuation via ContinuationDetector text-flow analysis.
+                    # Previously this branch was a blind state-machine: any page without a heading
+                    # was silently chained to active_q_obj at HIGH confidence with no validation.
+                    # Now we call ContinuationDetector and only assign CONTINUATION if the text
+                    # flow evidence supports it (confidence >= 0.70).
                     active_q_id = getattr(active_q_obj, 'id', None)
                     q_num_str = normalize_q_code(QuestionAccessor.get_question_number(active_q_obj))
                     formatted_active_q = normalize_q_code(QuestionAccessor.get_formatted_number(active_q_obj))
-                    reg = AnswerRegion(
-                        page_number=p_num,
-                        region_id=f"p{p_num}_r1",
-                        bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
-                        question_id=active_q_id,
-                        question_number=q_num_str,
-                        heading_text=f"Continuation of {formatted_active_q}",
-                        heading_confidence=0.85,
-                        semantic_confidence=semantic_match_score if sem_best_q == active_q_obj else 0.0,
-                        mapping_method="CONTINUATION",
-                        confidence_level="HIGH",
-                        requires_review=False,
-                        reason=f"Continuation of {formatted_active_q} across page boundaries"
+
+                    cont_result = ContinuationDetector.evaluate_continuation(
+                        prev_page_text=prev_page_ocr,
+                        current_page_text=ocr_text,
+                        current_has_new_header=bool(detections),
+                        prev_page_conf=active_q_conf
                     )
-                    page_regions.append(reg)
-                    mapped_regions_by_q[active_q_id]['regions'].append(reg)
+
+                    if cont_result['is_continuation'] and cont_result['confidence'] >= 0.70:
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=active_q_id,
+                            question_number=q_num_str,
+                            heading_text=f"Continuation of {formatted_active_q}",
+                            heading_confidence=round(cont_result['confidence'], 2),
+                            semantic_confidence=semantic_match_score if sem_best_q == active_q_obj else 0.0,
+                            mapping_method="CONTINUATION",
+                            confidence_level="HIGH" if cont_result['confidence'] >= 0.85 else "MEDIUM",
+                            requires_review=False,
+                            reason=f"Continuation of {formatted_active_q}: {cont_result['reason']}"
+                        )
+                        page_regions.append(reg)
+                        mapped_regions_by_q[active_q_id]['regions'].append(reg)
+                    else:
+                        # Weak or absent text-flow evidence — flag for teacher review
+                        reg = AnswerRegion(
+                            page_number=p_num,
+                            region_id=f"p{p_num}_r1",
+                            bbox={'ymin': 0.0, 'xmin': 0.0, 'ymax': 1.0, 'xmax': 1.0},
+                            question_id=active_q_id,
+                            question_number=q_num_str,
+                            heading_text=f"Possible continuation of {formatted_active_q} (unconfirmed)",
+                            heading_confidence=round(cont_result['confidence'], 2),
+                            semantic_confidence=0.0,
+                            mapping_method="UNRESOLVED",
+                            confidence_level="LOW",
+                            requires_review=True,
+                            reason=f"Continuation uncertain ({cont_result['reason']}) — teacher review needed"
+                        )
+                        page_regions.append(reg)
+                        mapped_regions_by_q[active_q_id]['regions'].append(reg)
 
                 elif sem_best_q and semantic_match_score >= 0.20:
                     # Initial match if no active question
@@ -475,9 +536,11 @@ class QuestionMappingOrchestrator:
                     unassigned_page_numbers.append(p_num)
 
             # Store answer_regions_json on SubmissionPage
-            sp.answer_regions_json = [r.to_dict() for r in page_regions]
-            sp.save()
+            regions_dict_list = [r.to_dict() for r in page_regions]
+            SubmissionPage.objects.filter(id=sp.id).update(answer_regions_json=regions_dict_list)
+            sp.answer_regions_json = regions_dict_list
             page_regions_map[p_num] = page_regions
+            prev_page_ocr = ocr_text  # Fix 3: advance sliding window for ContinuationDetector
 
             # Create summary mapping record for page
             q_nums_on_page = [normalize_q_code(r.question_number) if r.question_number not in ['COVER_PAGE', 'UNMAPPED'] else r.question_number for r in page_regions]
@@ -721,26 +784,43 @@ class QuestionMappingOrchestrator:
 
             for m_item in confirmed_mappings:
                 q_id = m_item.get('question_id')
-                pg_list = m_item.get('page_numbers') or m_item.get('pages', [])
+                raw_pg_list = m_item.get('page_numbers') or m_item.get('pages', [])
                 reg_list = m_item.get('regions') or m_item.get('regions_json', [])
 
                 if not q_id:
                     continue
 
+                # Ensure strict ascending integer sorting on page numbers
+                sorted_pg_list = sorted([int(p) for p in raw_pg_list if str(p).isdigit() or isinstance(p, (int, float))])
+
                 q_obj = Question.objects.get(id=q_id)
                 q_map, _ = QuestionMapping.objects.get_or_create(submission=submission, question=q_obj)
-                if pg_list:
-                    q_map.page_numbers_json = pg_list
+                
+                # If explicit bounding boxes are provided, use them; otherwise reconstruct clean full-page regions
                 if reg_list:
                     q_map.regions_json = reg_list
+                else:
+                    new_regions = [
+                        {
+                            "page_number": int(p),
+                            "region_id": f"p{p}_q{normalize_q_code(q_obj.question_number)}_confirmed",
+                            "bbox": {"ymin": 0.0, "xmin": 0.0, "ymax": 1.0, "xmax": 1.0},
+                            "confidence": 1.0,
+                            "source": "TEACHER_CONFIRMED"
+                        }
+                        for p in sorted_pg_list
+                    ]
+                    q_map.regions_json = new_regions
+
+                q_map.page_numbers_json = sorted_pg_list
                 q_map.confidence = 1.0  # Teacher confirmed
                 q_map.mapping_status = QuestionMapping.Status.MANUAL_OVERRIDE
                 q_map.is_confirmed = True
                 q_map.save()
 
-                # Concatenate region-scoped answer text from mapped pages
+                # Concatenate region-scoped answer text from mapped pages in ascending order
                 combined_ans_text = []
-                for p_num in pg_list:
+                for p_num in sorted_pg_list:
                     if p_num in pages and pages[p_num].ocr_raw_text:
                         combined_ans_text.append(f"--- PAGE {p_num} --- \n" + pages[p_num].ocr_raw_text)
 

@@ -168,25 +168,33 @@ class AIScriptEvaluator:
         total_max = 0.0
         has_manual_review = False
 
-        for a_idx, ans in enumerate(answers, 1):
-            try:
-                from core.views import _update_submission_progress_cache
-                _update_submission_progress_cache(
-                    submission_id=submission.id,
-                    processed_pages=total_pages_count,
-                    total_pages=total_pages_count,
-                    evaluated_regions=a_idx,
-                    total_regions=total_answers_count,
-                    msg=f"Evaluated Question Q{ans.question.question_number} ({a_idx}/{total_answers_count})"
-                )
-            except Exception:
-                pass
+        import concurrent.futures
+        from django.db import close_old_connections
 
-            eval_res = cls._evaluate_answer_v3(ans, options, user, trace_dir)
-            total_obtained += float(eval_res.obtained_marks)
-            total_max += float(eval_res.maximum_marks)
-            if eval_res.requires_manual_review:
-                has_manual_review = True
+        def _eval_worker(a_item):
+            a_idx, ans_obj = a_item
+            close_old_connections()
+            try:
+                res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir)
+                return (a_idx, ans_obj, res, None)
+            except Exception as e_w:
+                return (a_idx, ans_obj, None, e_w)
+            finally:
+                close_old_connections()
+
+        worker_inputs = list(enumerate(answers, 1))
+        max_th = min(4, max(1, len(answers)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_th) as executor:
+            completed_evals = list(executor.map(_eval_worker, worker_inputs))
+
+        for a_idx, ans_obj, eval_res, err in completed_evals:
+            if eval_res is not None:
+                total_obtained += float(eval_res.obtained_marks)
+                total_max += float(eval_res.maximum_marks)
+                if eval_res.requires_manual_review:
+                    has_manual_review = True
+            elif err:
+                print(f"[PARALLEL EVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -529,12 +537,31 @@ Return strict JSON ONLY:
         total_max = 0.0
         has_manual_review = False
 
-        for ans in answers:
-            eval_res = cls._evaluate_answer_v3(ans, options, user, trace_dir, is_reevaluation=True)
-            total_obtained += float(eval_res.obtained_marks)
-            total_max += float(eval_res.maximum_marks)
-            if eval_res.requires_manual_review:
-                has_manual_review = True
+        import concurrent.futures
+        from django.db import close_old_connections
+
+        def _reeval_worker(ans_obj):
+            close_old_connections()
+            try:
+                res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir, is_reevaluation=True)
+                return (ans_obj, res, None)
+            except Exception as e_w:
+                return (ans_obj, None, e_w)
+            finally:
+                close_old_connections()
+
+        max_th = min(4, max(1, len(answers)))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_th) as executor:
+            completed_evals = list(executor.map(_reeval_worker, answers))
+
+        for ans_obj, eval_res, err in completed_evals:
+            if eval_res is not None:
+                total_obtained += float(eval_res.obtained_marks)
+                total_max += float(eval_res.maximum_marks)
+                if eval_res.requires_manual_review:
+                    has_manual_review = True
+            elif err:
+                print(f"[PARALLEL REEVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -966,6 +993,39 @@ Provide your evaluation strictly as a valid JSON object matching this schema:
 }}
 Return ONLY JSON without markdown commentary.
 """
+
+    @classmethod
+    def _prepare_crop_bytes_safely(cls, raw_bytes: Any, max_dim: int = 1000, quality: int = 85) -> bytes:
+        """
+        Safely unpacks, validates, and optimizes raw crop bytes to JPEG format.
+        Guarantees max dimension <= 1000px and quality 85, reducing memory footprint and avoiding HTTP 413.
+        """
+        if not raw_bytes:
+            return b""
+        if isinstance(raw_bytes, str):
+            import base64
+            try:
+                raw_bytes = base64.b64decode(raw_bytes)
+            except Exception:
+                raw_bytes = raw_bytes.encode('utf-8')
+        try:
+            import cv2
+            import numpy as np
+            nparr = np.frombuffer(raw_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                if max(h, w) > max_dim:
+                    scale = float(max_dim) / float(max(h, w))
+                    new_w = max(1, int(w * scale))
+                    new_h = max(1, int(h * scale))
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                success, enc = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+                if success:
+                    return enc.tobytes()
+        except Exception:
+            pass
+        return raw_bytes if isinstance(raw_bytes, bytes) else bytes(raw_bytes)
 
     @classmethod
     def _evaluate_answer_v3(
