@@ -162,6 +162,7 @@ class QuestionFigure(models.Model):
     thumbnail = models.ImageField(upload_to='exam_figures/thumbs/%Y/%m/', blank=True, null=True)
     bounding_box = models.JSONField(default=list, blank=True, help_text="[xmin, ymin, xmax, ymax]")
     display_order = models.IntegerField(default=1)
+    is_master_solution_figure = models.BooleanField(default=False, help_text="True if this figure was extracted from the teacher's Master Benchmark Solution PDF.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

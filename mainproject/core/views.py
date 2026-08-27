@@ -2939,6 +2939,7 @@ def api_finalize_scanned_paper(request):
         return JsonResponse({'success': False, 'error': f'Failed to commit finalized paper: {str(e)}'}, status=500)
 
 
+@csrf_exempt
 def api_upload_master_solution(request, exam_id):
     """
     AJAX endpoint to upload a Master / Benchmark Solution Script (PDF or Images),
@@ -2961,6 +2962,17 @@ def api_upload_master_solution(request, exam_id):
     stored_questions = list(exam.questions.all().order_by('question_number'))
     if not stored_questions:
         return JsonResponse({'error': 'No questions configured for this examination. Please scan or create questions first.'}, status=400)
+
+    # ── Build q_map HERE (before any PDF/image branching) so it is always in scope ──
+    # Supports lookups by both raw number ('1') and prefixed form ('Q1')
+    q_map = {}
+    for _q in stored_questions:
+        _qn = str(_q.question_number).strip().upper()
+        q_map[_qn] = _q
+        if not _qn.startswith('Q'):
+            q_map[f'Q{_qn}'] = _q
+        else:
+            q_map[_qn[1:]] = _q  # e.g. 'Q1' → also register '1'
 
     master_files = request.FILES.getlist('master_solution_files')
     if not master_files and request.FILES.get('master_solution_file'):
@@ -2993,6 +3005,9 @@ def api_upload_master_solution(request, exam_id):
             try:
                 import fitz
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+                # Collect embedded images per-page for later QuestionFigure binding
+                embedded_page_images = {}  # {page_idx: [png_bytes, ...]}
                 for page_idx in range(len(doc)):
                     page = doc[page_idx]
                     pix = page.get_pixmap(dpi=200)
@@ -3004,6 +3019,20 @@ def api_upload_master_solution(request, exam_id):
                     page_texts.append(raw_text)
                     page_word_boxes.append(wb)
                     page_line_boxes.append(lb)
+
+                    # Extract embedded raster/vector images from this PDF page
+                    try:
+                        page_img_list = page.get_images(full=True)
+                        page_embedded = []
+                        for img_idx, img_info in enumerate(page_img_list):
+                            xref = img_info[0]
+                            base_img = doc.extract_image(xref)
+                            if base_img and base_img.get('image'):
+                                page_embedded.append(base_img['image'])
+                        if page_embedded:
+                            embedded_page_images[page_idx] = page_embedded
+                    except Exception as fig_extract_err:
+                        print(f"[MASTER SOLUTION FIGURE EXTRACT WARNING] Page {page_idx}: {fig_extract_err}")
             except Exception as pdf_err:
                 print(f"[MASTER SOLUTION PDF READ ERROR] {pdf_err}")
                 ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[], mime_type=mime_type)
@@ -3011,12 +3040,171 @@ def api_upload_master_solution(request, exam_id):
                 page_word_boxes.append(ocr_out.get('word_boxes', []))
                 page_line_boxes.append(ocr_out.get('line_boxes', []))
         else:
+            # Image upload path: no embedded PDF page images to extract
+            embedded_page_images = {}
             ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[file_bytes], mime_type=mime_type)
+
+            # Vision Fallback: if OCR returned insufficient text for a handwritten image,
+            # route directly to the multimodal vision AI provider for extraction.
+            if ocr_out.get('engine') == 'VisionFallback':
+                print(f"[MASTER SOLUTION VISION FALLBACK] OCR insufficient ({ocr_out.get('char_count', 0)} chars) "
+                      f"for image upload — invoking multimodal vision AI extraction.")
+                try:
+                    from core.ai_engine.providers.factory import AIProviderFactory
+                    # Correct import: TaskType lives in core.ai_engine.routing.task_types
+                    from core.ai_engine.routing.task_types import TaskType
+
+                    ai_provider = AIProviderFactory.get_provider()
+                    vision_prompt = (
+                        "You are an expert academic evaluator processing a teacher's handwritten master solution script.\n"
+                        "Carefully examine the entire handwritten image and extract ALL content.\n\n"
+                        "Structure your output by question number. For each question found (Q1, Q2, Q3, etc.):\n"
+                        "Q1:\n"
+                        "- Step 1: [formula / calculation / derivation]\n"
+                        "- Step 2: [next step]\n"
+                        "- Final value: [result]\n\n"
+                        "Q2:\n"
+                        "- Step 1: ...\n\n"
+                        "If question numbers are not explicitly visible, treat the entire page as a single question solution.\n"
+                        "Reproduce ALL visible handwritten text, equations, matrices, and diagram descriptions exactly as written. "
+                        "Do NOT summarize or omit any detail."
+                    )
+
+                    # generate_completion() always returns str across all providers
+                    raw_response = ai_provider.generate_completion(
+                        prompt=vision_prompt,
+                        system_instruction="You are a highly accurate academic OCR and document extraction engine for handwritten solutions.",
+                        image_bytes=file_bytes,
+                        mime_type=mime_type,
+                        task_type=TaskType.ANSWER_VISUAL_READ
+                    )
+
+                    # Normalize: coerce dict responses (some providers may wrap) or plain str
+                    if isinstance(raw_response, dict):
+                        vision_text = raw_response.get('text', '') or raw_response.get('content', '') or str(raw_response)
+                    else:
+                        vision_text = str(raw_response).strip()
+
+                    print(f"[MASTER SOLUTION VISION FALLBACK] Vision extracted {len(vision_text)} chars from handwritten image.")
+
+                    if not vision_text:
+                        raise ValueError("Vision model returned an empty response for the handwritten image.")
+
+
+                    # ── Robust question-block parser ──────────────────────────
+                    import re as _re
+
+                    # Matches headers like: Q1:  Q2.  Question 1:  1)  2.
+                    _q_pattern = r'(?:^|\n)(?:Question\s*|Q\s*)(\d+[a-z]?)\s*[:\.\.\)\-]\s*'
+                    _splits = _re.split(_q_pattern, vision_text, flags=_re.IGNORECASE)
+
+                    mapped_summary = []
+                    matched_any = False
+
+                    if len(_splits) > 1:
+                        # _splits layout: [preamble, q_label, q_text, q_label, q_text, ...]
+                        for _i in range(1, len(_splits) - 1, 2):
+                            _q_label = _splits[_i].strip().upper()
+                            _q_text  = _splits[_i + 1].strip() if (_i + 1) < len(_splits) else ''
+
+                            # Try both 'Q1' and '1' lookups
+                            _target_q = q_map.get(_q_label) or q_map.get(f'Q{_q_label}')
+                            if _target_q and _q_text:
+                                _lines = [l for l in _q_text.splitlines() if l.strip()]
+                                _target_q.master_solution_text = _q_text
+                                _target_q.master_solution_steps = [
+                                    {
+                                        'step': idx + 1,
+                                        'description': l.strip(),
+                                        'marks': round(float(_target_q.max_marks) / max(1, len(_lines)), 2)
+                                    }
+                                    for idx, l in enumerate(_lines) if len(l.strip()) > 3
+                                ]
+                                _target_q.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                                matched_any = True
+                                mapped_summary.append({
+                                    'question_number': _q_label,
+                                    'text_length': len(_q_text),
+                                    'steps_count': len(_target_q.master_solution_steps),
+                                    'source': 'VisionFallback',
+                                    'sample_text': _q_text[:120] + '...' if len(_q_text) > 120 else _q_text
+                                })
+
+                    # Fallback: no question headings detected — assign full text to first question
+                    if not matched_any and stored_questions:
+                        _q_first = stored_questions[0]
+                        _full_text = vision_text.strip()
+                        _lines = [l for l in _full_text.splitlines() if l.strip()]
+                        _q_first.master_solution_text = _full_text
+                        _q_first.master_solution_steps = [
+                            {
+                                'step': idx + 1,
+                                'description': l.strip(),
+                                'marks': round(float(_q_first.max_marks) / max(1, len(_lines)), 2)
+                            }
+                            for idx, l in enumerate(_lines) if len(l.strip()) > 3
+                        ]
+                        _q_first.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                        matched_any = True
+                        mapped_summary.append({
+                            'question_number': str(_q_first.question_number),
+                            'text_length': len(_full_text),
+                            'steps_count': len(_q_first.master_solution_steps),
+                            'source': 'VisionFallback-NoHeadings',
+                            'sample_text': _full_text[:120] + '...' if len(_full_text) > 120 else _full_text
+                        })
+
+                    # Save source image as QuestionFigure for each bound question
+                    from django.core.files.base import ContentFile
+                    from core.models import QuestionFigure
+                    for _entry in mapped_summary:
+                        _qobj = q_map.get(_entry['question_number']) or q_map.get(f"Q{_entry['question_number']}")
+                        if _qobj:
+                            try:
+                                QuestionFigure.objects.get_or_create(
+                                    question=_qobj,
+                                    is_master_solution_figure=True,
+                                    defaults=dict(
+                                        page_number=1,
+                                        caption=f"Master Solution Handwritten Image — Q{_qobj.question_number}",
+                                        image=ContentFile(file_bytes, name=f"master_vision_exam{exam.id}_q{_qobj.question_number}.png"),
+                                        display_order=1,
+                                    )
+                                )
+                            except Exception as _qf_err:
+                                print(f"[MASTER SOLUTION VISION FIGURE WARNING] {_qf_err}")
+
+                    exam.master_solution_parsed = True
+                    exam.save(update_fields=['master_solution_parsed'])
+                    return JsonResponse({
+                        'success': True,
+                        'message': (
+                            f"Handwritten Master Baseline Solution successfully extracted and bound to "
+                            f"{len(mapped_summary)} question(s)."
+                        ),
+                        'chars_extracted': len(vision_text),
+                        'mapped_questions': mapped_summary,
+                        'extraction_engine': 'VisionFallback'
+                    })
+
+                except Exception as vision_err:
+                    print(f"[MASTER SOLUTION VISION FALLBACK ERROR] {vision_err}")
+                    # If vision also fails, return a soft error (not 500 crash) so the teacher knows
+                    return JsonResponse({
+                        'error': (
+                            f"OCR could not extract text from the handwritten image ({ocr_out.get('char_count', 0)} chars), "
+                            f"and the Vision AI fallback also failed: {str(vision_err)}. "
+                            f"Please upload a higher-resolution image or a PDF scan."
+                        )
+                    }, status=422)
+
             page_texts.append(ocr_out.get('text', ''))
             page_word_boxes.append(ocr_out.get('word_boxes', []))
             page_line_boxes.append(ocr_out.get('line_boxes', []))
 
         stored_q_nums = [q.formatted_number for q in stored_questions]
+        # q_map already built at function top — re-build here with normalize_q_code keys
+        # to match the heading-detector pipeline's normalized form
         q_map = {normalize_q_code(q.question_number): q for q in stored_questions}
         extracted_by_q = {q_code: [] for q_code in q_map.keys()}
 
@@ -3065,7 +3253,8 @@ def api_upload_master_solution(request, exam_id):
                     clean_line = line.strip()
                     if clean_line and len(clean_line) > 3:
                         steps.append({'step': len(steps) + 1, 'description': clean_line, 'marks': round(float(q_obj.max_marks) / max(1, 4), 2)})
-                q_obj.master_solution_steps = steps[:8]
+                # Issue C resolved: removed arbitrary [:8] cap — full step sequence preserved
+                q_obj.master_solution_steps = steps
                 q_obj.save(update_fields=['master_solution_text', 'master_solution_steps'])
                 mapped_summary.append({
                     'question_number': q_code,
@@ -3076,6 +3265,39 @@ def api_upload_master_solution(request, exam_id):
 
         exam.master_solution_parsed = True
         exam.save(update_fields=['master_solution_parsed'])
+
+        # Issue F: Bind master solution embedded figures as QuestionFigure records
+        if embedded_page_images:
+            from core.models import QuestionFigure
+            from django.core.files.base import ContentFile
+            for p_idx, fig_bytes_list in embedded_page_images.items():
+                # Determine which question is active on this page
+                target_q_obj = None
+                for q_code_key, q_candidate in q_map.items():
+                    seg_list = extracted_by_q.get(q_code_key, [])
+                    # Check if any segment was assigned to this page index
+                    if seg_list and page_texts[p_idx:p_idx+1]:
+                        target_q_obj = q_candidate
+                        break
+                if target_q_obj is None:
+                    # Fallback: bind to first question
+                    target_q_obj = next(iter(q_map.values()), None)
+
+                if target_q_obj:
+                    for fig_idx, fig_png in enumerate(fig_bytes_list):
+                        if len(fig_png) < 500:
+                            continue  # Skip trivially small images (logos/icons)
+                        try:
+                            QuestionFigure.objects.create(
+                                question=target_q_obj,
+                                page_number=p_idx + 1,
+                                caption=f"Master Solution Reference Diagram — Page {p_idx+1}, Fig {fig_idx+1}",
+                                image=ContentFile(fig_png, name=f"master_fig_exam{exam.id}_q{target_q_obj.question_number}_p{p_idx+1}_{fig_idx+1}.png"),
+                                display_order=fig_idx + 1,
+                                is_master_solution_figure=True
+                            )
+                        except Exception as qf_err:
+                            print(f"[MASTER SOLUTION FIGURE SAVE WARNING] {qf_err}")
 
         return JsonResponse({
             'success': True,

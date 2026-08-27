@@ -145,10 +145,22 @@ class AIScriptEvaluator:
             QuestionMappingOrchestrator.confirm_mapping_and_evaluate(submission.id, confirmed_mappings, user=user, ip_address=ip_address)
         else:
             pages = list(submission.pages.all().order_by('page_number'))
-            stored_questions = safe_normalize_collection(submission.examination.questions.all().order_by('question_number'))
+            # Issue D resolved: select_related + prefetch_related eliminate N+1 queries across rubric / figure / table / formula FKs
+            stored_questions = list(
+                submission.examination.questions
+                .select_related('rubric')
+                .prefetch_related('figures_rel', 'tables_rel', 'formulas_rel')
+                .order_by('question_number')
+            )
             cls._segment_answers_v3(submission, pages, stored_questions)
 
-        answers = list(submission.answers.all().order_by('question__question_number'))
+        # Issue D: preload all answer-level relations in a single batch query
+        answers = list(
+            submission.answers
+            .select_related('question', 'question__rubric', 'page')
+            .prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel')
+            .order_by('question__question_number')
+        )
         total_answers_count = len(answers)
         total_pages_count = submission.pages.count() or 1
 
@@ -780,9 +792,16 @@ Return strict JSON ONLY:
 
         master_solution_section = ""
         if q_dto.master_solution_text:
+            # Build structured steps block from teacher's mark allocation (Issue B)
+            steps_formatted = ""
+            if getattr(q_dto, 'master_solution_steps', None):
+                steps_formatted = "\n[STRUCTURED BENCHMARK STEPS & STEP-BY-STEP MARKS ALLOCATION]\n" + "\n".join(
+                    f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
+                    for idx, s in enumerate(q_dto.master_solution_steps)
+                )
             master_solution_section = f"""
 [AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
-{q_dto.master_solution_text}
+{q_dto.master_solution_text}{steps_formatted}
 """
         elif q_dto.ideal_answer:
             master_solution_section = f"""
@@ -881,9 +900,16 @@ Return ONLY raw JSON without markdown commentary.
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
         master_solution_section = ""
         if q_dto.master_solution_text:
+            # Build structured steps block from teacher's mark allocation (Issue B)
+            steps_formatted = ""
+            if getattr(q_dto, 'master_solution_steps', None):
+                steps_formatted = "\n[STRUCTURED BENCHMARK STEPS & STEP-BY-STEP MARKS ALLOCATION]\n" + "\n".join(
+                    f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
+                    for idx, s in enumerate(q_dto.master_solution_steps)
+                )
             master_solution_section = f"""
 [AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
-{q_dto.master_solution_text}
+{q_dto.master_solution_text}{steps_formatted}
 """
         elif q_dto.ideal_answer:
             master_solution_section = f"""
@@ -964,6 +990,24 @@ Return ONLY JSON without markdown commentary.
 
         # Construct canonical QuestionDTO via QuestionAccessor
         q_dto = QuestionAccessor.to_dto(question)
+
+        # Issue G: Pre-evaluation benchmark audit log — warn if master solution is absent
+        try:
+            exam_obj = answer.submission.examination
+            if getattr(exam_obj, 'master_solution_parsed', False):
+                cls._write_pipeline_log(
+                    answer.submission.id,
+                    f"[BENCHMARK EVALUATION] Q{q_dto.number} — Grounded with Teacher Master Benchmark Solution Key."
+                )
+            else:
+                cls._write_pipeline_log(
+                    answer.submission.id,
+                    f"[WARN] No master solution uploaded for Exam #{exam_obj.id}. "
+                    f"Q{q_dto.number} will be graded on standard rubric only. "
+                    f"Upload a baseline solution via the Setup page to improve grading accuracy."
+                )
+        except Exception:
+            pass
 
         # Step 0: Check Question Type for MCQ/Quiz Routing vs Subjective Multimodal Flow
         raw_types = getattr(q_dto, 'question_type', None) or getattr(question, 'question_type', []) or []
