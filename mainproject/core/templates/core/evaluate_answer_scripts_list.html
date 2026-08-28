@@ -83,7 +83,7 @@
                     <i data-lucide="eye" class="w-4 h-4 text-cyan-400"></i> 👁️ Preview Scanned Question Paper & Rubric
                 </button>
 
-                <a href="{% url 'evaluation_wizard' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <a href="{% url 'evaluation_wizard' exam.id %}?new=1" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
                     <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
                 </a>
 
@@ -332,7 +332,7 @@
                                 </div>
                                 <p class="font-bold text-sm theme-text-primary">No student answer scripts evaluated yet.</p>
                                 <p class="text-xs">Click Launch Evaluation Wizard below to upload student answer scripts and initiate step-by-step AI evaluation.</p>
-                                <a href="{% url 'evaluation_wizard' exam.id %}" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 shadow-lg">
+                                <a href="{% url 'evaluation_wizard' exam.id %}?new=1" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 shadow-lg">
                                     <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
                                 </a>
                             </div>

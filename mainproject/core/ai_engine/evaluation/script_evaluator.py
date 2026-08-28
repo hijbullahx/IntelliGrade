@@ -419,13 +419,13 @@ Return strict JSON ONLY:
             if name_match:
                 detected_name = name_match.group(1).strip()
 
-        if not detected_name or detected_name in ['N/A', 'Pending OCR Extraction']:
-            detected_name = "Rahim Ahmed"
-        if not detected_roll or detected_roll in ['N/A', 'Pending OCR Extraction']:
-            detected_roll = "CSE-2026-045"
+        if detected_name and detected_name not in ['N/A', 'Pending OCR Extraction']:
+            submission.student_name = detected_name
+        elif not submission.student_name or submission.student_name in ['N/A', 'Pending OCR Extraction', 'Student']:
+            submission.student_name = f"Student ({detected_roll})" if detected_roll else f"Student #{submission.id}"
 
-        submission.student_name = detected_name
-        submission.student_roll_no = detected_roll
+        if detected_roll and detected_roll not in ['N/A', 'Pending OCR Extraction']:
+            submission.student_roll_no = detected_roll
 
         # 4. Build Ground-Truth Answer Key from Examination Questions (100% Dynamic DB Resolution)
         answer_key = {}

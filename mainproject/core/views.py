@@ -107,18 +107,85 @@ def student_dashboard(request):
     user = request.user
     dept = profile.department
 
-    # Helper function for letter grade
+    # Helper function for letter grade and GPA points
+    def get_grade_and_gpa(pct):
+        if pct >= 80: return 'A+', 4.00
+        elif pct >= 75: return 'A', 3.75
+        elif pct >= 70: return 'A-', 3.50
+        elif pct >= 65: return 'B+', 3.25
+        elif pct >= 60: return 'B', 3.00
+        elif pct >= 55: return 'B-', 2.75
+        elif pct >= 50: return 'C+', 2.50
+        elif pct >= 45: return 'C', 2.25
+        elif pct >= 40: return 'D', 2.00
+        else: return 'F', 0.00
+
     def get_letter_grade(pct):
-        if pct >= 80: return 'A+'
-        elif pct >= 75: return 'A'
-        elif pct >= 70: return 'A-'
-        elif pct >= 65: return 'B+'
-        elif pct >= 60: return 'B'
-        elif pct >= 55: return 'B-'
-        elif pct >= 50: return 'C+'
-        elif pct >= 45: return 'C'
-        elif pct >= 40: return 'D'
-        else: return 'F'
+        return get_grade_and_gpa(pct)[0]
+
+    def resolve_exam_routine_info(exam):
+        if not exam:
+            return 'Spring 2026', 'Final Examination', 'Final Examination - Spring 2026', 'final', 'emerald', 10
+        
+        from core.models import CourseTabulation
+        tab = CourseTabulation.objects.filter(course=exam.course).first() if (exam and exam.course) else None
+        sem_name = tab.semester if (tab and tab.semester) else 'Spring 2026'
+        
+        raw_title = (exam.title or '').strip()
+        title_lower = raw_title.lower()
+        
+        import re
+        # 1. Class Test (CT) Detection (e.g. CT 1, CT-1, Class Test 2, CT)
+        ct_match = re.search(r'\b(?:class\s*test|ct)\s*[-#_]?\s*(\d+)\b', title_lower)
+        if ct_match:
+            ct_num = ct_match.group(1)
+            ex_type = f"Class Test {ct_num} (CT-{ct_num})"
+            routine_key_type = f"ct_{ct_num}"
+            badge_color = "amber"
+            order_weight = 30 + int(ct_num)
+        elif 'class test' in title_lower or re.search(r'\bct\b', title_lower):
+            ex_type = "Class Test (CT)"
+            routine_key_type = "ct"
+            badge_color = "amber"
+            order_weight = 30
+        # 2. Quiz Assessment Detection
+        elif quiz_match := re.search(r'\bquiz\s*[-#_]?\s*(\d+)\b', title_lower):
+            q_num = quiz_match.group(1)
+            ex_type = f"Quiz Assessment {q_num}"
+            routine_key_type = f"quiz_{q_num}"
+            badge_color = "cyan"
+            order_weight = 40 + int(q_num)
+        elif 'quiz' in title_lower:
+            ex_type = "Quiz Assessment"
+            routine_key_type = "quiz"
+            badge_color = "cyan"
+            order_weight = 40
+        # 3. Midterm Examination Detection
+        elif 'mid' in title_lower or 'midterm' in title_lower or 'mid-term' in title_lower:
+            ex_type = "Midterm Examination"
+            routine_key_type = "midterm"
+            badge_color = "indigo"
+            order_weight = 20
+        # 4. Assignment / Lab Presentation
+        elif 'assign' in title_lower:
+            ex_type = "Assignment Assessment"
+            routine_key_type = "assignment"
+            badge_color = "purple"
+            order_weight = 50
+        elif 'lab' in title_lower or 'practical' in title_lower:
+            ex_type = "Lab / Practical Examination"
+            routine_key_type = "lab"
+            badge_color = "teal"
+            order_weight = 60
+        # 5. Default: Final Examination
+        else:
+            ex_type = "Final Examination"
+            routine_key_type = "final"
+            badge_color = "emerald"
+            order_weight = 10
+
+        routine_title = f"{ex_type} - {sem_name}"
+        return sem_name, ex_type, routine_title, routine_key_type, badge_color, order_weight
 
     evaluated_results_list = []
 
@@ -136,6 +203,7 @@ def student_dashboard(request):
         max_marks = float(sub.examination.total_marks if (sub.examination and sub.examination.total_marks) else (sub.total_max_marks or 100.0))
         obtained = float(sub.total_obtained_marks or 0.0)
         pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+        let_grade, gpa_pt = get_grade_and_gpa(pct)
 
         answers = sub.answers.select_related('question', 'evaluation_result').all().order_by('question__question_number')
         answer_breakdowns = []
@@ -155,16 +223,25 @@ def student_dashboard(request):
                 'mistakes': eval_res.mistakes_json if eval_res else [],
             })
 
+        sem_name, ex_type_display, routine_title, routine_key_type, badge_color, order_weight = resolve_exam_routine_info(sub.examination)
+
         evaluated_results_list.append({
             'id': sub.id,
             'type': 'submission',
+            'semester': sem_name,
+            'exam_type_display': ex_type_display,
+            'routine_title': routine_title,
+            'routine_key_type': routine_key_type,
+            'badge_color': badge_color,
+            'order_weight': order_weight,
             'exam_title': sub.examination.title if sub.examination else 'Examination',
             'course_code': sub.examination.course.code if (sub.examination and sub.examination.course) else 'GEN',
             'course_title': sub.examination.course.title if (sub.examination and sub.examination.course) else 'General Course',
             'obtained_marks': obtained,
             'total_marks': max_marks,
             'percentage': pct,
-            'grade': get_letter_grade(pct),
+            'grade': let_grade,
+            'gpa_point': gpa_pt,
             'status_label': 'Finalized & Certified' if sub.status == StudentSubmission.Status.FINALIZED else 'AI Evaluated',
             'is_finalized': (sub.status == StudentSubmission.Status.FINALIZED),
             'evaluated_at': sub.updated_at,
@@ -197,17 +274,26 @@ def student_dashboard(request):
             })
 
         pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+        let_grade, gpa_pt = get_grade_and_gpa(pct)
+        sem_name, ex_type_display, routine_title, routine_key_type, badge_color, order_weight = resolve_exam_routine_info(sc.examination)
 
         evaluated_results_list.append({
             'id': sc.id,
             'type': 'script',
+            'semester': sem_name,
+            'exam_type_display': ex_type_display,
+            'routine_title': routine_title,
+            'routine_key_type': routine_key_type,
+            'badge_color': badge_color,
+            'order_weight': order_weight,
             'exam_title': sc.examination.title if sc.examination else 'Examination',
             'course_code': sc.examination.course.code if (sc.examination and sc.examination.course) else 'GEN',
             'course_title': sc.examination.course.title if (sc.examination and sc.examination.course) else 'General Course',
             'obtained_marks': obtained,
             'total_marks': max_marks,
             'percentage': pct,
-            'grade': get_letter_grade(pct),
+            'grade': let_grade,
+            'gpa_point': gpa_pt,
             'status_label': 'Finalized & Certified' if sc.status == AnswerScript.Status.REVIEWED else 'AI Evaluated',
             'evaluated_at': sc.uploaded_at,
             'answers': segment_breakdowns,
@@ -216,17 +302,81 @@ def student_dashboard(request):
     # Sort evaluated results by date newest first
     evaluated_results_list.sort(key=lambda x: x['evaluated_at'], reverse=True)
 
-    # Compute real stats
+    # 3. Aggregate Evaluated Subjects by Specific Examination Routine Category (Final, Midterm, CT-1, CT-2, Quiz)
+    exam_routines_dict = {}
+    for item in evaluated_results_list:
+        routine_key = f"{item['semester']} {item['exam_type_display']}"
+
+        if routine_key not in exam_routines_dict:
+            exam_routines_dict[routine_key] = {
+                'routine_key': routine_key.replace(' ', '_').replace('(', '').replace(')', '').replace('-', '_').lower(),
+                'routine_title': item['routine_title'],
+                'semester': item['semester'],
+                'exam_type': item['exam_type_display'],
+                'badge_color': item['badge_color'],
+                'order_weight': item['order_weight'],
+                'subjects': [],
+                'total_obtained': 0.0,
+                'total_max': 0.0,
+                'percentages': [],
+                'gpa_points': []
+            }
+
+        exam_routines_dict[routine_key]['subjects'].append(item)
+        exam_routines_dict[routine_key]['total_obtained'] += item['obtained_marks']
+        exam_routines_dict[routine_key]['total_max'] += item['total_marks']
+        exam_routines_dict[routine_key]['percentages'].append(item['percentage'])
+        exam_routines_dict[routine_key]['gpa_points'].append(item.get('gpa_point', 0.0))
+
+    exam_routines_list = []
+    for r_key, r_data in exam_routines_dict.items():
+        subjs = r_data['subjects']
+        if subjs:
+            avg_pct = round(sum(r_data['percentages']) / len(subjs), 1)
+            avg_gpa = round(sum(r_data['gpa_points']) / len(subjs), 2)
+            overall_let_grade = get_letter_grade(avg_pct)
+        else:
+            avg_pct = 0.0
+            avg_gpa = 0.0
+            overall_let_grade = 'N/A'
+
+        exam_routines_list.append({
+            'routine_key': r_data['routine_key'],
+            'routine_title': r_data['routine_title'],
+            'semester': r_data['semester'],
+            'exam_type': r_data['exam_type'],
+            'badge_color': r_data['badge_color'],
+            'order_weight': r_data['order_weight'],
+            'subjects': subjs,
+            'subjects_count': len(subjs),
+            'total_obtained': round(r_data['total_obtained'], 1),
+            'total_max': round(r_data['total_max'], 1),
+            'overall_percentage': avg_pct,
+            'overall_gpa': avg_gpa,
+            'overall_grade': overall_let_grade,
+        })
+
+    # Order routines logically: Final first, then Midterm, then CTs, Quiz, Assignments
+    exam_routines_list.sort(key=lambda x: x['order_weight'])
+
+    # Compute overall stats across all evaluated routine exams
     enrolled_courses_count = Course.objects.filter(department=dept).count() if dept else 0
     completed_exams_count = len(evaluated_results_list)
 
-    if completed_exams_count > 0:
+    if exam_routines_list:
+        primary_routine = exam_routines_list[0]
+        overall_grade_display = f"{primary_routine['overall_grade']} ({primary_routine['overall_percentage']}%)"
+        overall_routine_title = primary_routine['routine_title']
+        overall_gpa_val = f"{primary_routine['overall_gpa']} / 4.00"
+    elif completed_exams_count > 0:
         avg_pct = sum(r['percentage'] for r in evaluated_results_list) / completed_exams_count
-        gpa_avg = f"{round(avg_pct, 1)}% ({get_letter_grade(avg_pct)})"
-        rank = "Active Student"
+        overall_grade_display = f"{get_letter_grade(avg_pct)} ({round(avg_pct, 1)}%)"
+        overall_routine_title = "Semester Examination"
+        overall_gpa_val = "N/A"
     else:
-        gpa_avg = "N/A"
-        rank = "Enrolled"
+        overall_grade_display = "N/A"
+        overall_routine_title = "Upcoming Examination"
+        overall_gpa_val = "N/A"
 
     stats = {
         'student_name': user.get_full_name() or user.username,
@@ -234,12 +384,16 @@ def student_dashboard(request):
         'dept_name': dept.name if dept else "Academic Faculty Department",
         'enrolled_courses': enrolled_courses_count,
         'completed_exams': completed_exams_count,
-        'gpa_avg': gpa_avg,
-        'rank': rank,
+        'overall_grade': overall_grade_display,
+        'overall_gpa': overall_gpa_val,
+        'overall_routine_title': overall_routine_title,
+        'gpa_avg': overall_grade_display,
+        'rank': "Active Student" if completed_exams_count > 0 else "Enrolled",
     }
 
     return render(request, 'core/dashboard_student.html', {
         'stats': stats,
+        'exam_routines': exam_routines_list,
         'evaluated_results': evaluated_results_list,
     })
 
@@ -3721,118 +3875,123 @@ def review_evaluation_answer(request, result_id):
     submission = answer.submission
 
     if request.method == 'POST':
-        action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
-        new_marks_val = request.POST.get('new_marks')
-        comments = request.POST.get('comments', '').strip()
-
-        old_marks = eval_result.obtained_marks
-
-        if action == 'APPROVE':
-            eval_result.status = EvaluationResult.ReviewStatus.APPROVED
-            eval_result.requires_manual_review = False
-            eval_result.save()
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.APPROVE,
-                previous_marks=old_marks,
-                new_marks=old_marks,
-                review_comments=comments or 'Approved by teacher.'
-            )
-
-        elif action == 'OVERRIDE':
-            try:
-                new_m = float(new_marks_val)
-                new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
-            except (TypeError, ValueError):
-                return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
-
-            eval_result.obtained_marks = new_m
-            eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
-            eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
-            eval_result.requires_manual_review = False
-            eval_result.save()
-
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.OVERRIDE,
-                previous_marks=old_marks,
-                new_marks=new_m,
-                review_comments=comments
-            )
-            EvaluationHistory.objects.create(
-                evaluation_result=eval_result,
-                modified_by=request.user,
-                old_marks=old_marks,
-                new_marks=new_m,
-                reason=comments or 'Teacher score override'
-            )
-
-        elif action == 'RE_EVALUATE':
-            # Re-run AI evaluation for this specific answer
-            AIScriptEvaluator._evaluate_single_answer(answer)
-            eval_result.refresh_from_db()
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.RE_EVALUATE,
-                previous_marks=old_marks,
-                new_marks=eval_result.obtained_marks,
-                review_comments='Requested AI re-evaluation'
-            )
-
-        # Recalculate submission totals
-        all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
-        total_obtained = sum(float(e.obtained_marks) for e in all_evals)
-        total_max = sum(float(e.maximum_marks) for e in all_evals)
-
-        submission.total_obtained_marks = total_obtained
-        submission.total_max_marks = total_max
-        submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
-        submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
-        if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
-            submission.status = StudentSubmission.Status.REVIEWED
-        submission.save()
-
-        # Sync OBE Course Tabulation with updated marks
         try:
-            from core.services.tabulation_service import sync_submission_to_tabulation
-            sync_submission_to_tabulation(submission)
-        except Exception as _e_tab:
-            print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} after review: {_e_tab}")
+            action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
+            new_marks_val = request.POST.get('new_marks')
+            comments = request.POST.get('comments', '').strip()
 
-        # Regenerate updated Evaluated Script PDF with new marks and dispatch email to student
-        try:
-            from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
-            from core.services.email_service import EmailService
+            old_marks = eval_result.obtained_marks
 
-            pdf_path = EvaluatedScriptPDFService.generate_evaluated_pdf(submission.id)
-            if action in ['APPROVE', 'OVERRIDE'] or submission.status in [StudentSubmission.Status.REVIEWED, StudentSubmission.Status.FINALIZED]:
-                EmailService.send_submission_evaluated_email(
-                    submission=submission,
-                    final_pdf_path=pdf_path,
-                    sync=False
+            if action == 'APPROVE':
+                eval_result.status = EvaluationResult.ReviewStatus.APPROVED
+                eval_result.requires_manual_review = False
+                eval_result.save()
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.APPROVE,
+                    previous_marks=old_marks,
+                    new_marks=old_marks,
+                    review_comments=comments or 'Approved by teacher.'
                 )
-        except Exception as _e_pdf_email:
-            print(f"[EVALUATED PDF / EMAIL WARNING] Failed generating PDF or sending email for submission #{submission.id}: {_e_pdf_email}")
 
-        EvaluationAuditLog.objects.create(
-            submission=submission,
-            user=request.user,
-            action=f"TEACHER_REVIEW_{action}",
-            details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
+            elif action == 'OVERRIDE':
+                try:
+                    new_m = float(new_marks_val)
+                    new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
+                except (TypeError, ValueError):
+                    return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
 
-        return JsonResponse({
-            'success': True,
-            'new_obtained_marks': float(eval_result.obtained_marks),
-            'new_submission_total': float(submission.total_obtained_marks),
-            'submission_percentage': submission.percentage,
-            'submission_status': submission.status,
-            'message': f'Evaluation successfully updated ({action}).'
-        })
+                eval_result.obtained_marks = new_m
+                eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
+                eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
+                eval_result.requires_manual_review = False
+                eval_result.save()
+
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.OVERRIDE,
+                    previous_marks=old_marks,
+                    new_marks=new_m,
+                    review_comments=comments
+                )
+                EvaluationHistory.objects.create(
+                    evaluation_result=eval_result,
+                    modified_by=request.user,
+                    old_marks=old_marks,
+                    new_marks=new_m,
+                    reason=comments or 'Teacher score override'
+                )
+
+            elif action == 'RE_EVALUATE':
+                # Re-run AI evaluation for this specific answer
+                from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+                AIScriptEvaluator._evaluate_single_answer(answer)
+                eval_result.refresh_from_db()
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.RE_EVALUATE,
+                    previous_marks=old_marks,
+                    new_marks=eval_result.obtained_marks,
+                    review_comments='Requested AI re-evaluation'
+                )
+
+            # Recalculate submission totals
+            all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
+            total_obtained = sum(float(e.obtained_marks) for e in all_evals)
+            total_max = sum(float(e.maximum_marks) for e in all_evals)
+
+            submission.total_obtained_marks = total_obtained
+            submission.total_max_marks = total_max
+            submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
+            submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
+            if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
+                submission.status = StudentSubmission.Status.REVIEWED
+            submission.save()
+
+            # Sync OBE Course Tabulation with updated marks
+            try:
+                from core.services.tabulation_service import sync_submission_to_tabulation
+                sync_submission_to_tabulation(submission)
+            except Exception as _e_tab:
+                print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} after review: {_e_tab}")
+
+            # Regenerate updated Evaluated Script PDF with new marks and dispatch email to student
+            try:
+                from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
+                from core.services.email_service import EmailService
+
+                pdf_path = EvaluatedScriptPDFService.generate_evaluated_pdf(submission.id)
+                if action in ['APPROVE', 'OVERRIDE'] or submission.status in [StudentSubmission.Status.REVIEWED, StudentSubmission.Status.FINALIZED]:
+                    EmailService.send_submission_evaluated_email(
+                        submission=submission,
+                        final_pdf_path=pdf_path,
+                        sync=False
+                    )
+            except Exception as _e_pdf_email:
+                print(f"[EVALUATED PDF / EMAIL WARNING] Failed generating PDF or sending email for submission #{submission.id}: {_e_pdf_email}")
+
+            EvaluationAuditLog.objects.create(
+                submission=submission,
+                user=request.user,
+                action=f"TEACHER_REVIEW_{action}",
+                details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+
+            return JsonResponse({
+                'success': True,
+                'new_obtained_marks': float(eval_result.obtained_marks),
+                'new_submission_total': float(submission.total_obtained_marks),
+                'submission_percentage': submission.percentage,
+                'submission_status': submission.status,
+                'message': f'Evaluation successfully updated ({action}).'
+            })
+        except Exception as e_rev:
+            print(f"[REVIEW EVALUATION ERROR] {e_rev}")
+            return JsonResponse({'success': False, 'error': str(e_rev)}, status=500)
 
     return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
 
@@ -3967,7 +4126,8 @@ def api_get_submission_images(request, submission_id):
         'success': True,
         'images': data,
         'student_name': submission.student_name,
-        'roll_no': submission.student_roll_no
+        'roll_no': submission.student_roll_no,
+        'status': submission.status
     })
 
 

@@ -678,8 +678,8 @@ function closeAllPagesModal() {
 
 // Teacher Review & Score Override Persistence
 async function submitReview(resultId, action, qIdx) {
-    if (!resultId) {
-        alert("Evaluation record ID not found.");
+    if (!resultId || resultId === 'None' || resultId === 'null') {
+        alert("Evaluation record ID not found for this question yet. Please ensure evaluation is complete.");
         return;
     }
 
@@ -699,7 +699,16 @@ async function submitReview(resultId, action, qIdx) {
             body: formData,
             headers: { 'X-CSRFToken': '{{ csrf_token }}' }
         });
-        const data = await resp.json();
+
+        const contentType = resp.headers.get('content-type') || '';
+        let data;
+        if (contentType.includes('application/json')) {
+            data = await resp.json();
+        } else {
+            const errText = await resp.text();
+            throw new Error(`Server returned HTTP ${resp.status}: ${errText.substring(0, 100)}`);
+        }
+
         if (data.success) {
             // 1. Update Right Panel Score Badge
             const rightBadge = document.getElementById(`rightScoreBadge_${resultId}`);
@@ -723,7 +732,7 @@ async function submitReview(resultId, action, qIdx) {
             const actionText = action === 'APPROVE' ? 'Approved' : 'Overridden';
             alert(`✓ Question Q${questionData[qIdx].qNum} score successfully ${actionText} (${data.new_obtained_marks} marks).`);
         } else {
-            alert('Error: ' + data.error);
+            alert('Error: ' + (data.error || 'Review could not be saved.'));
         }
     } catch(err) {
         alert('Action failed: ' + err.message);

@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.db import transaction, close_old_connections, IntegrityError, DatabaseError, OperationalError
 
-from core.models import StudentSubmission, EvaluationResult, EvaluationAuditLog, QuestionMapping
+from core.models import StudentSubmission, SubmissionPage, EvaluationResult, EvaluationAuditLog, QuestionMapping
 from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
 from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
 

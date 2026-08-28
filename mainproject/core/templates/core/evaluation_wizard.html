@@ -625,23 +625,44 @@ function getImageName(item, idx) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('new') === '1') {
+        sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
+        document.getElementById('studentName').value = '';
+        document.getElementById('studentRoll').value = '';
+        currentSubmissionId = null;
+        return;
+    }
+
     const savedSubId = sessionStorage.getItem('ig_sub_id_{{ exam.id }}');
     if(savedSubId) {
         try {
             const resp = await fetch(`/api/submission/${savedSubId}/images/`);
             const data = await resp.json();
-            if(data.success && data.images && data.images.length > 0) {
+            if(data.success && data.images && data.images.length > 0 && !['AI_EVALUATED', 'UNDER_REVIEW', 'REVIEWED', 'FINALIZED'].includes(data.status)) {
                 currentSubmissionId = parseInt(savedSubId);
                 uploadedFiles = data.images;
                 pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
-                if(data.student_name) document.getElementById('studentName').value = data.student_name;
+                if(data.student_name && data.student_name !== 'Pending OCR Extraction') {
+                    document.getElementById('studentName').value = data.student_name;
+                }
                 if(data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
                 renderThumbnails();
                 goToStep(2);
+            } else {
+                sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
+                document.getElementById('studentName').value = '';
+                document.getElementById('studentRoll').value = '';
+                currentSubmissionId = null;
             }
         } catch(e) {
             console.warn("Failed restoring submission images:", e);
+            sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
         }
+    } else {
+        document.getElementById('studentName').value = '';
+        document.getElementById('studentRoll').value = '';
+        currentSubmissionId = null;
     }
 });
 
@@ -1317,6 +1338,7 @@ async function confirmQuestionMappingAndStart() {
         });
         const data = await resp.json();
         if(data.success) {
+            sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
             log("==================================================", 85);
             log("AI EVALUATION COMPLETE", 90);
             log("==================================================", 95);

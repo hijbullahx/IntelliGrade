@@ -7,6 +7,10 @@
 **/.env
 **/.env*
 local_settings.py
+Tabulation-Spring-26-CSC-4383-C.xlsx
+mainproject/Tabulation-Spring-26-CSC-4383-C.xlsx
+Tabulation-*.xlsx
+*.xlsx
 
 # ==========================================
 # Scratch & Local Verification Test Scripts

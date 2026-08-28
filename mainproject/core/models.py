@@ -391,6 +391,7 @@ class StudentSubmission(models.Model):
         WAITING_TEACHER_CONFIRMATION = 'WAITING_TEACHER_CONFIRMATION', 'Waiting for Teacher Confirmation'
         AI_EVALUATED = 'AI_EVALUATED', 'AI Evaluated'
         UNDER_REVIEW = 'UNDER_REVIEW', 'Under Teacher Review'
+        REVIEWED = 'REVIEWED', 'Teacher Reviewed'
         FINALIZED = 'FINALIZED', 'Finalized & Locked'
         ARCHIVED = 'ARCHIVED', 'Archived'
         FAILED = 'FAILED', 'Evaluation Failed'
