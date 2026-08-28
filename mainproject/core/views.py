@@ -1104,38 +1104,35 @@ def dept_head_dashboard(request):
     dept_exams = Examination.objects.filter(course__department=dept).select_related('course', 'assigned_faculty').order_by('-exam_date', '-id') if dept else Examination.objects.none()
     published_exams_count = dept_exams.count()
 
-    # 5. Department Submissions & Evaluation Rates
+    # 5. Current Semester Resolution & Accurate Semester-Wise Pass Rate from Scanned Routine
+    from core.models import CourseTabulation
+    active_tab = CourseTabulation.objects.filter(course__department=dept).first() if dept else None
+    current_semester = active_tab.semester if (active_tab and active_tab.semester) else 'Spring 2026'
+
+    sem_tabulations = CourseTabulation.objects.filter(course__department=dept, semester=current_semester) if dept else CourseTabulation.objects.none()
+    sem_courses = set(sem_tabulations.values_list('course_id', flat=True))
+
+    sem_exams = dept_exams.filter(course_id__in=sem_courses) if sem_courses else dept_exams
+    sem_evaluated_subs = StudentSubmission.objects.filter(
+        examination__in=sem_exams,
+        status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+    )
+
+    total_submissions_count = StudentSubmission.objects.filter(examination__in=dept_exams).count() if dept else 0
+    evaluated_submissions_count = sem_evaluated_subs.count()
     pass_rate = 'N/A'
-    ai_approval_rate = 'N/A'
-    total_submissions_count = 0
-    evaluated_submissions_count = 0
+    passed_count = 0
 
-    if dept and dept_exams.exists():
-        all_submissions = StudentSubmission.objects.filter(examination__in=dept_exams)
-        total_submissions_count = all_submissions.count()
-
-        all_evaluated_submissions = all_submissions.filter(
-            status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
-        )
-        evaluated_submissions_count = all_evaluated_submissions.count()
-
-        if all_evaluated_submissions.exists():
-            passed_count = sum(
-                1 for sub in all_evaluated_submissions 
-                if sub.total_obtained_marks is not None and sub.examination.total_marks 
-                and (float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4))
+    if sem_evaluated_subs.exists():
+        passed_count = sum(
+            1 for sub in sem_evaluated_subs 
+            if sub.total_obtained_marks is not None and (sub.percentage is not None or sub.examination.total_marks)
+            and (
+                float(sub.percentage) >= 40.0 if sub.percentage is not None 
+                else float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4)
             )
-            pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
-
-        all_evaluations = EvaluationResult.objects.filter(submission_answer__submission__examination__in=dept_exams)
-        if all_evaluations.exists():
-            approved_count = all_evaluations.filter(reviews__action='APPROVE').count()
-            ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
-        else:
-            script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
-            if script_evals.exists():
-                approved_count = script_evals.filter(review_status=Evaluation.ReviewStatus.APPROVED).count()
-                ai_approval_rate = f"{round((approved_count / script_evals.count()) * 100, 1)}%"
+        )
+        pass_rate = f"{round((passed_count / sem_evaluated_subs.count()) * 100, 1)}%"
 
     # 6. Course-wise Evaluation Progress List
     course_list = Course.objects.filter(department=dept).order_by('code') if dept else Course.objects.none()
@@ -1217,14 +1214,15 @@ def dept_head_dashboard(request):
 
     stats = {
         'dept_name': dept_name,
+        'current_semester': current_semester,
         'faculty_count': faculty_count,
         'students_count': total_students_count,
         'active_courses': active_courses_count,
         'published_exams': published_exams_count,
         'total_submissions': total_submissions_count,
         'evaluated_submissions': evaluated_submissions_count,
+        'passed_count': passed_count,
         'pass_rate': pass_rate,
-        'ai_approval_rate': ai_approval_rate,
     }
 
     dept_faculty = Profile.objects.filter(role=Profile.Role.TEACHER, department=dept).select_related('user') if dept else Profile.objects.none()

@@ -17,8 +17,8 @@
     </div>
 
     <!-- Analytics Cards -->
-    <!-- Analytics Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+    <!-- Analytics Cards (5 Core Metrics) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <!-- 1. Faculty Members Card -->
         <div class="glass-card p-4 rounded-2xl border-l-4 border-l-cyan-500">
             <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Faculty Members</span>
@@ -79,28 +79,16 @@
             <p class="text-[10px] theme-text-muted mt-1">Examinations created</p>
         </div>
 
-        <!-- 5. Pass Rate Card -->
+        <!-- 5. Semester Pass Rate Card (Accurate Semester-Wise from Routine) -->
         <div class="glass-card p-4 rounded-2xl border-l-4 border-l-teal-500">
-            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Pass Rate</span>
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Pass Rate ({{ stats.current_semester }})</span>
             <div class="mt-2 flex items-baseline justify-between">
                 <span class="text-2xl font-black text-teal-600 dark:text-teal-400">{{ stats.pass_rate }}</span>
                 <div class="p-2 rounded-xl bg-teal-500/10 text-teal-500">
                     <i data-lucide="trending-up" class="w-4 h-4"></i>
                 </div>
             </div>
-            <p class="text-[10px] theme-text-muted mt-1">Marks &ge; 40% outcomes</p>
-        </div>
-
-        <!-- 6. AI Approval Rate Card -->
-        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-purple-500">
-            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">AI Approval</span>
-            <div class="mt-2 flex items-baseline justify-between">
-                <span class="text-2xl font-black text-purple-600 dark:text-purple-400">{{ stats.ai_approval_rate }}</span>
-                <div class="p-2 rounded-xl bg-purple-500/10 text-purple-500">
-                    <i data-lucide="sparkles" class="w-4 h-4"></i>
-                </div>
-            </div>
-            <p class="text-[10px] theme-text-muted mt-1">Faculty AI approvals</p>
+            <p class="text-[10px] theme-text-muted mt-1">{{ stats.passed_count }}/{{ stats.evaluated_submissions }} scripts passed (&ge; 40%)</p>
         </div>
     </div>
 
@@ -294,37 +282,6 @@
         </div>
     </div>
 
-    <!-- Department Performance Overview -->
-    <div class="glass-card p-6 rounded-2xl space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
-                <i data-lucide="pie-chart" class="w-5 h-5 text-cyan-500"></i> Course Evaluation Progress
-            </h2>
-            <span class="text-xs theme-text-muted font-medium">Real-time script evaluation metrics</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {% for item in course_progress_list %}
-            <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div class="flex items-center justify-between text-xs font-bold">
-                    <span class="theme-text-primary flex items-center gap-1.5">
-                        <i data-lucide="book-open" class="w-3.5 h-3.5 text-brand-500"></i>
-                        <span>{{ item.code }}: {{ item.title }}</span>
-                    </span>
-                    <span class="{% if item.progress_percent == 100 %}text-emerald-600 dark:text-emerald-400{% elif item.progress_percent > 0 %}text-brand-600 dark:text-brand-400{% else %}theme-text-muted{% endif %} font-mono">
-                        {{ item.status_text }}
-                    </span>
-                </div>
-                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                    <div class="{% if item.progress_percent == 100 %}bg-emerald-500{% elif item.progress_percent > 0 %}bg-brand-500{% else %}bg-slate-400/40{% endif %} h-full transition-all duration-500" style="width: {{ item.progress_percent }}%;"></div>
-                </div>
-            </div>
-            {% empty %}
-            <div class="col-span-2 p-8 text-center theme-text-muted italic">
-                No active courses found for this department.
-            </div>
-            {% endfor %}
-        </div>
     <!-- Departmental AI Evaluation Governance & Animation Showcase Card -->
     <div class="glass-card p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden relative">
         <div class="grid lg:grid-cols-12 gap-8 items-center">
