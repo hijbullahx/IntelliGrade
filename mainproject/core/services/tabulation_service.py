@@ -135,11 +135,16 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
         }
 
     # 4. Get or Create StudentGradeRecord
-    record, _ = StudentGradeRecord.objects.get_or_create(
+    record, created = StudentGradeRecord.objects.get_or_create(
         tabulation=tabulation,
         student_id=student_id,
         defaults={'student_name': student_name}
     )
+
+    # If the faculty has manually edited and locked this grade record, preserve their custom values
+    if not created and getattr(record, 'is_manually_edited', False):
+        return record
+
     record.student_name = student_name
     record.exam_scores = exam_scores
     record.co_scores = co_scores
@@ -163,12 +168,14 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
     # Institutional standard weighted sum
     weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0))
     
-    # If all academic assessments are taken, attendance is included
+    # If any academic assessment is evaluated, attendance is added
+    att_marks = float(getattr(record, 'attendance_marks', 5.0) or 5.0)
     if category_percentages['final'] or category_percentages['midterm'] or category_percentages['class_test']:
-        weighted_total += w_att
+        weighted_total += att_marks
 
     overall = round(min(100.0, max(0.0, weighted_total)), 2)
     record.overall_score = overall
+    record.attendance_marks = att_marks
 
     if overall >= 80: record.letter_grade = 'A+'
     elif overall >= 75: record.letter_grade = 'A'

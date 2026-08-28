@@ -669,8 +669,10 @@ class StudentGradeRecord(models.Model):
     exam_scores = models.JSONField(default=dict, help_text="Exam / Assessment breakdown per question and totals")
     co_scores = models.JSONField(default=dict, help_text="Obtained marks per Course Outcome (e.g. {'CO1': 34.0, ...})")
     po_scores = models.JSONField(default=dict, help_text="Obtained marks per Program Outcome (e.g. {'PO1': 230.0, ...})")
+    attendance_marks = models.FloatField(default=5.0, help_text="Attendance score out of 5.0 (5% weightage)")
     overall_score = models.FloatField(default=0.0)
     letter_grade = models.CharField(max_length=10, default='F')
+    is_manually_edited = models.BooleanField(default=False, help_text="Flag indicating manual overrides from the instructor")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -724,6 +726,23 @@ class StudentGradeRecord(models.Model):
     @property
     def assignment_data(self):
         return self.get_category_data('assignment')
+
+    @property
+    def attendance_data(self):
+        weights = {'attendance': 5.0}
+        if self.tabulation and self.tabulation.weightage_config:
+            w = float(self.tabulation.weightage_config.get('attendance', 5.0))
+        else:
+            w = 5.0
+        att_val = float(getattr(self, 'attendance_marks', 5.0) or 0.0)
+        pct = (att_val / max(1.0, w)) * 100.0 if w > 0 else 100.0
+        return {
+            'obtained': round(att_val, 2),
+            'max_marks': round(w, 2),
+            'percentage': round(pct, 2),
+            'weighted': round(att_val, 2),
+            'weight': round(w, 2)
+        }
 
 
 

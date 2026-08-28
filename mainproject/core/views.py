@@ -378,6 +378,13 @@ def student_dashboard(request):
         overall_routine_title = "Upcoming Examination"
         overall_gpa_val = "N/A"
 
+    # 4. Fetch official OBE CourseTabulation & StudentGradeRecords for this student
+    course_grade_records = StudentGradeRecord.objects.filter(
+        Q(student_id__iexact=user.username) |
+        Q(student_name__icontains=user.username) |
+        Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
+    ).select_related('tabulation', 'tabulation__course').order_by('tabulation__course__code')
+
     stats = {
         'student_name': user.get_full_name() or user.username,
         'student_id': user.username,
@@ -395,6 +402,7 @@ def student_dashboard(request):
         'stats': stats,
         'exam_routines': exam_routines_list,
         'evaluated_results': evaluated_results_list,
+        'course_grade_records': course_grade_records,
     })
 
 
@@ -5393,8 +5401,12 @@ def course_tabulation_view(request, course_id):
 
     StudentGradeRecord.objects.filter(tabulation=tabulation).exclude(student_id__in=active_ids).delete()
 
-    # 2. Sync all active evaluated submissions
+    # 2. Sync active evaluated submissions if not manually locked
     for sub in evaluated_subs:
+        stu_id = (sub.student_roll_no or sub.student_name or f"STU-{sub.id}").strip()
+        existing_gr = StudentGradeRecord.objects.filter(tabulation=tabulation, student_id=stu_id).first()
+        if existing_gr and getattr(existing_gr, 'is_manually_edited', False):
+            continue
         try:
             sync_submission_to_tabulation(sub)
         except Exception as e_backfill:
@@ -5489,7 +5501,9 @@ def api_update_student_grade_record(request, record_id):
         mid_pct = float(data.get('midterm', 0.0) or 0.0)
         fn_pct = float(data.get('final', 0.0) or 0.0)
         as_pct = float(data.get('assignment', 0.0) or 0.0)
-        att_pct = float(data.get('attendance', 100.0) or 100.0)
+        att_marks = float(data.get('attendance_marks', data.get('attendance', 5.0)) or 5.0)
+        record.attendance_marks = min(5.0, max(0.0, att_marks))
+        record.is_manually_edited = True
 
         exam_scores = record.exam_scores or {}
 
@@ -5535,9 +5549,8 @@ def api_update_student_grade_record(request, record_id):
         w_mid = float(weights.get('midterm', 25.0))
         w_fn = float(weights.get('final', 50.0))
         w_as = float(weights.get('assignment', 10.0))
-        w_att = float(weights.get('attendance', 5.0))
 
-        weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0)) + (att_pct * (w_att / 100.0))
+        weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0)) + record.attendance_marks
         overall = round(min(100.0, max(0.0, weighted_total)), 2)
         record.overall_score = overall
 
@@ -5554,9 +5567,34 @@ def api_update_student_grade_record(request, record_id):
 
         record.save()
 
+        # Synchronize back to student's live submission records for this course
+        try:
+            course = record.tabulation.course
+            subs = StudentSubmission.objects.filter(examination__course=course, student_roll_no=record.student_id)
+            for sub in subs:
+                ex_title = (sub.examination.title or '').upper()
+                ex_max = float(sub.examination.total_marks or 100.0)
+                if 'MID' in ex_title and mid_pct > 0:
+                    sub.total_obtained_marks = round((mid_pct / 100.0) * ex_max, 2)
+                    sub.percentage = mid_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+                elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and ct_pct > 0:
+                    sub.total_obtained_marks = round((ct_pct / 100.0) * ex_max, 2)
+                    sub.percentage = ct_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+                elif ('FINAL' in ex_title or 'EXAM' in ex_title) and fn_pct > 0:
+                    sub.total_obtained_marks = round((fn_pct / 100.0) * ex_max, 2)
+                    sub.percentage = fn_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+        except Exception as e_sub_sync:
+            print(f"[SUBMISSION SYNC ON EDIT WARNING] {e_sub_sync}")
+
         return JsonResponse({
             'success': True,
-            'message': f"Updated grade record for {record.student_name} ({record.student_id}) successfully!",
+            'message': f"Updated grade record & attendance for {record.student_name} ({record.student_id}) successfully!",
             'record': {
                 'id': record.id,
                 'student_id': record.student_id,
@@ -5565,6 +5603,7 @@ def api_update_student_grade_record(request, record_id):
                 'midterm_weighted': record.midterm_data['weighted'] if record.midterm_data else 0.0,
                 'final_weighted': record.final_data['weighted'] if record.final_data else 0.0,
                 'assignment_weighted': record.assignment_data['weighted'] if record.assignment_data else 0.0,
+                'attendance_marks': record.attendance_marks,
                 'overall_score': record.overall_score,
                 'letter_grade': record.letter_grade
             }
