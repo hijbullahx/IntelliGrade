@@ -79,7 +79,11 @@
 
                 {% elif questions %}
                 <!-- Ordinary Descriptive Mode Buttons -->
-                <a href="{% url 'evaluation_wizard' exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
+                <button type="button" onclick="toggleSavedDescriptiveViewerInHub()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-extrabold text-xs rounded-xl border border-cyan-500/30 transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+                    <i data-lucide="eye" class="w-4 h-4 text-cyan-400"></i> 👁️ Preview Scanned Question Paper & Rubric
+                </button>
+
+                <a href="{% url 'evaluation_wizard' exam.id %}?new=1" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-2 text-xs">
                     <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
                 </a>
 
@@ -99,6 +103,114 @@
                 {% endif %}
             </div>
         </div>
+
+        <!-- Collapsible Scanned Descriptive Paper & Rubric Viewer Panel -->
+        {% if not is_mcq_exam and questions %}
+        <div id="hubDescriptiveViewerPanel" class="hidden p-5 rounded-2xl bg-slate-950/95 border border-slate-800 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <span class="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        <i data-lucide="file-text" class="w-4 h-4"></i>
+                    </span>
+                    <div>
+                        <h4 class="font-extrabold text-sm text-cyan-300 flex items-center gap-2">
+                            Scanned Descriptive Examination Paper & Evaluation Rubrics
+                        </h4>
+                        <p class="text-[11px] text-slate-400">Review the scanned questions, model criteria, figures, and OBE metrics configured for this exam.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-300 border border-purple-500/20 text-xs font-mono font-bold">
+                        {{ questions.count }} Question(s) | {{ exam.total_marks|default:"100" }} Total Marks
+                    </span>
+                    <a href="{% url 'question_rubric_manage' exam.id %}" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-all flex items-center gap-1.5">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5 text-purple-400"></i> Edit in Rubric Builder
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[520px] overflow-y-auto pr-1">
+                {% for q in questions %}
+                <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800/80 text-xs space-y-3 shadow-sm flex flex-col justify-between">
+                    <div class="space-y-2">
+                        <div class="flex items-start justify-between font-bold gap-2">
+                            <span class="text-sm font-extrabold text-cyan-300 font-mono">Q{{ q.question_number }}.</span>
+                            <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                                <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-bold uppercase">Subjective</span>
+                                <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">
+                                    [{{ q.co_mapping|default:"CO1" }}, {{ q.bloom_level|default:"C1" }}, {% if q.po_mapping %}{{ q.po_mapping|join:", " }}{% else %}PO1{% endif %}]
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="text-xs text-slate-200 font-medium whitespace-pre-line leading-relaxed">
+                            {{ q.prompt_text }}
+                        </div>
+
+                        <!-- Attached Figures -->
+                        {% if q.figures_rel.all %}
+                        <div class="my-2 space-y-1.5">
+                            {% for fig in q.figures_rel.all %}
+                            <div class="p-2 rounded-xl bg-slate-950 border border-slate-800 text-center">
+                                {% if fig.image %}
+                                <img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-40 object-contain mx-auto rounded-lg border border-slate-700">
+                                {% elif fig.thumbnail %}
+                                <img src="{{ fig.thumbnail.url }}" alt="{{ fig.caption }}" class="max-h-40 object-contain mx-auto rounded-lg border border-slate-700">
+                                {% endif %}
+                                <p class="text-[10px] font-mono text-slate-400 mt-1">📷 {{ fig.caption|default:"Figure" }} (Page {{ fig.page_number }})</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Attached Tables -->
+                        {% if q.tables_rel.all %}
+                        <div class="my-2 space-y-1.5">
+                            {% for tbl in q.tables_rel.all %}
+                            <div class="p-2 rounded-xl bg-slate-950 border border-slate-800 text-left overflow-x-auto">
+                                <p class="text-[10px] font-bold text-cyan-400 mb-1">
+                                    {% if tbl.element_type == 'MATRIX' %}🔢 Matrix{% else %}📊 Table{% endif %}: {{ tbl.caption|default:"" }}
+                                </p>
+                                {% if tbl.cell_json %}
+                                <table class="w-full text-[10px] border-collapse border border-slate-700 font-mono bg-slate-900 my-1 text-slate-300">
+                                    {% for row in tbl.cell_json %}
+                                    <tr>
+                                        {% for cell in row %}
+                                        <td class="border border-slate-700 px-2 py-0.5 text-center font-bold">{{ cell }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <!-- Model Solution / Rubric Criteria -->
+                        {% if q.rubric and q.rubric.ideal_answer %}
+                        <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                            <span class="text-[10px] font-bold text-blue-400 flex items-center gap-1">
+                                <i data-lucide="file-check" class="w-3 h-3"></i> Model Solution & Evaluation Rubric:
+                            </span>
+                            <p class="text-[11px] text-slate-300 font-sans leading-relaxed">
+                                {{ q.rubric.ideal_answer }}
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex items-center justify-between border-t border-slate-800/80 pt-2 text-[11px] text-slate-400">
+                        <span>Weightage: <strong class="text-emerald-400 font-mono font-bold">{{ q.max_marks }} Marks</strong></span>
+                        {% if q.rubric and q.rubric.co_mapped %}
+                        <span class="text-[10px] text-purple-300 font-mono">CO: {{ q.rubric.co_mapped }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Collapsible Scanned MCQ Paper & Key Viewer Panel -->
         {% if is_mcq_exam and questions %}
@@ -154,7 +266,12 @@
                     {% for sub in submissions %}
                     <tr id="sub-row-{{ sub.id }}" class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
                         <td class="px-5 py-4 theme-text-primary">
-                            <div class="font-extrabold text-sm">{{ sub.student_name }}</div>
+                            <div class="flex items-center gap-2">
+                                <span id="sub-name-{{ sub.id }}" class="font-extrabold text-sm">{{ sub.student_name }}</span>
+                                <button type="button" onclick="openEditStudentListModal({{ sub.id }}, '{{ sub.student_name|escapejs }}', '{{ sub.student_roll_no|default:''|escapejs }}')" class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-brand-500 transition-colors" title="Edit Student Name & Roll Number">
+                                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </div>
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 {% for q_map in sub.question_mappings.all %}
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold border {% if q_map.page_numbers_json %}bg-brand-500/10 text-brand-500 border-brand-500/20{% else %}bg-slate-500/10 text-slate-400 border-slate-500/20{% endif %}">
@@ -165,7 +282,7 @@
                                 {% endfor %}
                             </div>
                         </td>
-                        <td class="px-5 py-4 font-mono text-[11px]">{{ sub.student_roll_no|default:"N/A" }}</td>
+                        <td class="px-5 py-4 font-mono text-[11px]" id="sub-roll-{{ sub.id }}">{{ sub.student_roll_no|default:"N/A" }}</td>
                         <td class="px-5 py-4 font-extrabold text-emerald-600 dark:text-emerald-400">{{ sub.total_obtained_marks }} / {{ sub.total_max_marks }}</td>
                         <td class="px-5 py-4 font-bold">{{ sub.percentage }}%</td>
                         <td class="px-5 py-4">
@@ -186,6 +303,9 @@
                             {% endif %}
                         </td>
                         <td class="px-5 py-4 text-right flex items-center justify-end gap-2">
+                            <button type="button" onclick="openEditStudentListModal({{ sub.id }}, '{{ sub.student_name|escapejs }}', '{{ sub.student_roll_no|default:''|escapejs }}')" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]" title="Edit Student Name & Roll Number">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5 text-brand-500"></i> Edit
+                            </button>
                             {% if sub.is_finalized or sub.status == 'FINALIZED' or sub.status == 'AI_EVALUATED' or sub.status == 'UNDER_REVIEW' or sub.status == 'REVIEWED' or sub.total_max_marks > 0 %}
                             <a href="{% url 'api_download_evaluated_pdf' sub.id %}" target="_blank" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors inline-flex items-center gap-1 text-[11px]" title="Download Evaluated Script PDF">
                                 <i data-lucide="file-down" class="w-3.5 h-3.5"></i> Download PDF
@@ -212,7 +332,7 @@
                                 </div>
                                 <p class="font-bold text-sm theme-text-primary">No student answer scripts evaluated yet.</p>
                                 <p class="text-xs">Click Launch Evaluation Wizard below to upload student answer scripts and initiate step-by-step AI evaluation.</p>
-                                <a href="{% url 'evaluation_wizard' exam.id %}" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 shadow-lg">
+                                <a href="{% url 'evaluation_wizard' exam.id %}?new=1" class="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-2 shadow-lg">
                                     <i data-lucide="sparkles" class="w-4 h-4"></i> Launch Evaluation Wizard &rarr;
                                 </a>
                             </div>
@@ -582,5 +702,161 @@ function toggleSavedMcqViewerInHub() {
         if (window.lucide) lucide.createIcons();
     }
 }
+
+function toggleSavedDescriptiveViewerInHub() {
+    const panel = document.getElementById('hubDescriptiveViewerPanel');
+    if (panel) {
+        panel.classList.toggle('hidden');
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+function formatMarkdownTables(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let inTable = false;
+    let html = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        let trimmed = line.trim();
+        
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            if (!inTable) {
+                html += '<div class="overflow-x-auto my-2 rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-sm"><table class="w-full text-[10px] border-collapse font-mono text-center"><tbody class="divide-y divide-slate-800">';
+                inTable = true;
+            }
+            if (trimmed.includes('---') || trimmed.includes(':---')) continue;
+            const cells = trimmed.split('|').slice(1, -1);
+            html += '<tr class="hover:bg-slate-800/50 transition-colors">' + cells.map((c, idx) => {
+                const isHeader = c.includes('**') || idx === 0;
+                const cleanCell = c.replace(/\*\*/g, '').trim();
+                return `<td class="border-r border-slate-800/80 px-2 py-1 ${isHeader ? 'font-extrabold text-cyan-300 bg-slate-800/40' : 'font-medium text-slate-200'}">${cleanCell}</td>`;
+            }).join('') + '</tr>';
+        } else {
+            if (inTable) {
+                html += '</tbody></table></div>';
+                inTable = false;
+            }
+            if (trimmed) {
+                html += `<p class="leading-relaxed my-0.5">${trimmed}</p>`;
+            }
+        }
+    }
+    if (inTable) html += '</tbody></table></div>';
+    return html || text;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.descriptive-prompt-text').forEach(el => {
+        if (el.innerText && el.innerText.includes('|')) {
+            el.innerHTML = formatMarkdownTables(el.innerText);
+            el.classList.remove('whitespace-pre-line');
+        }
+    });
+});
+
+let currentEditingSubId = null;
+
+function openEditStudentListModal(subId, currentName, currentRoll) {
+    currentEditingSubId = subId;
+    document.getElementById('listStudentNameInput').value = currentName || '';
+    document.getElementById('listStudentRollInput').value = (currentRoll === 'N/A' ? '' : currentRoll);
+    document.getElementById('editStudentListModal').classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+}
+
+function closeEditStudentListModal() {
+    document.getElementById('editStudentListModal').classList.add('hidden');
+    currentEditingSubId = null;
+}
+
+async function saveStudentListInfo() {
+    if (!currentEditingSubId) return;
+
+    const name = document.getElementById('listStudentNameInput').value.trim();
+    const roll = document.getElementById('listStudentRollInput').value.trim();
+
+    if (!name) {
+        alert('Student Name cannot be empty.');
+        return;
+    }
+
+    const btn = document.getElementById('saveStudentListBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving...`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    try {
+        const resp = await fetch(`/api/submission/${currentEditingSubId}/update-info/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                student_name: name,
+                student_roll_no: roll
+            })
+        });
+
+        const data = await resp.json();
+        if (data.success) {
+            const nameElem = document.getElementById(`sub-name-${currentEditingSubId}`);
+            const rollElem = document.getElementById(`sub-roll-${currentEditingSubId}`);
+            if (nameElem) nameElem.innerText = data.student_name;
+            if (rollElem) rollElem.innerText = data.student_roll_no || 'N/A';
+            closeEditStudentListModal();
+            alert('✓ ' + data.message);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to update student information'));
+        }
+    } catch (err) {
+        alert('Exception: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> Save Information`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
 </script>
+
+<!-- Edit Student Details Modal (List View) -->
+<div id="editStudentListModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl relative space-y-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base theme-text-primary flex items-center gap-2">
+                <i data-lucide="user-check" class="w-5 h-5 text-brand-500"></i> Edit Student Information
+            </h3>
+            <button type="button" onclick="closeEditStudentListModal()" class="theme-text-muted hover:theme-text-primary cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Full Name</label>
+                <input type="text" id="listStudentNameInput" placeholder="e.g. Jane Doe" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Roll / ID Number</label>
+                <input type="text" id="listStudentRollInput" placeholder="e.g. 2024-CSE-001" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold font-mono focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onclick="closeEditStudentListModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted rounded-xl transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="saveStudentListBtn" onclick="saveStudentListInfo()" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                <i data-lucide="save" class="w-4 h-4"></i> Save Information
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}

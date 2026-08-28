@@ -86,12 +86,16 @@ def is_easyocr_enabled() -> bool:
 
 
 def get_easyocr_subprocess_timeout() -> float:
-    """Returns timeout for isolated EasyOCR subprocess execution (default: 15.0s)."""
-    raw_val = get_env_value('EASYOCR_SUBPROCESS_TIMEOUT', default='15.0')
+    """Returns timeout for isolated EasyOCR subprocess execution (default: 45.0s).
+    Raised from 15s → 45s to accommodate handwritten image parsing which is significantly
+    slower than printed text due to character segmentation complexity.
+    Can be overridden via EASYOCR_SUBPROCESS_TIMEOUT env variable.
+    """
+    raw_val = get_env_value('EASYOCR_SUBPROCESS_TIMEOUT', default='45.0')
     try:
         return max(3.0, float(raw_val))
     except Exception:
-        return 15.0
+        return 45.0
 
 
 def run_easyocr_isolated(image_bytes: bytes, timeout: Optional[float] = None) -> Dict[str, Any]:

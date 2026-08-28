@@ -166,9 +166,110 @@ class EmailService:
             'score': score,
             'grade': grade,
             'remarks': remarks,
-            'script_url': f"{cls._get_base_url()}/",
+            'script_url': f"{cls._get_base_url()}/dashboard/student/",
         }
         return cls._send_async_email(subject, [student_email], 'emails/evaluation_published.html', context, sync=sync)
+
+    @classmethod
+    def send_submission_evaluated_email(
+        cls,
+        submission,
+        final_pdf_path: Optional[str] = None,
+        sync: bool = False
+    ):
+        """
+        Extracts student email, calculates letter grade, aggregates question breakdowns,
+        and dispatches official evaluation email with optional evaluated script PDF attachment.
+        """
+        student_user = getattr(submission, 'student', None)
+        recipient_email = None
+        student_name = submission.student_name or "Student"
+        student_roll = submission.student_roll_no or ""
+
+        if student_user and getattr(student_user, 'email', None):
+            recipient_email = student_user.email
+            if not student_name or student_name in ["Student", "Anonymous Student", "Pending OCR Extraction"]:
+                student_name = student_user.get_full_name() or student_user.username
+        elif student_roll:
+            from django.contrib.auth.models import User
+            matched_user = User.objects.filter(username__iexact=student_roll).first()
+            if matched_user and matched_user.email:
+                recipient_email = matched_user.email
+                if not student_name or student_name in ["Student", "Anonymous Student", "Pending OCR Extraction"]:
+                    student_name = matched_user.get_full_name() or matched_user.username
+            elif '@' in student_roll:
+                recipient_email = student_roll
+
+        if not recipient_email or '@' not in recipient_email:
+            print(f"[EMAIL SERVICE INFO] No registered email address associated with Submission #{submission.id} (Roll: '{student_roll}'). Email skipped.")
+            return None
+
+        obtained = float(submission.total_obtained_marks or 0.0)
+        max_marks = float(submission.examination.total_marks if (submission.examination and submission.examination.total_marks) else (submission.total_max_marks or 100.0))
+        pct = round((obtained / max(1.0, max_marks)) * 100.0, 1)
+
+        def _calc_letter_grade(p):
+            if p >= 80: return 'A+'
+            elif p >= 75: return 'A'
+            elif p >= 70: return 'A-'
+            elif p >= 65: return 'B+'
+            elif p >= 60: return 'B'
+            elif p >= 55: return 'B-'
+            elif p >= 50: return 'C+'
+            elif p >= 45: return 'C'
+            elif p >= 40: return 'D'
+            else: return 'F'
+
+        letter_grade = _calc_letter_grade(pct)
+
+        answers = submission.answers.select_related('question', 'evaluation_result').all().order_by('question__question_number')
+        breakdowns = []
+        for ans in answers:
+            er = getattr(ans, 'evaluation_result', None)
+            q_num = ans.question.formatted_number if hasattr(ans.question, 'formatted_number') else (ans.question.question_number or 'Q')
+            breakdowns.append({
+                'question_number': q_num,
+                'question_text': ans.question.prompt_text if hasattr(ans.question, 'prompt_text') else getattr(ans.question, 'question_text', ''),
+                'obtained_marks': float(er.obtained_marks) if er else 0.0,
+                'maximum_marks': float(er.maximum_marks) if er else float(getattr(ans.question, 'max_marks', 0.0)),
+                'feedback_text': er.feedback_text if er else 'Evaluated.',
+            })
+
+        course_code = submission.examination.course.code if (submission.examination and submission.examination.course) else 'GEN'
+        course_title = submission.examination.course.title if (submission.examination and submission.examination.course) else 'Course'
+        exam_title = submission.examination.title if submission.examination else 'Examination'
+
+        subject = f"[Result Published] {course_code}: {exam_title} - Grade: {letter_grade} ({obtained}/{max_marks})"
+
+        context = {
+            'student_name': student_name,
+            'student_id': student_roll,
+            'course_code': course_code,
+            'course_title': course_title,
+            'exam_title': exam_title,
+            'score': f"{obtained} / {max_marks}",
+            'percentage': pct,
+            'grade': letter_grade,
+            'answers': breakdowns,
+            'script_url': f"{cls._get_base_url()}/dashboard/student/",
+        }
+
+        # Resolve PDF attachment path if exists
+        pdf_path = final_pdf_path
+        if not pdf_path and hasattr(submission, 'pdf_document') and submission.pdf_document.pdf_file:
+            try:
+                pdf_path = submission.pdf_document.pdf_file.path
+            except Exception:
+                pass
+
+        return cls._send_async_email(
+            subject=subject,
+            recipient_list=[recipient_email],
+            template_name='emails/evaluation_published.html',
+            context=context,
+            attachment_path=pdf_path,
+            sync=sync
+        )
 
     @classmethod
     def send_faculty_report_summary_email(cls, faculty_email: str, course_code: str, section: str, export_file_path: Optional[str] = None, sync: bool = False):
@@ -218,22 +319,30 @@ class EmailService:
         course_title: str,
         exam_date: str,
         total_marks: str = "100",
+        exam_id: Optional[int] = None,
         sync: bool = False,
     ):
-        """Sends notification to a teacher when assigned as the examiner for an examination."""
+        """Sends notification to a teacher when assigned as the examiner for an examination with direct link to Setup Paper & Rubrics."""
         recipient = getattr(teacher_user, 'email', None) or getattr(teacher_user, 'username', None)
         if not recipient or '@' not in recipient:
             return None
 
+        base_url = cls._get_base_url()
         teacher_name = teacher_user.get_full_name() or teacher_user.username
         subject = f"[Examiner Assigned] {course_code} - {exam_title}"
+
+        rubric_url = f"{base_url}/teacher/exam/{exam_id}/questions-rubric/" if exam_id else f"{base_url}/teacher/questions-rubric/"
+
         context = {
             'teacher_name': teacher_name,
+            'exam_id': exam_id,
             'exam_title': exam_title,
             'course_code': course_code,
             'course_title': course_title,
             'exam_date': str(exam_date),
             'total_marks': str(total_marks),
-            'workspace_url': f"{cls._get_base_url()}/teacher/login/",
+            'rubric_url': rubric_url,
+            'workspace_url': rubric_url,
         }
         return cls._send_async_email(subject, [recipient], 'emails/exam_assigned_teacher.html', context, sync=sync)
+

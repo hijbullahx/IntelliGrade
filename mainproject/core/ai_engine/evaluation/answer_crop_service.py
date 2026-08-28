@@ -131,12 +131,13 @@ class AnswerCropService:
         all_crops = []
         pages_by_num = {p.page_number: p for p in submission.pages.all()}
 
-        # Group regions by page_number
+        # Group regions by page_number (strictly filtered to mapped page_numbers)
         regions_by_page: Dict[int, List[Dict[str, Any]]] = {}
+        valid_page_set = set(int(p) for p in page_numbers)
         for r in regions:
             p_num = r.get('page_number')
-            if p_num:
-                regions_by_page.setdefault(p_num, []).append(r)
+            if p_num and int(p_num) in valid_page_set:
+                regions_by_page.setdefault(int(p_num), []).append(r)
 
         # Iterate in sorted page order
         for p_num in sorted(page_numbers):
@@ -148,6 +149,12 @@ class AnswerCropService:
             if not working_path or not os.path.exists(working_path):
                 from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
                 working_path = WorkingCopyManager.get_latest_working_image_path(submission.id, p_num)
+            if (not working_path or not os.path.exists(working_path)) and sp.page_image:
+                try:
+                    if os.path.exists(sp.page_image.path):
+                        working_path = sp.page_image.path
+                except Exception:
+                    pass
 
             page_regs = regions_by_page.get(p_num, [])
             # If no specific sub-regions on this page (e.g. continuation page), use full page

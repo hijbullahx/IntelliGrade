@@ -13,7 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.db import transaction, close_old_connections, IntegrityError, DatabaseError, OperationalError
 
-from core.models import StudentSubmission, EvaluationResult, EvaluationAuditLog, QuestionMapping
+from core.models import StudentSubmission, SubmissionPage, EvaluationResult, EvaluationAuditLog, QuestionMapping
 from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
 from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
 
@@ -60,6 +60,24 @@ class FinalizationService:
             }
         )
 
+        # 2.1 Synchronize OBE Course Tabulation & Grade Record
+        try:
+            from core.services.tabulation_service import sync_submission_to_tabulation
+            sync_submission_to_tabulation(submission)
+        except Exception as _e_tab:
+            print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} to tabulation: {_e_tab}")
+
+        # 2.2 Dispatch Official Evaluated Results & Grade Email to Student
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_submission_evaluated_email(
+                submission=submission,
+                final_pdf_path=archived_final_pdf,
+                sync=False
+            )
+        except Exception as _e_email:
+            print(f"[STUDENT EMAIL NOTIFICATION WARNING] {_e_email}")
+
         # 3. Purge Temporary Files (Working images, preview PDFs, temporary crops, OCR cache)
         deleted_files = cls._purge_temporary_artifacts(submission.id)
 
@@ -89,11 +107,16 @@ class FinalizationService:
         count = 0
         working_count = 0
 
-        # Delete working image files (media/submission_working/sub_<id>_*)
+        # Purge only obsolete working image versions (keep active version on disk for teacher workspace viewing)
+        active_paths = set(
+            SubmissionPage.objects.filter(submission_id=submission_id)
+            .values_list('working_image_path', flat=True)
+        )
         working_pattern = os.path.join(WorkingCopyManager.WORKING_DIR, f"sub_{submission_id}_*")
         for f in glob.glob(working_pattern):
             try:
-                if os.path.isfile(f):
+                # If this file is NOT the active page image, clean it up
+                if os.path.normpath(f) not in {os.path.normpath(p) for p in active_paths if p} and os.path.isfile(f):
                     os.remove(f)
                     count += 1
                     working_count += 1

@@ -215,3 +215,192 @@ Return ONLY a valid JSON object in this exact schema without any markdown or com
                     })
 
         return {"questions": fallback_questions}
+
+    def analyze_question_full(
+        self,
+        question_prompt: str,
+        max_marks: float = 10.0,
+        course_outline_text: Optional[str] = None,
+        timeout: Optional[float] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Analyzes a question statement or generates a full examination question from a prompt/topic.
+        Auto-generates comprehensive academic metadata:
+        - Refined/Generated Question Statement
+        - Question Category (Theory, Explanation, Numerical, etc.)
+        - Command Verbs (Explain, Apply, Calculate, etc.)
+        - Bloom Taxonomy Level (Remember, Understand, Apply, Analyze, Evaluate, Create)
+        - OBE Course Outcome (CO1..CO4) & Program Outcomes (PO(a)..PO(d))
+        - Expected / Model Solution Answer
+        - Marking Criteria & Step-by-Step Partial Marks Rubric Breakdown
+        - Common Mistakes & Key Technical Keywords
+        """
+        prompt = f"""
+You are an expert Academic Examiner and University Curriculum Specialist.
+Your goal is to synthesize a complete university examination question and marking rubric.
+
+Input Request / Topic / Question:
+"{question_prompt}"
+
+Allocated Maximum Marks: {max_marks}
+Course / Subject Context: {course_outline_text or "Computer Science / University Course"}
+
+INSTRUCTIONS:
+1. If the input is an instruction or topic (e.g. 'make a sample question', 'deadlocks', 'binary search tree', 'explain polymorphism'):
+   Craft a complete, rigorous examination question with parts (a) and (b), diagrams and analytical trade-offs. Put this in "question_prompt".
+2. If the input is already a question statement: refine it in "question_prompt".
+3. Provide comprehensive criteria, ideal answer, master benchmark solution, Bloom's level, Course Outcome (CO1..CO4), Program Outcomes (PO(a)..PO(d)), Knowledge Profile (KP), Complex Engineering Problem (CEP), Complex Engineering Activity (CEA), keywords, and common student mistakes.
+
+Output strictly valid JSON with keys:
+- "question_prompt": (string: the complete synthesized or polished question statement)
+- "question_type": (list of strings: e.g. ["Theory", "Explanation"])
+- "command_verbs": (list of strings: e.g. ["Explain", "Compare"])
+- "predicted_bloom": (string: Remember, Understand, Apply, Analyze, Evaluate, or Create)
+- "predicted_CO": (string: CO1, CO2, CO3, or CO4)
+- "predicted_PO": (list of strings: e.g. ["PO(a)", "PO(c)"])
+- "predicted_KP": (list of strings: e.g. ["KP1"])
+- "predicted_CEP": (list of strings: e.g. ["CEP1"])
+- "predicted_CEA": (list of strings: e.g. ["CEA1"])
+- "difficulty": (string: Easy, Medium, Hard, or Very Hard)
+- "estimated_time": (string: e.g. "15 mins")
+- "criteria": (string: detailed step-by-step marking breakdown with marks)
+- "ideal_answer": (string: full comprehensive model answer)
+- "expected_answer": (string: expected student response summary)
+- "master_solution": (string: golden benchmark solution)
+- "keywords": (list of strings: key technical terms)
+- "alternative_answers": (string: acceptable variations)
+- "common_mistakes": (list of strings: common errors)
+- "rubric_levels": (object with Excellent, Good, Average, Poor, Fail keys and mark ranges)
+"""
+        try:
+            response_text = self.generate_completion(prompt, system_instruction="You are an academic curriculum specialist. Return ONLY a single raw JSON object without commentary or markdown codeblocks.", timeout=timeout)
+            
+            # 1. Clean markdown codeblocks
+            cleaned = re.sub(r'```(?:json)?\s*', '', response_text)
+            cleaned = re.sub(r'```\s*', '', cleaned).strip()
+            
+            # Helper to validate parsed dict
+            def is_substantive(d):
+                if not isinstance(d, dict):
+                    return False
+                q_p = d.get('question_prompt', '')
+                if not q_p or q_p.strip() in ['...', '…', '']:
+                    return False
+                return bool(d.get('criteria') or d.get('ideal_answer') or d.get('predicted_bloom'))
+
+            # Direct parse
+            try:
+                parsed = json.loads(cleaned)
+                if is_substantive(parsed):
+                    return parsed
+            except Exception:
+                pass
+
+            # Scan all JSON candidate blocks (from last to first)
+            matches = list(re.finditer(r'\{[\s\S]*?\}', response_text))
+            for m in reversed(matches):
+                raw_candidate = m.group(0)
+                for candidate in [raw_candidate, re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', raw_candidate)]:
+                    try:
+                        parsed = json.loads(candidate)
+                        if is_substantive(parsed):
+                            return parsed
+                    except Exception:
+                        pass
+
+            # Largest JSON block fallback
+            match = re.search(r'(\{[\s\S]*\})', response_text)
+            if match:
+                for candidate in [match.group(1), re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', match.group(1))]:
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict) and ('criteria' in parsed or 'ideal_answer' in parsed):
+                            return parsed
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"[ANALYZE QUESTION AI ERROR] {e}")
+
+        return self._fallback_analyze_question_prompt(question_prompt, max_marks, course_outline_text)
+
+    @classmethod
+    def _fallback_analyze_question_prompt(cls, prompt_text: str, max_marks: float = 10.0, course_context: Optional[str] = None) -> Dict[str, Any]:
+        """Deterministic heuristic fallback when LLM is unavailable."""
+        p_lower = prompt_text.lower().strip()
+        
+        # Check if the user is asking to synthesize / generate a sample question
+        is_generation_request = any(p in p_lower for p in [
+            'make a sample', 'sample question', 'create a question', 'generate a question',
+            'create question', 'generate question', 'give me a question', 'sample', 'demo question'
+        ]) or len(p_lower) < 15
+
+        if is_generation_request:
+            subject = course_context or "Computer Science / Engineering"
+            synthesized_prompt = f"(a) Explain the fundamental architecture and principles of core concepts in {subject}. (b) Analyze the performance trade-offs, advantages, and limitations with illustrative diagrams and real-world examples."
+            actual_prompt = synthesized_prompt
+        else:
+            actual_prompt = prompt_text
+
+        p_eval = actual_prompt.lower()
+        
+        bloom = "Understand"
+        if any(w in p_eval for w in ['define', 'list', 'state', 'name', 'what is', 'recall']):
+            bloom = "Remember"
+        elif any(w in p_eval for w in ['calculate', 'compute', 'solve', 'apply', 'implement', 'execute']):
+            bloom = "Apply"
+        elif any(w in p_eval for w in ['analyze', 'differentiate', 'compare', 'contrast', 'distinguish']):
+            bloom = "Analyze"
+        elif any(w in p_eval for w in ['evaluate', 'justify', 'critique', 'judge', 'assess']):
+            bloom = "Evaluate"
+        elif any(w in p_eval for w in ['design', 'create', 'formulate', 'develop', 'construct']):
+            bloom = "Create"
+
+        verbs = []
+        for v in ['Explain', 'Define', 'Calculate', 'Analyze', 'Compare', 'Design', 'Apply', 'Evaluate', 'Justify']:
+            if v.lower() in p_eval:
+                verbs.append(v)
+        if not verbs:
+            verbs = ['Explain']
+
+        q_types = []
+        if any(w in p_eval for w in ['calculate', 'compute', 'solve', 'numerical', 'matrix']):
+            q_types.append("Numerical")
+        if any(w in p_eval for w in ['code', 'program', 'algorithm', 'function', 'class']):
+            q_types.append("Programming")
+        if any(w in p_eval for w in ['compare', 'contrast', 'difference', 'versus', 'vs']):
+            q_types.append("Comparative")
+        if any(w in p_eval for w in ['design', 'architecture', 'diagram']):
+            q_types.append("Design")
+        if not q_types:
+            q_types = ["Theory", "Explanation"]
+
+        return {
+            "question_prompt": actual_prompt,
+            "question_type": q_types,
+            "command_verbs": verbs,
+            "predicted_bloom": bloom,
+            "predicted_CO": "CO1",
+            "predicted_PO": ["PO(a)", "PO(c)"],
+            "predicted_KP": ["KP1"],
+            "predicted_CEP": ["CEP1"],
+            "predicted_CEA": ["CEA1"],
+            "difficulty": "Medium",
+            "estimated_time": f"{max(5, int(max_marks * 1.5))} mins",
+            "criteria": f"1. Core concepts & accuracy ({max_marks * 0.5:.1f} marks)\n2. Logical explanation & structure ({max_marks * 0.3:.1f} marks)\n3. Technical presentation & terminology ({max_marks * 0.2:.1f} marks)",
+            "ideal_answer": f"Model solution addressing '{actual_prompt[:120]}...' with complete conceptual clarity.",
+            "expected_answer": f"Standard academic response meeting all criteria for {max_marks} marks.",
+            "master_solution": f"Benchmark solution for: {actual_prompt}",
+            "keywords": [w.capitalize() for w in re.findall(r'\b[a-zA-Z]{5,}\b', actual_prompt)[:5]],
+            "alternative_answers": "Alternative valid technical formulations and notations accepted.",
+            "common_mistakes": ["Incomplete explanation", "Missing key formulas or definitions"],
+            "rubric_levels": {
+                "Excellent": {"marks": f"{max_marks*0.9:.1f}-{max_marks}", "criteria": "Flawless reasoning, thorough explanation."},
+                "Good": {"marks": f"{max_marks*0.7:.1f}-{max_marks*0.85:.1f}", "criteria": "Good conceptual response with minor omissions."},
+                "Average": {"marks": f"{max_marks*0.5:.1f}-{max_marks*0.65:.1f}", "criteria": "Basic understanding demonstrated."},
+                "Poor": {"marks": f"{max_marks*0.2:.1f}-{max_marks*0.45:.1f}", "criteria": "Major gaps in explanation."},
+                "Fail": {"marks": "0.0-{max_marks*0.15:.1f}", "criteria": "Incorrect response."}
+            }
+        }
+
+

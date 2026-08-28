@@ -141,8 +141,15 @@ class StudentQuestionHeadingDetector:
     Primary Source of Truth for student script answer segment creation.
     """
 
-    BENGALI_TO_ENG = {'১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'}
-    ROMAN_TO_INT = {'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'}
+    BENGALI_TO_ENG = {'০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'}
+
+    # Fix 7: Only letters a–j are valid academic sub-part identifiers.
+    # Trailing garbage OCR chars like 'v', 'q', 'z' from tokens like "Q1cq" or "YLQ4vUQ" are rejected.
+    VALID_SUBPART_LETTERS = set('abcdefghij')
+    ROMAN_TO_INT = {
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10',
+        'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15', 'XVI': '16', 'XVII': '17', 'XVIII': '18', 'XIX': '19', 'XX': '20'
+    }
 
     # Academic metadata patterns (e.g. Course Outcomes, Program Outcomes, Bloom Taxonomy)
     ACADEMIC_METADATA_PATTERNS = [
@@ -173,12 +180,20 @@ class StudentQuestionHeadingDetector:
         r'\b(?:question|q)\s*[0-9]{1,2}\s+(?:is|was|shows|explains|discusses|states)\b',
     ]
 
+    # Cover page and exam metadata keywords
+    COVER_PAGE_KEYWORDS = [
+        'student name', 'name of student', 'student id', 'roll no', 'roll number', 'id no', 'id number',
+        'registration no', 'reg no', 'course code', 'course title', 'semester', 'department',
+        'examination', 'midterm exam', 'final exam', 'quiz', 'assigned faculty', 'instructor',
+        'section', 'batch', 'session', 'date of exam', 'total marks', 'iubat', 'university', 'college'
+    ]
+
     # ABSOLUTELY INVALID QUESTION MARKERS — MUST NEVER START A QUESTION
     ROMAN_SUBPOINT_PATTERN = re.compile(
-        r'^\s*[\(\[\{]?\s*(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\s*[\)\}\]\:\.\-]?\s*(?:$|\b|\s+[a-zA-Z])', re.IGNORECASE
+        r'^\s*[\(\[\{]?\s*(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\s*[\)\}\]\:\.\-]?\s*(?:$|\b|\s+[a-zA-Z0-9])', re.IGNORECASE
     )
     LETTER_SUBPOINT_PATTERN = re.compile(
-        r'^\s*[\(\[\{]?\s*[a-dA-D]\s*[\)\}\]\:\.\-]?\s*(?:$|\b|\s+[a-zA-Z])'
+        r'^\s*[\(\[\{]?\s*[a-dA-D]\s*[\)\}\]\:\.\-]?\s*(?:$|\b|\s+[a-zA-Z0-9])'
     )
     ORDINARY_NUMBERING_PATTERN = re.compile(
         r'^\s*(?:[\(\[\{]?\s*[0-9]{1,2}\s*[\)\}\]\:\.\-]|[\•\*\-]\s*[0-9]{1,2})\s*(?![a-zA-Z0-9\s]*\b(?:Ans|Question|Q|Solution|Soln)\b)', re.IGNORECASE
@@ -187,63 +202,82 @@ class StudentQuestionHeadingDetector:
         r'^\s*(?:Step|Part|Point|Section|Item)\s*[0-9]{1,2}\b', re.IGNORECASE
     )
 
-    # Subcontinental / Bangladeshi verbose student question heading patterns
-    SUBCONTINENTAL_HEADING_PATTERNS = [
-        # Recommended flexible pattern covering verbose heading variations:
-        # "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)", "Question No. 1"
-        re.compile(
-            r'(?i)(?:ans(?:wer)?\s*\.?\s*)?(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
-            re.IGNORECASE
-        ),
-        # Explicit Ans/Answer prefix: "Ans to the Q No 1", "Answer to the question no. 2", "Ans: 3", "Ans. to Q. 4(a)"
-        re.compile(
-            r'^\s*(?:ans(?:wer)?\s*\.?\s*)(?:to\s+(?:the\s+)?)?(?:q(?:uestion)?\s*\.?\s*)?(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
-            re.IGNORECASE
-        ),
-        # Explicit Q/Question prefix: "Q. No. 1", "Question 2", "Q1(a)"
-        re.compile(
-            r'^\s*(?:q(?:uestion)?\s*\.?\s*)(?:no\s*\.?\s*)?[:\-]?\s*([0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[১-৯]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[IVXLCDM]+)',
-            re.IGNORECASE
-        ),
-        # Bengali explicit heading pattern: "উত্তর/প্রশ্ন (নং) ১"
-        re.compile(
-            r'(?:উত্তর|প্রশ্ন)\s*(?:নং)?\s*[\.\:\-]?\s*([১-৯]+|[0-9]+(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?)',
-            re.IGNORECASE
-        ),
+    # Strict Full-Sentence Academic Answer Header Patterns
+    STRICT_SENTENCE_HEADER_PATTERNS = [
+        # "Ans to the ques/question/q no 1", "Answer to the question no. 2(a)"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+the\s+(?:ques(?:tion)?|q)\.?\s*(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to the no 1", "Answer to the no 2"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+the\s+(?:no\.?|num(?:ber)?\.?)\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to ques/q no 1", "Answer to question 2"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+(?:ques(?:tion)?|q)\.?\s*(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to no 1", "Answer to 1"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b')
     ]
+    HEADING_REGEX_PATTERNS = STRICT_SENTENCE_HEADER_PATTERNS
+    SUBCONTINENTAL_HEADING_PATTERNS = STRICT_SENTENCE_HEADER_PATTERNS
+
+    NUMBER_WORDS = {
+        'one': '1', 'two': '2', 'three': '3', 'four': '4', 'foutr': '4', 'five': '5',
+        'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10'
+    }
 
     ANSWER_TOKENS = [
-        'answer', 'ans', 'ans.', 'ang', 'angto', 'ansto', 'answe', 'ansr', 'solution', 'soln', 'sol', 'উত্তর'
+        'answer', 'ans', 'ans.', 'ang', 'angto', 'ansto', 'answe', 'ansr', 'answ', 'solution', 'soln', 'sol',
+        'ami', 'amilo', "am'", 'উত্তর', 'সমাধান'
     ]
 
     QUESTION_TOKENS = [
-        'question', 'ques', 'quest', 'q', 'q.', 'no', 'no.', 'number', '#', 'n0', 'no!', 'nd', 'প্রশ্ন', 'নং'
+        'question', 'questions', 'ques', 'quest', 'qs', 'q', 'q.', 'no', 'no.', 'number', 'n0', 'no!', "no'", 'nd',
+        '0n', '0no', '0nq', '9nd', '9no', "9'no", '9.no', 'q.no', "q'no", "q'nd", 'প্রশ্ন', 'নং'
     ]
 
     @classmethod
     def find_answer_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for answer context tokens (ans, answer, angto, solution, etc.)."""
-        words = re.findall(r'[a-zA-Z\.\—\–\−]+', text.lower())
+        """Tolerant search for answer context tokens (ans, answer, angto, solution, উত্তর, সমাধান, etc.) with word boundaries."""
+        lower = text.lower()
+        # Bengali keywords
+        for tok in ['উত্তর', 'সমাধান']:
+            if tok in lower:
+                return True, tok
+
+        # Regex with word boundaries for ASCII answer tokens
+        m = re.search(r'\b(?:ans(?:wer)?s?|ang(?:to)?|ansto|amilo|am\'|sol(?:ution|n)?)\b', lower)
+        if m:
+            return True, m.group(0)
+
+        words = re.findall(r'[\w\.\—\–\−]+', lower, re.UNICODE)
         for w in words:
-            w_clean = w.strip('.')
+            w_clean = w.strip('.!\'"`')
             if w_clean in cls.ANSWER_TOKENS:
-                return True, w
-            for token in ['answer', 'solution', 'soln', 'ans', 'ang']:
-                if len(w_clean) >= 3 and (w_clean.startswith(token[:3]) or w_clean in token):
-                    return True, w
+                return True, w_clean
         return False, ""
 
     @classmethod
     def find_question_context_token(cls, text: str) -> Tuple[bool, str]:
-        """Tolerant search for question context tokens (question, Q, No, NO!, N0, ND, etc.)."""
-        words = re.findall(r'[a-zA-Z0-9\!\#\.]+', text)
+        """Tolerant search for question context tokens (question, Q, Q1..QN, No, NO!, N0, ND, নং, প্রশ্ন, etc.) with word boundaries."""
+        lower = text.lower()
+        # Bengali keywords
+        for tok in ['প্রশ্ন', 'নং']:
+            if tok in lower:
+                return True, tok
+
+        if re.search(r'\bQ\s*[\.\:\-\'\`]?\s*[0-9]', text, re.IGNORECASE):
+            return True, 'Q'
+        if re.search(r'\b(?:question|questions|quest|ques|qs|q\.|q|no\.|no|number|n0|no!|no\'|0nq|0no|0n|q[\.\'\`]?no|9[\.\'\`]?no)\b', lower):
+            return True, 'Q'
+        if re.search(r'#\s*[0-9]', text):
+            return True, '#'
+        if re.search(r'[@\xa9]\s*[\,\.\s]*no\b', lower):
+            return True, 'No'
+
+        words = re.findall(r'[\w\!\#\.\'\`\@]+', text, re.UNICODE)
         for w in words:
-            w_lower = w.lower().strip('.!')
+            w_lower = w.lower().strip('.!\'`"')
             if w_lower in cls.QUESTION_TOKENS:
-                return True, w
-            for token in ['question', 'quest', 'number']:
-                if len(w_lower) >= 4 and (w_lower.startswith(token[:4]) or w_lower in token):
-                    return True, w
+                return True, w_lower
         return False, ""
 
     @classmethod
@@ -251,14 +285,14 @@ class StudentQuestionHeadingDetector:
         """Extracts candidate question numbers from text string, returning (raw_num, normalized_num)."""
         results = []
         for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
-            m = pat.search(text)
-            if m and m.group(1):
-                raw = m.group(1).strip()
-                norm = cls.normalize_question_number(raw)
-                if norm and (raw, norm) not in results:
-                    results.append((raw, norm))
+            for m in pat.finditer(text):
+                if m and m.group(1):
+                    raw = m.group(1).strip()
+                    norm = cls.normalize_question_number(raw)
+                    if norm and (raw, norm) not in results:
+                        results.append((raw, norm))
 
-        raw_matches = re.findall(r'\b0*([1-9][0-9]?)\b|[১-৯]{1,2}|\b[IVX]{1,4}\b', text, re.IGNORECASE)
+        raw_matches = re.findall(r'\b0*([1-9][0-9]{0,1})\b|[১-৯][০-৯]?|\b[IVXLCDM]{1,6}\b', text, re.IGNORECASE)
         for m in raw_matches:
             tok = m[0] if isinstance(m, tuple) and m[0] else (m if isinstance(m, str) else "")
             if not tok:
@@ -266,6 +300,18 @@ class StudentQuestionHeadingDetector:
             norm = cls.normalize_question_number(tok)
             if norm and (tok, norm) not in results:
                 results.append((tok, norm))
+
+        # Check for word numbers (e.g. "four", "three", "two", "one")
+        for word, num_str in cls.NUMBER_WORDS.items():
+            if re.search(rf'\b{word}\b', text, re.IGNORECASE):
+                if (word, num_str) not in results:
+                    results.append((word, num_str))
+
+        # Check for OCR pipes/special characters like `0|` -> 1, `0I` -> 1
+        pipe_match = re.search(r'0[\`\'\|\/I1]\b|0[\`\'\|\/I1](?=\s|$)', text)
+        if pipe_match:
+            results.append((pipe_match.group(0), '1'))
+
         return results
 
     @classmethod
@@ -286,19 +332,36 @@ class StudentQuestionHeadingDetector:
 
     @classmethod
     def normalize_question_number(cls, raw_num: str) -> str:
-        """Normalizes Bengali, Roman, OCR typos ('l', 'I'), and leading zero strings ('01' -> '1', '02' -> '2') into standard integer string ('1', '2')."""
+        """Normalizes Bengali, Roman, OCR typos ('l', 'I'), and leading zero strings ('01' -> '1', '02' -> '2') into standard integer/subpart string ('1', '2', '1(a)')."""
         if not raw_num:
             return ""
         clean = raw_num.strip().upper()
         if clean in ['L', 'I', 'L.']:
             return '1'
-        if clean in cls.BENGALI_TO_ENG:
-            return cls.BENGALI_TO_ENG[clean]
 
-        if clean in cls.ROMAN_TO_INT:
-            return cls.ROMAN_TO_INT[clean]
+        # Translate all Bengali digits (handles single & multi-digit Bengali numbers: ১ -> 1, ১২ -> 12, ২০ -> 20)
+        translated = "".join(cls.BENGALI_TO_ENG.get(ch, ch) for ch in clean)
+        clean = translated
 
-        clean_sub = re.sub(r'^(?:Q(?:UESTION)?|ANS(?:WER)?|SOLN|SOLUTION|NO|NUMBER)?[\.\:\-\#\s]*', '', clean)
+        # Check Roman numerals
+        roman_key = re.sub(r'[\.\:\-\s]', '', clean)
+        if roman_key in cls.ROMAN_TO_INT:
+            return cls.ROMAN_TO_INT[roman_key]
+
+        clean_sub = re.sub(r'^(?:Q(?:UESTION|S)?|ANS(?:WER)?|SOLN|SOLUTION|NO|NUMBER)?[\.\:\-\#\s]*', '', clean, flags=re.IGNORECASE)
+        # Fix 7: Check if subpart format like 1(a), 1a, 2(b) — but ONLY accept letters a–j.
+        # Garbage OCR suffixes like 'v', 'q', 'z' (from tokens like "Q1cq" or "YLQ4v") are rejected
+        # and the plain question number is returned instead.
+        subpart_m = re.match(r'^([0-9]{1,3})\s*[\(\[]?([A-Za-z])[\)\]]?$', clean_sub)
+        if subpart_m:
+            num_part = str(int(subpart_m.group(1)))
+            letter_part = subpart_m.group(2).lower()
+            if letter_part in cls.VALID_SUBPART_LETTERS:
+                return f"{num_part}({letter_part})"
+            else:
+                # OCR garbage suffix — treat as plain question number
+                return num_part
+
         clean_num = re.sub(r'[^0-9A-ZA-Z]', '', clean_sub)
         if clean_num in ['L', 'I']:
             return '1'
@@ -308,11 +371,68 @@ class StudentQuestionHeadingDetector:
 
     @classmethod
     def is_roman_subpoint(cls, text: str) -> bool:
-        return bool(cls.ROMAN_SUBPOINT_PATTERN.search(text))
+        """Checks if text begins with a bracketed/standalone Roman subpoint like (i), (ii), (iii), [iv], i., ii."""
+        clean = text.strip()
+        if cls.ROMAN_SUBPOINT_PATTERN.match(clean):
+            # Only allow if explicitly prefixed with question/answer header command like "Ans to (i)", "Q. (i)"
+            if not re.search(r'\b(?:ans(?:wer)?|question|ques|q\b|q\.|নং|উত্তর|সমাধান|to\s+(?:the|tha)\s+no|no)\b', clean, re.IGNORECASE):
+                return True
+        return False
 
     @classmethod
     def is_letter_subpoint(cls, text: str) -> bool:
-        return bool(cls.LETTER_SUBPOINT_PATTERN.search(text))
+        """Checks if text begins with a bracketed/standalone Letter subpoint like (a), (b), (c), [d], a., b."""
+        clean = text.strip()
+        if cls.LETTER_SUBPOINT_PATTERN.match(clean):
+            if not re.search(r'\b(?:ans(?:wer)?|question|ques|q\b|q\.|নং|উত্তর|সমাধান|to\s+(?:the|tha)\s+no|no)\b', clean, re.IGNORECASE):
+                return True
+        return False
+
+    @classmethod
+    def detect_cover_page_or_metadata(
+        cls,
+        ocr_text: str,
+        line_boxes: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyzes page text and bounding boxes for exam cover / student metadata.
+        Returns:
+          - 'is_pure_cover_page': bool
+          - 'has_metadata_header': bool
+          - 'metadata_bottom_ymin': float
+        """
+        if not ocr_text:
+            return {'is_pure_cover_page': False, 'has_metadata_header': False, 'metadata_bottom_ymin': 0.0}
+
+        text_lower = ocr_text.lower()
+        lines = [l.strip() for l in ocr_text.splitlines() if l.strip()]
+
+        meta_lines_idx = []
+        for idx, l in enumerate(lines):
+            l_low = l.lower()
+            if any(kw in l_low for kw in cls.COVER_PAGE_KEYWORDS):
+                meta_lines_idx.append(idx)
+            elif re.search(r'\b(?:name|id|roll|course|dept|batch|section|sem|date)\s*[:\-\=]', l_low):
+                meta_lines_idx.append(idx)
+
+        has_metadata = len(meta_lines_idx) >= 1 or any(kw in text_lower for kw in ['student name', 'roll no', 'course code', 'student id', 'registration no'])
+
+        metadata_bottom_ymin = 0.0
+        if meta_lines_idx and len(lines) > 0:
+            last_meta_idx = max(meta_lines_idx)
+            metadata_bottom_ymin = round((last_meta_idx + 1) / float(len(lines)), 3)
+            if line_boxes and last_meta_idx < len(line_boxes):
+                lb = line_boxes[last_meta_idx]
+                bbox = lb.get('bbox', lb)
+                if isinstance(bbox, dict) and 'ymax' in bbox:
+                    ymax = bbox['ymax']
+                    metadata_bottom_ymin = round(ymax / 1000.0 if ymax > 1.0 else ymax, 3)
+
+        return {
+            'is_pure_cover_page': has_metadata,
+            'has_metadata_header': has_metadata,
+            'metadata_bottom_ymin': min(0.95, max(0.10, metadata_bottom_ymin))
+        }
 
     @classmethod
     def is_ordinary_numbering(cls, text: str) -> bool:
@@ -373,6 +493,24 @@ class StudentQuestionHeadingDetector:
                 'reason': 'TOO_LONG_OR_EMPTY'
             }
 
+        # Fix 2: OCR Garbage Rejection — reject strings where less than 35% of characters
+        # are real alphabetic letters AND the string lacks explicit heading anchor keywords.
+        # This eliminates highly corrupted OCR tokens like "YLQ4vUQSUOAL Zusq0" or "Q1cq {mito"
+        # that accidentally contain a Q+digit substring.
+        if len(line_str) >= 6:  # Only apply to strings long enough to be meaningful
+            alpha_ratio = sum(1 for c in line_str if c.isalpha()) / len(line_str)
+            has_anchor = any(k in line_str.lower() for k in ['ans', 'answer', 'question', 'no.', 'উত্তর', 'সমাধান', 'প্রশ্ন'])
+            if alpha_ratio < 0.35 and not has_anchor:
+                return {
+                    'is_question_heading': False,
+                    'question_number': None,
+                    'heading_text': line_str,
+                    'confidence': 0.0,
+                    'heading_type': 'BODY_TEXT',
+                    'raw_text': text,
+                    'reason': 'OCR_GARBAGE_REJECTION'
+                }
+
         # 1. Rejection Filters for non-heading content
         if cls.is_roman_subpoint(line_str):
             return {
@@ -427,6 +565,18 @@ class StudentQuestionHeadingDetector:
                 'heading_type': 'BODY_TEXT',
                 'raw_text': text,
                 'reason': 'ACADEMIC_METADATA'
+            }
+
+        line_lower = line_str.lower()
+        if any(kw in line_lower for kw in ['examination', 'student name', 'course number', 'course name', 'id no', 'record of score', 'marks obtained', 'semester:', 'section:']):
+            return {
+                'is_question_heading': False,
+                'question_number': None,
+                'heading_text': line_str,
+                'confidence': 0.99,
+                'heading_type': 'BODY_TEXT',
+                'raw_text': text,
+                'reason': 'COVER_PAGE_METADATA'
             }
 
         if cls.is_non_header_number(line_str):
@@ -489,6 +639,13 @@ class StudentQuestionHeadingDetector:
         for pat in cls.SUBCONTINENTAL_HEADING_PATTERNS:
             m = pat.search(line_str)
             if m and m.group(1):
+                # Fix 1 (runtime guard): Even if the pattern matched, verify the Q token is
+                # not embedded inside a longer alphanumeric OCR garbage word.
+                # e.g. "YLQ4vUQSUOAL" matches Q4 but the char before m.start() is alpha → reject.
+                match_start = m.start()
+                if match_start > 0 and line_str[match_start - 1].isalnum():
+                    continue  # Q is part of a garbage token — skip this match
+
                 raw_num = m.group(1).strip()
                 norm_num = cls.normalize_question_number(raw_num)
 
@@ -512,6 +669,7 @@ class StudentQuestionHeadingDetector:
                     return {
                         'is_question_heading': True,
                         'question_number': norm_num,
+                        'normalized_number': norm_num,
                         'heading_text': line_str,
                         'confidence': conf,
                         'score': boosted_score,
@@ -524,67 +682,65 @@ class StudentQuestionHeadingDetector:
                         'reason': 'VERBOSE_SUBCONTINENTAL_PATTERN_MATCH'
                     }
 
-        best_cand = None
-        best_score = 0
-
-        for raw_num, norm_num in num_candidates:
-            # Validate question number against exam questions
-            base_norm = re.sub(r'\D', '', norm_num)
-            is_cand_valid = True
-            if valid_nums_clean:
-                is_cand_valid = (
-                    (norm_num in valid_nums_clean) or
-                    (norm_num.lower() in [v.lower() for v in valid_nums_clean]) or
-                    (base_norm and any(re.sub(r'\D', '', v) == base_norm for v in valid_nums_clean if v))
-                )
-
-            if not is_cand_valid:
-                continue
-
-            # Multi-Factor Score Calculation:
-            score = 0
-            if has_ans_ctx:
-                score += 40
-            if has_q_ctx:
-                score += 15
-            score += 30  # Valid question number
-            score += 10  # Spatial proximity within line window
-            if ymin_pct <= 0.25:
-                score += 5  # Top page position bonus
-
-            if score > best_score:
-                best_score = score
-                best_cand = (raw_num, norm_num)
-
-        if best_cand and best_score >= 70:
-            raw_num, norm_num = best_cand
-            conf = min(0.99, round(best_score / 100.0, 2))
-            return {
-                'is_question_heading': True,
-                'question_number': norm_num,
-                'heading_text': line_str,
-                'confidence': conf,
-                'score': best_score,
-                'heading_type': 'ANSWER_HEADING_CONTEXT',
-                'raw_text': text,
-                'ans_token': ans_token if has_ans_ctx else 'NO',
-                'q_token': q_token if has_q_ctx else 'NO',
-                'raw_num': raw_num,
-                'norm_num': norm_num,
-                'reason': 'CONTEXT_AND_NUMBER_MATCH'
-            }
-
+        # Strict Sentence-Only Policy: Require explicit match from STRICT_SENTENCE_HEADER_PATTERNS.
+        # Loose context combinations (e.g. 'Ans: 1', 'Ans - 1') without full structural sentence are rejected.
         return {
             'is_question_heading': False,
             'question_number': None,
+            'normalized_number': None,
             'heading_text': line_str,
             'confidence': 0.0,
             'heading_type': 'BODY_TEXT',
             'raw_text': text,
             'ans_token': ans_token if has_ans_ctx else 'NO',
             'q_token': q_token if has_q_ctx else 'NO',
-            'reason': 'HEADING_SCORE_TOO_LOW'
+            'reason': 'STRICT_FULL_SENTENCE_HEADER_REQUIRED'
         }
+
+
+    @classmethod
+    def is_potential_heading_line(cls, text: str, ymin_pct: float) -> bool:
+        """
+        Fast-Reject Body Lines:
+        - Do NOT test formulas (=, +, *, numbers, single letters like F, a+0, 210.) as heading candidates.
+        - Reject standalone subpoints: (i), (ii), (iii), (a), (b), (c) unless prefixed with explicit question keywords.
+        - Reject metadata lines: Name, Roll, Course Code, Student ID.
+        - Only evaluate lines containing explicit heading trigger tokens OR isolated numeral anchors at top 40%.
+        """
+        clean = text.strip()
+        if not clean or len(clean) > 140:
+            return False
+
+        lower = clean.lower()
+
+        # Reject pure metadata lines
+        if any(kw in lower for kw in ['student name', 'roll no', 'course code', 'course title', 'student id', 'registration no', 'reg no', 'semester', 'department']):
+            return False
+
+        # Fast check for explicit heading trigger tokens
+        trigger_tokens = [
+            'ans', 'answer', 'q', 'ques', 'quest', 'question', 'q.', 'qno', 'qs', 'no.', 'no', 'নং', 'উত্তর', 'সমাধান',
+            'solution', 'soln', 'sol', 'ang', 'am', 'ami', "am'", 'amilo', 'nd', 'n0', 'no!', "no'", '0n', '0no', '0nq',
+            "9'n", "9'nd", "q'nd", "q'no", "9.no", "q.no", "no'"
+        ]
+        for tok in trigger_tokens:
+            if tok in lower:
+                return True
+
+        if re.search(r'\b(?:ans(?:wer)?|a[mn][sgi\'\`\~]*|sol(?:ution|n)?|q(?:uestion|ues|s)?|no|nd|n0|0n[oq]?|#|নং|উত্তর|প্রশ্ন)\b', lower, re.UNICODE):
+            return True
+
+        if re.search(r'\b(?:Q|9|NO|ND|N0)\s*[\.\:\-\'\`]?\s*(?:NO|ND|N0)?\s*[\.\:\-\'\`]?\s*[0-9]{1,3}', clean, re.IGNORECASE):
+            return True
+
+        # Top 40% of page check for isolated numerals or anchor patterns
+        if ymin_pct < 0.40:
+            if re.match(r'^(?:[Qq9][\.\s\'\-]*)?[0-9]{1,3}[\.\:\)\-]?$', clean):
+                return True
+            if re.match(r'^[IVXLCDM]{1,6}[\.\:\)\-]?$', clean, re.IGNORECASE):
+                return True
+
+        return False
 
     @classmethod
     def detect_questions_on_page(
@@ -596,8 +752,8 @@ class StudentQuestionHeadingDetector:
         stored_question_numbers: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Reconstructs visual lines using LineReconstructor, performs multi-signal scoring,
-        and returns all candidate answer headings found across the page.
+        Reconstructs visual lines using LineReconstructor, performs fast-rejection candidate filtering,
+        multi-signal scoring, and returns all candidate answer headings found across the page.
         """
         detections = []
         if not ocr_raw_text and not word_boxes and not line_boxes:
@@ -612,16 +768,17 @@ class StudentQuestionHeadingDetector:
 
         candidates = []
 
-        # 1. Single reconstructed lines
+        # 1. Single reconstructed lines with Fast Rejection
         for r_line in reconstructed_lines:
             line_str = cls.normalize_ocr_text(r_line['text'])
-            if not line_str or len(line_str) > 140:
+            ymin_pct = r_line['ymin_pct']
+            if not cls.is_potential_heading_line(line_str, ymin_pct):
                 continue
 
             candidates.append({
                 'text': line_str,
                 'line_index': r_line['line_index'],
-                'ymin_pct': r_line['ymin_pct'],
+                'ymin_pct': ymin_pct,
                 'ymax_pct': r_line['ymax_pct'],
                 'bbox': r_line['bbox'],
                 'whitespace_above': r_line.get('whitespace_above', 0.0),
@@ -630,82 +787,73 @@ class StudentQuestionHeadingDetector:
                 'is_multiline': False
             })
 
-        # 2. 2-line multiline candidates (for split headings e.g. "Answer to" on line 1, "Question 1" on line 2)
-        for i in range(len(candidates) - 1):
-            c1 = candidates[i]
-            c2 = candidates[i + 1]
-            if c2['line_index'] == c1['line_index'] + 1 and (c2['ymin_pct'] - c1['ymax_pct']) <= 0.04:
-                combined_text = f"{c1['text']} {c2['text']}"
-                candidates.append({
-                    'text': combined_text,
-                    'line_index': c1['line_index'],
-                    'ymin_pct': c1['ymin_pct'],
-                    'ymax_pct': c2['ymax_pct'],
-                    'bbox': {
-                        'ymin': c1['bbox'].get('ymin', 0),
-                        'xmin': min(c1['bbox'].get('xmin', 0), c2['bbox'].get('xmin', 0)),
-                        'ymax': c2['bbox'].get('ymax', 0),
-                        'xmax': max(c1['bbox'].get('xmax', 0), c2['bbox'].get('xmax', 0))
-                    },
-                    'whitespace_above': c1.get('whitespace_above', 0.0),
-                    'whitespace_below': c2.get('whitespace_below', 0.0),
-                    'is_isolated': c1.get('is_isolated', False),
-                    'is_multiline': True
-                })
+        # 2. Multiline sliding windows (2, 3, 4 lines) for split headings
+        n_lines = len(reconstructed_lines)
+        for w_size in [2, 3, 4]:
+            for i in range(n_lines - w_size + 1):
+                window_slice = reconstructed_lines[i:i + w_size]
+                r_first = window_slice[0]
+                r_last = window_slice[-1]
+                if r_first['ymin_pct'] >= 0.40 and not any(cls.is_potential_heading_line(cls.normalize_ocr_text(r['text']), r['ymin_pct']) for r in window_slice):
+                    continue
+                combined_text = " ".join(cls.normalize_ocr_text(r['text']) for r in window_slice)
+                if cls.is_potential_heading_line(combined_text, r_first['ymin_pct']):
+                    candidates.append({
+                        'text': combined_text,
+                        'line_index': r_first['line_index'],
+                        'ymin_pct': r_first['ymin_pct'],
+                        'ymax_pct': r_last['ymax_pct'],
+                        'bbox': {
+                            'ymin': r_first['bbox'].get('ymin', 0),
+                            'xmin': min(r['bbox'].get('xmin', 0) for r in window_slice),
+                            'ymax': r_last['bbox'].get('ymax', 0),
+                            'xmax': max(r['bbox'].get('xmax', 0) for r in window_slice)
+                        },
+                        'whitespace_above': r_first.get('whitespace_above', 0.0),
+                        'whitespace_below': r_last.get('whitespace_below', 0.0),
+                        'is_isolated': r_first.get('is_isolated', False),
+                        'is_multiline': True
+                    })
 
-        print(f"\n============================================================")
-        print(f"QUESTION HEADER ANALYSIS LOG")
-        print(f"============================================================")
-
+        # Fix 5: Best-score-wins deduplication — evaluate ALL candidates first, then keep the
+        # highest-scoring detection per normalized question number. Previously, the first-seen
+        # candidate won (single-line noisy match beat cleaner multi-line windows).
+        # Two passes: (1) score all candidates, (2) keep top scorer per Q number.
+        all_scored = []
         for cand in candidates:
-            text = cand['text']
-            ymin_pct = cand['ymin_pct']
+            cand_text = cand['text']
+            cand_ymin = cand['ymin_pct']
 
             decision = cls.detect_explicit_question_heading(
-                text=text,
-                ymin_pct=ymin_pct,
+                text=cand_text,
+                ymin_pct=cand_ymin,
                 stored_question_numbers=stored_question_numbers
             )
 
             if decision['is_question_heading']:
-                print(f"============================================================")
-                print(f"ANSWER HEADING CANDIDATE")
-                print(f"============================================================")
-                print(f"Page: {cand.get('line_index', 0) + 1}")
-                print(f"Raw OCR:\n\"{text}\"")
-                print(f"Detected answer context:\n\"{decision.get('ans_token', 'NO')}\"")
-                print(f"Detected question context:\n\"{decision.get('q_token', 'NO')}\"")
-                print(f"Detected number:\n{decision.get('raw_num', 'N/A')}")
-                print(f"Normalized number:\n{decision.get('norm_num', 'N/A')}")
-                print(f"Question exists:\nYES")
-                print(f"Spatial proximity:\nYES")
-                print(f"Answer heading score:\n{decision.get('score', 0)}")
-                print(f"Decision:\nACCEPT -> Q{decision['question_number']}\n")
-
-                detections.append({
+                all_scored.append({
                     'raw_text': decision['raw_text'],
-                    'heading_text': text,
+                    'heading_text': cand_text,
                     'normalized_number': decision['question_number'],
                     'confidence': decision['confidence'],
                     'score': decision.get('score', 0),
                     'line_index': cand['line_index'],
-                    'ymin_pct': ymin_pct,
+                    'ymin_pct': cand_ymin,
                     'ymax_pct': cand['ymax_pct'],
                     'bbox': cand['bbox'],
                     'classification': decision['heading_type'],
                     'method': decision['heading_type']
                 })
-            else:
-                ans_ctx_str = 'YES' if (decision.get('ans_token') and decision.get('ans_token') != 'NO') else 'NO'
-                q_ctx_str = 'YES' if (decision.get('q_token') and decision.get('q_token') != 'NO') else 'NO'
-                print(f"============================================================")
-                print(f"REJECTED BODY CANDIDATE")
-                print(f"============================================================")
-                print(f"Candidate:\n\"{text}\"")
-                print(f"Answer context:\n{ans_ctx_str}")
-                print(f"Question context:\n{q_ctx_str}")
-                print(f"Valid heading:\nNO")
-                print(f"Decision:\nREJECT -> {decision['reason']}\n")
+
+        # Keep only the highest-scoring entry per normalized question number
+        best_by_q_num: Dict[str, Dict] = {}
+        for entry in all_scored:
+            norm_q = entry['normalized_number']
+            if norm_q not in best_by_q_num or entry['score'] > best_by_q_num[norm_q]['score']:
+                best_by_q_num[norm_q] = entry
+
+        # Restore original vertical ordering (sort by ymin_pct ascending)
+        detections.extend(sorted(best_by_q_num.values(), key=lambda e: e['ymin_pct']))
 
         return detections
 

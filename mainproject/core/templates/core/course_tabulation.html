@@ -49,65 +49,142 @@
 
         <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                <thead class="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 theme-text-muted uppercase font-semibold text-[11px]">
                     <tr>
-                        <th class="px-5 py-4 text-center">#</th>
-                        <th class="px-5 py-4 text-center">Student ID</th>
-                        <th class="px-5 py-4">Student Name</th>
-                        <th class="px-5 py-4 text-center">Overall Score</th>
-                        <th class="px-5 py-4 text-center">Letter Grade</th>
-                        <th class="px-5 py-4 text-center">CO Scores (CO1..CO5)</th>
-                        <th class="px-5 py-4 text-center">PO Scores (PO1..PO12)</th>
-                        <th class="px-5 py-4 text-right">Last Updated</th>
+                        <th class="px-4 py-3.5 text-center">#</th>
+                        <th class="px-4 py-3.5 text-center">Student ID</th>
+                        <th class="px-4 py-3.5">Student Name</th>
+                        <th class="px-4 py-3.5 text-center">Class Test (10%)</th>
+                        <th class="px-4 py-3.5 text-center">Mid Term (25%)</th>
+                        <th class="px-4 py-3.5 text-center">Final Exam (50%)</th>
+                        <th class="px-4 py-3.5 text-center">Assignment (10%)</th>
+                        <th class="px-4 py-3.5 text-center">Attendance (5%)</th>
+                        <th class="px-4 py-3.5 text-center">Overall (100%)</th>
+                        <th class="px-4 py-3.5 text-center">Grade</th>
+                        <th class="px-4 py-3.5 text-center">CO Scores</th>
+                        <th class="px-4 py-3.5 text-center">PO Scores</th>
+                        <th class="px-4 py-3.5 text-center">Action</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                <tbody id="tabulationTableBody" class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
                     {% for gr in grade_records %}
-                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
-                        <td class="px-5 py-4 text-center font-bold theme-text-muted">{{ forloop.counter }}</td>
-                        <td class="px-5 py-4 text-center">
+                    <tr id="row-record-{{ gr.id }}" class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-4 py-3.5 text-center font-bold theme-text-muted">{{ forloop.counter }}</td>
+                        <td class="px-4 py-3.5 text-center">
                             <span class="px-2.5 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-[11px] font-bold">{{ gr.student_id }}</span>
                         </td>
-                        <td class="px-5 py-4 theme-text-primary font-bold text-sm">{{ gr.student_name }}</td>
-                        <td class="px-5 py-4 text-center font-extrabold text-brand-600 dark:text-brand-400 text-sm">{{ gr.overall_score }}%</td>
-                        <td class="px-5 py-4 text-center">
-                            {% if gr.letter_grade == 'A+' or gr.letter_grade == 'A' %}
-                            <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
-                            {% elif gr.letter_grade == 'A-' or gr.letter_grade == 'B+' %}
-                            <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
-                            {% elif gr.letter_grade == 'F' %}
-                            <span class="px-3 py-1 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                        <td class="px-4 py-3.5 theme-text-primary font-bold text-xs" id="cell-name-{{ gr.id }}">{{ gr.student_name }}</td>
+                        
+                        <!-- Class Test (10%) -->
+                        <td class="px-4 py-3.5 text-center font-mono" id="cell-ct-{{ gr.id }}">
+                            {% if gr.class_test_data %}
+                            <span class="font-bold theme-text-primary text-xs">{{ gr.class_test_data.weighted }}</span>
+                            <span class="text-[10px] theme-text-muted block font-sans">({{ gr.class_test_data.obtained }}/{{ gr.class_test_data.max_marks }})</span>
                             {% else %}
-                            <span class="px-3 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                            <span class="text-slate-400 italic text-[11px]">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-5 py-4">
-                            <div class="flex flex-wrap gap-1 justify-center">
+
+                        <!-- Mid Term Total (25%) -->
+                        <td class="px-4 py-3.5 text-center font-mono" id="cell-mid-{{ gr.id }}">
+                            {% if gr.midterm_data %}
+                            <span class="font-bold theme-text-primary text-xs">{{ gr.midterm_data.weighted }}</span>
+                            <span class="text-[10px] theme-text-muted block font-sans">({{ gr.midterm_data.obtained }}/{{ gr.midterm_data.max_marks }})</span>
+                            {% else %}
+                            <span class="text-slate-400 italic text-[11px]">-</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Final Exam Total (50%) -->
+                        <td class="px-4 py-3.5 text-center font-mono" id="cell-final-{{ gr.id }}">
+                            {% if gr.final_data %}
+                            <span class="font-bold theme-text-primary text-xs">{{ gr.final_data.weighted }}</span>
+                            <span class="text-[10px] theme-text-muted block font-sans">({{ gr.final_data.obtained }}/{{ gr.final_data.max_marks }})</span>
+                            {% else %}
+                            <span class="text-slate-400 italic text-[11px]">-</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Assignment Total (10%) -->
+                        <td class="px-4 py-3.5 text-center font-mono" id="cell-assign-{{ gr.id }}">
+                            {% if gr.assignment_data %}
+                            <span class="font-bold theme-text-primary text-xs">{{ gr.assignment_data.weighted }}</span>
+                            <span class="text-[10px] theme-text-muted block font-sans">({{ gr.assignment_data.obtained }}/{{ gr.assignment_data.max_marks }})</span>
+                            {% else %}
+                            <span class="text-slate-400 italic text-[11px]">-</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- Attendance Total (5%) -->
+                        <td class="px-4 py-3.5 text-center font-mono" id="cell-att-{{ gr.id }}">
+                            <span class="font-bold theme-text-primary text-xs">{{ gr.attendance_marks|default:5.0 }}</span>
+                            <span class="text-[10px] theme-text-muted block font-sans">({{ gr.attendance_data.percentage }}%)</span>
+                        </td>
+
+                        <!-- Overall Score (100%) -->
+                        <td class="px-4 py-3.5 text-center font-extrabold text-brand-600 dark:text-brand-400 text-xs font-mono" id="cell-overall-{{ gr.id }}">{{ gr.overall_score }}%</td>
+                        
+                        <!-- Letter Grade -->
+                        <td class="px-4 py-3.5 text-center" id="cell-grade-{{ gr.id }}">
+                            {% if gr.letter_grade == 'A+' or gr.letter_grade == 'A' %}
+                            <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                            {% elif gr.letter_grade == 'A-' or gr.letter_grade == 'B+' %}
+                            <span class="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                            {% elif gr.letter_grade == 'F' %}
+                            <span class="px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-extrabold text-xs">{{ gr.letter_grade }}</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- CO Scores -->
+                        <td class="px-4 py-3.5">
+                            <div class="flex flex-wrap gap-1 justify-center max-w-[180px]">
                                 {% for co_key, co_val in gr.co_scores.items %}
-                                <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px]">
-                                    {{ co_key }}: <strong class="text-brand-600 dark:text-brand-400">{{ co_val }}</strong>
+                                <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px]">
+                                    {{ co_key }}: <strong class="theme-text-primary">{{ co_val }}</strong>
                                 </span>
                                 {% empty %}
-                                <span class="text-slate-400 italic text-[11px]">No CO scores yet</span>
+                                <span class="text-slate-400 italic text-[10px]">No CO scores</span>
                                 {% endfor %}
                             </div>
                         </td>
-                        <td class="px-5 py-4">
-                            <div class="flex flex-wrap gap-1 justify-center">
+
+                        <!-- PO Scores -->
+                        <td class="px-4 py-4">
+                            <div class="flex flex-wrap gap-1 justify-center max-w-[180px]">
                                 {% for po_key, po_val in gr.po_scores.items %}
-                                <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px]">
-                                    {{ po_key }}: <strong class="text-cyan-600 dark:text-cyan-400">{{ po_val }}</strong>
+                                <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px]">
+                                    {{ po_key }}: <strong class="theme-text-primary">{{ po_val }}</strong>
                                 </span>
                                 {% empty %}
-                                <span class="text-slate-400 italic text-[11px]">No PO scores yet</span>
+                                <span class="text-slate-400 italic text-[10px]">No PO scores</span>
                                 {% endfor %}
                             </div>
                         </td>
-                        <td class="px-5 py-4 text-right theme-text-muted text-[11px]">{{ gr.updated_at|date:"Y-m-d H:i" }}</td>
+
+                        <!-- Action: Edit Record -->
+                        <td class="px-4 py-3.5 text-center">
+                            <button type="button" 
+                                class="btn-edit-grade px-2.5 py-1 bg-brand-500/10 hover:bg-brand-500 hover:text-white text-brand-600 dark:text-brand-400 border border-brand-500/20 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                                data-record-id="{{ gr.id }}"
+                                data-student-id="{{ gr.student_id }}"
+                                data-student-name="{{ gr.student_name }}"
+                                data-class-test="{% if gr.class_test_data %}{{ gr.class_test_data.percentage }}{% endif %}"
+                                data-midterm="{% if gr.midterm_data %}{{ gr.midterm_data.percentage }}{% endif %}"
+                                data-final="{% if gr.final_data %}{{ gr.final_data.percentage }}{% endif %}"
+                                data-assignment="{% if gr.assignment_data %}{{ gr.assignment_data.percentage }}{% endif %}"
+                                data-attendance="{{ gr.attendance_marks|default:5.0 }}"
+                                data-co-json="{{ gr.co_json_str|escapejs }}"
+                                data-po-json="{{ gr.po_json_str|escapejs }}"
+                                onclick="openEditGradeModalFromButton(this)">
+                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
+                            </button>
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="px-5 py-12 text-center theme-text-muted">
+                        <td colspan="13" class="px-5 py-12 text-center theme-text-muted">
                             <div class="space-y-2">
                                 <i data-lucide="inbox" class="w-8 h-8 mx-auto text-slate-400"></i>
                                 <p class="font-bold text-xs theme-text-primary">No grade records found for this course yet.</p>
@@ -121,4 +198,364 @@
         </div>
     </div>
 </div>
+
+<!-- Interactive Student Grade Record Edit Modal -->
+<div id="editGradeModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="glass-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl text-slate-800 dark:text-slate-200">
+        
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-950/50">
+            <div class="flex items-center gap-2.5">
+                <span class="p-2 rounded-xl bg-brand-500/10 text-brand-500">
+                    <i data-lucide="edit-3" class="w-5 h-5"></i>
+                </span>
+                <div>
+                    <h3 class="font-extrabold text-base theme-text-primary tracking-tight">Edit Student Grade & OBE Outcome Scores</h3>
+                    <p class="text-xs theme-text-muted">Changes instantly update the database & official Excel export (.xlsx)</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeEditGradeModal()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer px-2">&times;</button>
+        </div>
+
+        <form id="editGradeForm" onsubmit="submitEditGrade(event)" class="p-6 space-y-4 overflow-y-auto flex-1">
+            {% csrf_token %}
+            <input type="hidden" id="editRecordId" value="">
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold theme-text-secondary mb-1">Student Roll / ID</label>
+                    <input type="text" id="editStudentId" readonly class="w-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold theme-text-muted outline-none cursor-not-allowed">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-secondary mb-1">Student Full Name</label>
+                    <input type="text" id="editStudentName" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                </div>
+            </div>
+
+            <!-- Score Inputs (Percentages / Raw Marks) -->
+            <div class="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3">
+                <span class="text-xs font-bold theme-text-primary block flex items-center gap-1.5">
+                    <i data-lucide="calculator" class="w-4 h-4 text-brand-500"></i> Assessment Marks (%) & Attendance
+                </span>
+
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-semibold theme-text-muted mb-1">Class Test (10%)</label>
+                        <input type="number" step="0.1" min="0" max="100" id="editClassTest" oninput="calculateLiveOverall()" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold theme-text-muted mb-1">Mid Term (25%)</label>
+                        <input type="number" step="0.1" min="0" max="100" id="editMidterm" oninput="calculateLiveOverall()" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold theme-text-muted mb-1">Final Exam (50%)</label>
+                        <input type="number" step="0.1" min="0" max="100" id="editFinal" oninput="calculateLiveOverall()" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold theme-text-muted mb-1">Assignment (10%)</label>
+                        <input type="number" step="0.1" min="0" max="100" id="editAssignment" oninput="calculateLiveOverall()" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 font-bold mb-1">Attendance (5%)</label>
+                        <input type="number" step="0.5" min="0" max="5" id="editAttendance" oninput="calculateLiveOverall()" class="w-full bg-white dark:bg-slate-900 border border-emerald-500/40 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-center text-emerald-600 dark:text-emerald-400 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                </div>
+
+                <!-- Live Preview of Computed Overall & Letter Grade -->
+                <div class="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                    <span class="theme-text-muted">Computed Overall: <strong id="previewOverall" class="text-brand-600 dark:text-brand-400 text-sm font-mono">0.0%</strong></span>
+                    <span class="theme-text-muted">Letter Grade: <strong id="previewGrade" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold text-xs">F</strong></span>
+                </div>
+            </div>
+
+            <!-- Course Outcomes (CO1 - CO5) Section -->
+            <div class="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <span class="text-xs font-bold theme-text-primary block flex items-center gap-1.5">
+                    <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Course Outcome Scores (CO1..CO5)
+                </span>
+                <p class="text-[11px] theme-text-muted">Attainment marks per Course Outcome (out of 50.0 / 100.0)</p>
+
+                <div class="grid grid-cols-5 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO1</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO2</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO2" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO3</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO3" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO4</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO4" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">CO5</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editCO5" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2 py-1.5 text-xs font-mono font-bold text-center theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Program Outcomes (PO1 - PO12) Section -->
+            <div class="p-4 rounded-2xl bg-slate-100/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <span class="text-xs font-bold theme-text-primary block flex items-center gap-1.5">
+                    <i data-lucide="award" class="w-4 h-4 text-cyan-500"></i> Program Outcome Scores (PO1..PO12)
+                </span>
+                <p class="text-[11px] theme-text-muted">Attainment marks per Program Outcome (out of 100.0)</p>
+
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO1</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO2</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO2" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO3</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO3" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO4</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO4" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO5</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO5" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO6</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO6" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO7</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO7" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO8</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO8" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO9</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO9" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO10</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO10" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO11</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO11" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-center theme-text-muted mb-1">PO12</label>
+                        <input type="number" step="0.5" min="0" max="100" id="editPO12" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-1.5 py-1 text-xs font-mono text-center theme-text-primary outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="closeEditGradeModal()" class="px-4 py-2 text-xs font-bold theme-text-muted hover:text-white rounded-xl transition-all cursor-pointer">Cancel</button>
+                <button type="submit" id="btnSaveGradeRecord" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/30 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="check" class="w-4 h-4"></i> Save & Sync Tabulation
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openEditGradeModalFromButton(btn) {
+    const ds = btn.dataset;
+    document.getElementById('editRecordId').value = ds.recordId;
+    document.getElementById('editStudentId').value = ds.studentId;
+    document.getElementById('editStudentName').value = ds.studentName;
+    document.getElementById('editClassTest').value = (ds.classTest !== undefined && ds.classTest !== '') ? ds.classTest : '';
+    document.getElementById('editMidterm').value = (ds.midterm !== undefined && ds.midterm !== '') ? ds.midterm : '';
+    document.getElementById('editFinal').value = (ds.final !== undefined && ds.final !== '') ? ds.final : '';
+    document.getElementById('editAssignment').value = (ds.assignment !== undefined && ds.assignment !== '') ? ds.assignment : '';
+    document.getElementById('editAttendance').value = (ds.attendance !== undefined && ds.attendance !== '') ? ds.attendance : 5.0;
+    
+    // Clear all CO inputs first
+    for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`editCO${i}`);
+        if (el) el.value = '';
+    }
+    
+    // Clear all PO inputs first
+    for (let i = 1; i <= 12; i++) {
+        const el = document.getElementById(`editPO${i}`);
+        if (el) el.value = '';
+    }
+    
+    // Populate COs from JSON
+    try {
+        const coObj = JSON.parse(ds.coJson || '{}');
+        for (const [k, v] of Object.entries(coObj)) {
+            const num = k.replace(/[^0-9]/g, '');
+            const el = document.getElementById(`editCO${num}`);
+            if (el) el.value = v;
+        }
+    } catch(e) {
+        console.warn('Error parsing coJson', e);
+    }
+    
+    // Populate POs from JSON
+    try {
+        const poObj = JSON.parse(ds.poJson || '{}');
+        for (const [k, v] of Object.entries(poObj)) {
+            const num = k.replace(/[^0-9]/g, '');
+            const el = document.getElementById(`editPO${num}`);
+            if (el) el.value = v;
+        }
+    } catch(e) {
+        console.warn('Error parsing poJson', e);
+    }
+    
+    calculateLiveOverall();
+    
+    const modal = document.getElementById('editGradeModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    lucide.createIcons();
+}
+
+function closeEditGradeModal() {
+    const modal = document.getElementById('editGradeModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function calculateLiveOverall() {
+    const ctStr = document.getElementById('editClassTest').value.trim();
+    const midStr = document.getElementById('editMidterm').value.trim();
+    const fnStr = document.getElementById('editFinal').value.trim();
+    const asStr = document.getElementById('editAssignment').value.trim();
+    const attStr = document.getElementById('editAttendance').value.trim();
+    
+    const ct = ctStr !== '' ? parseFloat(ctStr) : 0;
+    const mid = midStr !== '' ? parseFloat(midStr) : 0;
+    const fn = fnStr !== '' ? parseFloat(fnStr) : 0;
+    const as = asStr !== '' ? parseFloat(asStr) : 0;
+    const att = attStr !== '' ? parseFloat(attStr) : 5.0;
+    
+    // Weightages: CT: 10%, Mid: 25%, Final: 50%, Assignment: 10%, Attendance: 5% (raw marks)
+    let weightedTotal = 0;
+    if (ctStr !== '') weightedTotal += (ct * 0.10);
+    if (midStr !== '') weightedTotal += (mid * 0.25);
+    if (fnStr !== '') weightedTotal += (fn * 0.50);
+    if (asStr !== '') weightedTotal += (as * 0.10);
+    weightedTotal += att;
+    
+    const overall = Math.min(100, Math.round(weightedTotal * 100) / 100);
+    document.getElementById('previewOverall').innerText = overall.toFixed(1) + '%';
+    
+    let grade = 'F';
+    if (overall >= 80) grade = 'A+';
+    else if (overall >= 75) grade = 'A';
+    else if (overall >= 70) grade = 'A-';
+    else if (overall >= 65) grade = 'B+';
+    else if (overall >= 60) grade = 'B';
+    else if (overall >= 55) grade = 'B-';
+    else if (overall >= 50) grade = 'C+';
+    else if (overall >= 45) grade = 'C';
+    else if (overall >= 40) grade = 'D';
+    
+    document.getElementById('previewGrade').innerText = grade;
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function submitEditGrade(e) {
+    e.preventDefault();
+    const recordId = document.getElementById('editRecordId').value;
+    const btn = document.getElementById('btnSaveGradeRecord');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Saving...`;
+
+    const coScores = {};
+    for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`editCO${i}`);
+        if (el && el.value.trim() !== '') {
+            coScores[`CO${i}`] = parseFloat(el.value) || 0.0;
+        }
+    }
+
+    const poScores = {};
+    for (let i = 1; i <= 12; i++) {
+        const el = document.getElementById(`editPO${i}`);
+        if (el && el.value.trim() !== '') {
+            poScores[`PO${i}`] = parseFloat(el.value) || 0.0;
+        }
+    }
+
+    const ctVal = document.getElementById('editClassTest').value.trim();
+    const midVal = document.getElementById('editMidterm').value.trim();
+    const fnVal = document.getElementById('editFinal').value.trim();
+    const asVal = document.getElementById('editAssignment').value.trim();
+    const attVal = document.getElementById('editAttendance').value.trim();
+
+    const payload = {
+        student_name: document.getElementById('editStudentName').value.trim(),
+        class_test: ctVal !== '' ? parseFloat(ctVal) : null,
+        midterm: midVal !== '' ? parseFloat(midVal) : null,
+        final: fnVal !== '' ? parseFloat(fnVal) : null,
+        assignment: asVal !== '' ? parseFloat(asVal) : null,
+        attendance_marks: attVal !== '' ? parseFloat(attVal) : 5.0,
+        co_scores: coScores,
+        po_scores: poScores
+    };
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+
+    fetch(`/api/tabulation/grade-record/${recordId}/update/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(res => {
+        if (!res.ok) {
+            return res.text().then(text => { throw new Error(`HTTP ${res.status}: ${text}`); });
+        }
+        return res.json();
+    })
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Save & Sync Tabulation`;
+        if (data.success) {
+            closeEditGradeModal();
+            // Reload page to reflect all computed columns cleanly
+            window.location.reload();
+        } else {
+            alert('Error updating grade record: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Save & Sync Tabulation`;
+        alert('Server or network error updating record: ' + err.message);
+    });
+}
+</script>
 {% endblock %}

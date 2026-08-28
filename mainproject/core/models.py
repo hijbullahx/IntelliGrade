@@ -83,8 +83,19 @@ class Examination(models.Model):
     question_paper_file = models.FileField(upload_to='exam_questions/%Y/%m/', blank=True, null=True, help_text="Uploaded Question Paper document or image.")
     rubric_file = models.FileField(upload_to='exam_rubrics/%Y/%m/', blank=True, null=True, help_text="Uploaded Grading Rubric document or image.")
     course_outline_file = models.FileField(upload_to='course_outlines/%Y/%m/', blank=True, null=True, help_text="Uploaded Course Syllabus / Outline document.")
+    master_solution_file = models.FileField(upload_to='exam_master_solutions/%Y/%m/', blank=True, null=True, help_text="Uploaded Master / Benchmark Solution Script (PDF or Images)")
+    master_solution_parsed = models.BooleanField(default=False, help_text="Flag indicating whether Master Solution has been OCR'd and mapped per question.")
     
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def has_master_solution(self) -> bool:
+        """Returns True if exam has uploaded master script, parsed solution, or manually defined questions with model answers."""
+        if self.master_solution_file or self.master_solution_parsed:
+            return True
+        if self.questions.exists():
+            return True
+        return False
 
     def __str__(self):
         return f"{self.course.code} - {self.title}"
@@ -95,6 +106,10 @@ class Question(models.Model):
     question_number = models.CharField(max_length=10)
     prompt_text = models.TextField()
     max_marks = models.DecimalField(max_digits=5, decimal_places=2)
+
+    # Master / Benchmark Golden Solution Fields
+    master_solution_text = models.TextField(blank=True, default="", help_text="Extracted step-by-step benchmark solution text for this question.")
+    master_solution_steps = models.JSONField(default=list, blank=True, help_text="Structured benchmark steps: [{'step': '1', 'desc': 'Matrix setup', 'marks': 5.0}]")
 
     @property
     def text(self) -> str:
@@ -118,10 +133,16 @@ class Question(models.Model):
 
     class Meta:
         ordering = ['question_number']
-        unique_together = ('examination', 'question_number')
+    @property
+    def formatted_number(self) -> str:
+        """Returns guaranteed single-Q formatted question label e.g. Q1, Q2, Q1(a)."""
+        num = str(self.question_number or "1").strip()
+        import re
+        clean = re.sub(r'^[Qq]+[\.\:\s\-]*', '', num)
+        return f"Q{clean}" if clean else "Q1"
 
     def __str__(self):
-        return f"Q{self.question_number} ({self.max_marks} marks) - {self.examination.title}"
+        return f"{self.formatted_number} ({self.max_marks} marks) - {self.examination.title}"
 
 
 class Rubric(models.Model):
@@ -138,7 +159,7 @@ class Rubric(models.Model):
     common_mistakes = models.JSONField(default=list, blank=True, help_text="Common student pitfalls and deductions")
 
     def __str__(self):
-        return f"Rubric for Q{self.question.question_number} ({self.question.examination.title})"
+        return f"Rubric for {self.question.formatted_number} ({self.question.examination.title})"
 
 
 class QuestionFigure(models.Model):
@@ -150,13 +171,14 @@ class QuestionFigure(models.Model):
     thumbnail = models.ImageField(upload_to='exam_figures/thumbs/%Y/%m/', blank=True, null=True)
     bounding_box = models.JSONField(default=list, blank=True, help_text="[xmin, ymin, xmax, ymax]")
     display_order = models.IntegerField(default=1)
+    is_master_solution_figure = models.BooleanField(default=False, help_text="True if this figure was extracted from the teacher's Master Benchmark Solution PDF.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['page_number', 'display_order', 'id']
 
     def __str__(self):
-        return f"Figure '{self.caption or 'Diagram'}' for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Figure '{self.caption or 'Diagram'}' for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class QuestionTable(models.Model):
@@ -184,7 +206,7 @@ class QuestionTable(models.Model):
         ordering = ['page_number', 'display_order', 'id']
 
     def __str__(self):
-        return f"Table '{self.caption or 'Data Table'}' for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Table '{self.caption or 'Data Table'}' for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class QuestionFormula(models.Model):
@@ -200,7 +222,7 @@ class QuestionFormula(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     def __str__(self):
-        return f"Formula for Q{self.question.question_number} (Page {self.page_number})"
+        return f"Formula for {self.question.formatted_number} (Page {self.page_number})"
 
 
 class DocumentDOM(models.Model):
@@ -369,6 +391,7 @@ class StudentSubmission(models.Model):
         WAITING_TEACHER_CONFIRMATION = 'WAITING_TEACHER_CONFIRMATION', 'Waiting for Teacher Confirmation'
         AI_EVALUATED = 'AI_EVALUATED', 'AI Evaluated'
         UNDER_REVIEW = 'UNDER_REVIEW', 'Under Teacher Review'
+        REVIEWED = 'REVIEWED', 'Teacher Reviewed'
         FINALIZED = 'FINALIZED', 'Finalized & Locked'
         ARCHIVED = 'ARCHIVED', 'Archived'
         FAILED = 'FAILED', 'Evaluation Failed'
@@ -384,6 +407,7 @@ class StudentSubmission(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.UPLOADED)
     requires_manual_review = models.BooleanField(default=False)
     is_finalized = models.BooleanField(default=False, help_text="Set to True after teacher clicks Finalize Evaluation. Triggers temp file cleanup.")
+    extracted_ocr_data = models.JSONField(default=dict, blank=True, help_text='Cached OCR text per page: {"page_1": "...", "page_2": "..."}')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -417,7 +441,7 @@ class SubmissionAnswer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Answer Q{self.question.question_number} - {self.submission.student_name}"
+        return f"Answer {self.question.formatted_number} - {self.submission.student_name}"
 
 
 class EvaluationResult(models.Model):
@@ -443,7 +467,7 @@ class EvaluationResult(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Result Q{self.submission_answer.question.question_number}: {self.obtained_marks}/{self.maximum_marks}"
+        return f"Result {self.submission_answer.question.formatted_number}: {self.obtained_marks}/{self.maximum_marks}"
 
 
 class EvaluationFeedback(models.Model):
@@ -605,7 +629,7 @@ class QuestionMapping(models.Model):
         unique_together = ('submission', 'question')
 
     def __str__(self):
-        return f"Mapping Submission #{self.submission.id} Q{self.question.question_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
+        return f"Mapping Submission #{self.submission.id} {self.question.formatted_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
 
 
 class MappingHistory(models.Model):
@@ -645,8 +669,10 @@ class StudentGradeRecord(models.Model):
     exam_scores = models.JSONField(default=dict, help_text="Exam / Assessment breakdown per question and totals")
     co_scores = models.JSONField(default=dict, help_text="Obtained marks per Course Outcome (e.g. {'CO1': 34.0, ...})")
     po_scores = models.JSONField(default=dict, help_text="Obtained marks per Program Outcome (e.g. {'PO1': 230.0, ...})")
+    attendance_marks = models.FloatField(default=5.0, help_text="Attendance score out of 5.0 (5% weightage)")
     overall_score = models.FloatField(default=0.0)
     letter_grade = models.CharField(max_length=10, default='F')
+    is_manually_edited = models.BooleanField(default=False, help_text="Flag indicating manual overrides from the instructor")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -654,6 +680,80 @@ class StudentGradeRecord(models.Model):
 
     def __str__(self):
         return f"GradeRecord: {self.student_name} ({self.student_id}) - {self.overall_score:.1f}% ({self.letter_grade})"
+
+    def get_category_data(self, category_key):
+        """Extracts and computes aggregated obtained, max, percentage, and weighted score for a category."""
+        if not self.exam_scores or not isinstance(self.exam_scores, dict):
+            return None
+        matching = []
+        for ex in self.exam_scores.values():
+            if isinstance(ex, dict):
+                c = ex.get('category') or ex.get('exam_type')
+                if c == category_key:
+                    matching.append(ex)
+        if not matching:
+            return None
+        avg_pct = sum(float(m.get('percentage', 0.0)) for m in matching) / len(matching)
+        tot_obtained = sum(float(m.get('obtained', 0.0)) for m in matching)
+        tot_max = sum(float(m.get('max_marks', 100.0)) for m in matching)
+        weights = {'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
+        if self.tabulation and self.tabulation.weightage_config:
+            w = float(self.tabulation.weightage_config.get(category_key, weights.get(category_key, 10.0)))
+        else:
+            w = float(weights.get(category_key, 10.0))
+        weighted_score = round(avg_pct * (w / 100.0), 2)
+        return {
+            'obtained': round(tot_obtained, 2),
+            'max_marks': round(tot_max, 2),
+            'percentage': round(avg_pct, 2),
+            'weighted': weighted_score,
+            'weight': w,
+            'exam_titles': [m.get('exam_title', '') for m in matching]
+        }
+
+    @property
+    def class_test_data(self):
+        return self.get_category_data('class_test')
+
+    @property
+    def midterm_data(self):
+        return self.get_category_data('midterm')
+
+    @property
+    def final_data(self):
+        return self.get_category_data('final')
+
+    @property
+    def assignment_data(self):
+        return self.get_category_data('assignment')
+
+    @property
+    def attendance_data(self):
+        weights = {'attendance': 5.0}
+        if self.tabulation and self.tabulation.weightage_config:
+            w = float(self.tabulation.weightage_config.get('attendance', 5.0))
+        else:
+            w = 5.0
+        att_val = float(getattr(self, 'attendance_marks', 5.0) or 0.0)
+        pct = (att_val / max(1.0, w)) * 100.0 if w > 0 else 100.0
+        return {
+            'obtained': round(att_val, 2),
+            'max_marks': round(w, 2),
+            'percentage': round(pct, 2),
+            'weighted': round(att_val, 2),
+            'weight': round(w, 2)
+        }
+
+    @property
+    def co_json_str(self):
+        import json
+        return json.dumps(self.co_scores or {})
+
+    @property
+    def po_json_str(self):
+        import json
+        return json.dumps(self.po_scores or {})
+
 
 
 

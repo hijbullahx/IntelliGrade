@@ -1,290 +1,472 @@
 {% extends 'base.html' %}
 
-{% block title %}Evaluation Workspace - {{ submission.student_name }} | IntelliGrade{% endblock %}
+{% block title %}Evaluation Workbench - {{ submission.student_name }} | IntelliGrade{% endblock %}
 
 {% block content %}
-<div class="h-[calc(100vh-5rem)] flex flex-col space-y-4 max-w-[1600px] mx-auto px-4 py-4">
+<div class="h-[calc(100vh-4.5rem)] flex flex-col space-y-3 max-w-[1920px] mx-auto px-3 sm:px-6 py-2">
 
-    <!-- Top Workspace Navigation Bar -->
-    <div class="glass-card p-4 rounded-2xl flex items-center justify-between shrink-0">
+    <!-- Top Workspace Navigation & Summary Bar -->
+    <div class="glass-card p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-lg border border-slate-200 dark:border-slate-800/80">
         <div class="flex items-center gap-3">
-            <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="p-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary transition-all">
+            <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 theme-text-primary transition-all shadow-sm">
                 <i data-lucide="arrow-left" class="w-4 h-4"></i>
             </a>
             <div>
                 <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-brand-500">{{ exam.course.code }}</span>
+                    <span class="px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400 font-extrabold text-[11px] uppercase tracking-wider">{{ exam.course.code }}</span>
                     <span class="theme-text-muted">•</span>
-                    <span class="text-xs font-semibold theme-text-muted">{{ exam.title }}</span>
+                    <span class="text-xs font-semibold theme-text-muted truncate max-w-[280px]">{{ exam.title }}</span>
                 </div>
-                <h1 class="text-lg font-extrabold theme-text-primary">Evaluation Workspace: <span class="text-brand-500">{{ submission.student_name }}</span> (Roll: {{ submission.student_roll_no|default:"N/A" }})</h1>
+                <div class="flex items-center gap-2.5 mt-0.5">
+                    <h1 class="text-base font-black theme-text-primary flex items-center gap-2">
+                        <span id="displayStudentName">{{ submission.student_name }}</span>
+                        <span id="displayStudentRoll" class="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted">Roll: {{ submission.student_roll_no|default:"N/A" }}</span>
+                    </h1>
+                    <button type="button" onclick="openEditStudentModal()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm transition-all flex items-center gap-1 cursor-pointer" title="Edit Student Name & Roll Number">
+                        <i data-lucide="edit-3" class="w-3 h-3 text-brand-500"></i>
+                        <span>Edit Info</span>
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div class="flex items-center gap-6">
-            <div class="text-right">
-                <span class="text-xs font-medium theme-text-muted block">Total Score</span>
-                <span id="submissionTotal" class="text-xl font-black text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks }} / {{ submission.total_max_marks }} ({{ submission.percentage }}%)</span>
+        <div class="flex items-center gap-4">
+            <div class="text-right hidden sm:block">
+                <span class="text-[10px] font-bold uppercase tracking-wider theme-text-muted block">Aggregated Score</span>
+                <span id="submissionTotal" class="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                    {{ submission.total_obtained_marks|default:"0.0" }} / {{ submission.total_max_marks|default:"0.0" }} ({{ submission.percentage|default:"0" }}%)
+                </span>
             </div>
-            <div class="flex items-center gap-3">
+
+            <div class="flex items-center gap-2">
                 <span class="px-3 py-1 rounded-full text-xs font-bold border 
-                    {% if submission.status == 'FINALIZED' %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20
-                    {% else %}bg-amber-500/10 text-amber-600 border-amber-500/20{% endif %}">
+                    {% if submission.status == 'FINALIZED' or submission.status == 'REVIEWED' %}bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20
+                    {% else %}bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20{% endif %}">
                     {{ submission.get_status_display }}
                 </span>
-                <a href="{% url 'api_download_evaluated_pdf' submission.id %}" target="_blank" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
-                    <i data-lucide="file-down" class="w-4 h-4"></i> Download Evaluated Script (PDF)
+                
+                <a href="{% url 'api_download_evaluated_pdf' submission.id %}" target="_blank" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow transition-all inline-flex items-center gap-1.5">
+                    <i data-lucide="file-down" class="w-3.5 h-3.5"></i> PDF
                 </a>
+
                 {% if not submission.is_finalized %}
-                <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
-                    <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
+                <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-1.5">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Finalize
                 </button>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- Main Workspace Split Panel -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
+    <!-- Synchronized Question Navigation Tabs -->
+    <div class="glass-card p-2 rounded-2xl flex items-center justify-between gap-2 overflow-x-auto shrink-0 shadow-md border border-slate-200 dark:border-slate-800/80">
+        <div class="flex items-center gap-2 min-w-max" id="questionTabsContainer">
+            {% for item in normalized_answers %}
+            {% with q=item.q eval=item.evaluation_result idx=forloop.counter0 %}
+            <button type="button" 
+                    id="qTab_{{ idx }}" 
+                    onclick="switchQuestionTab({{ idx }})" 
+                    class="q-nav-tab px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 border 
+                    {% if forloop.first %}bg-brand-600 text-white border-brand-500 shadow-md ring-2 ring-brand-500/20 active-tab{% else %}bg-slate-100 dark:bg-slate-900 theme-text-primary border-slate-200 dark:border-slate-800 hover:border-brand-500/40{% endif %}">
+                <span class="font-black font-mono">Q{{ q.number }}</span>
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded-full {% if forloop.first %}bg-white/20 text-white{% else %}bg-slate-200 dark:bg-slate-800 theme-text-muted{% endif %}" id="tabScore_{{ q.id }}">
+                    {{ eval.obtained_marks|default:"0.0" }}/{{ q.marks }}
+                </span>
+                {% if eval.status == 'OVERRIDDEN' %}
+                <span class="w-2 h-2 rounded-full bg-amber-400" title="Teacher Overridden"></span>
+                {% elif eval.status == 'APPROVED' %}
+                <span class="w-2 h-2 rounded-full bg-emerald-400" title="Approved"></span>
+                {% elif eval.requires_manual_review %}
+                <span class="w-2 h-2 rounded-full bg-rose-400 animate-pulse" title="Requires Review"></span>
+                {% endif %}
+            </button>
+            {% endwith %}
+            {% endfor %}
+        </div>
+
+        <!-- Quick View Controls on Tab Bar -->
+        <div class="flex items-center gap-2 shrink-0">
+            <button type="button" onclick="openAllPagesModal()" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted hover:theme-text-primary transition-all flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="layers" class="w-3.5 h-3.5"></i> All Pages ({{ all_pages|length }})
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Question-Scoped Split View (50% / 50%) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
         
-        <!-- Left Panel (5 Cols): Original Student Script Viewer -->
-        <div class="lg:col-span-5 glass-card p-4 rounded-2xl flex flex-col min-h-0">
+        <!-- LEFT PANEL (6 Cols = 50%): Student Handwritten Answer Evidence -->
+        <div class="lg:col-span-6 glass-card p-4 rounded-2xl flex flex-col min-h-0 shadow-xl border border-slate-200 dark:border-slate-800/80">
+            
+            <!-- Left Header with Dynamic Question & Zoom Controls -->
             <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
-                <h2 class="font-bold text-xs theme-text-primary flex items-center gap-2">
-                    <i data-lucide="file-text" class="w-4 h-4 text-brand-500"></i> Student Answer Script Pages ({{ submission.pages.count }})
-                </h2>
-            </div>
-            <div class="flex-1 overflow-y-auto mt-3 space-y-4 pr-1">
-                {% for p in submission.pages.all %}
-                <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-100/50 dark:bg-slate-900/50 p-2 space-y-2">
-                    <div class="flex items-center justify-between text-[11px] font-bold theme-text-muted px-1">
-                        <span>Page {{ p.page_number }}</span>
-                        <span>OCR Conf: {{ p.ocr_confidence }}</span>
-                    </div>
-                    {% if p.page_image %}
-                    <img src="{{ p.page_image.url }}" alt="Page {{ p.page_number }}" class="w-full h-auto rounded-lg shadow-md border border-slate-300 dark:border-slate-700/50">
-                    {% else %}
-                    <div class="p-8 text-center theme-text-muted text-xs">Page Image Rendered</div>
-                    {% endif %}
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-brand-500"></i>
+                    <h2 class="font-bold text-xs theme-text-primary flex items-center gap-2">
+                        <span>Student Script Evidence</span>
+                        <span id="activeQPageBadge" class="px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-500 text-[10px] font-extrabold font-mono">Pages: Pg 2</span>
+                    </h2>
                 </div>
-                {% empty %}
-                <div class="p-8 text-center theme-text-muted text-xs">No script pages found.</div>
+
+                <!-- Zoom & Viewport Controls -->
+                <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="zoomActiveImage(-0.15)" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 theme-text-muted hover:theme-text-primary transition-all" title="Zoom Out">
+                        <i data-lucide="zoom-out" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <span id="zoomLevelIndicator" class="text-[10px] font-mono font-bold px-1.5 theme-text-muted">100%</span>
+                    <button type="button" onclick="zoomActiveImage(0.15)" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 theme-text-muted hover:theme-text-primary transition-all" title="Zoom In">
+                        <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button type="button" onclick="resetActiveImageZoom()" class="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 theme-text-muted hover:theme-text-primary transition-all" title="Reset Zoom">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button type="button" onclick="openFullscreenViewer()" class="p-1.5 rounded-lg hover:bg-brand-500/20 text-brand-500 transition-all" title="Fullscreen High-Res View">
+                        <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Question-Scoped Visual Image Stream Container -->
+            <div class="flex-1 overflow-y-auto mt-3 pr-1 space-y-4" id="leftEvidenceContainer">
+                {% for item in normalized_answers %}
+                {% with idx=forloop.counter0 q=item.q ans=item.answer %}
+                <div id="qEvidence_{{ idx }}" class="q-evidence-panel space-y-3 {% if not forloop.first %}hidden{% endif %}">
+                    
+                    {% if item.mapped_pages %}
+                        {% for p in item.mapped_pages %}
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-100/60 dark:bg-slate-950 p-2.5 space-y-2 shadow-inner">
+                            <div class="flex items-center justify-between text-[11px] font-extrabold theme-text-muted px-1">
+                                <span class="flex items-center gap-1.5 text-brand-600 dark:text-brand-400">
+                                    <i data-lucide="file-check-2" class="w-3.5 h-3.5"></i> Page {{ p.page_number }} of {{ all_pages|length }}
+                                </span>
+                                <span class="font-mono text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-full">OCR Conf: {{ p.ocr_confidence|floatformat:2 }}</span>
+                            </div>
+                            
+                            <div class="relative overflow-hidden rounded-lg border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-center p-1">
+                                {% if p.resolved_image_url %}
+                                <img src="{{ p.resolved_image_url }}" 
+                                     alt="Page {{ p.page_number }}" 
+                                     loading="lazy"
+                                     decoding="async"
+                                     id="evidenceImg_{{ idx }}_{{ forloop.counter0 }}" 
+                                     class="evidence-zoomable-img max-w-full h-auto rounded shadow-sm transition-transform duration-200 origin-top cursor-zoom-in"
+                                     onclick="openImageModal('{{ p.resolved_image_url }}', 'Page {{ p.page_number }} - Q{{ q.number }}')">
+                                {% elif p.page_image %}
+                                <img src="{{ p.page_image.url }}" 
+                                     alt="Page {{ p.page_number }}" 
+                                     loading="lazy"
+                                     decoding="async"
+                                     id="evidenceImg_{{ idx }}_{{ forloop.counter0 }}" 
+                                     class="evidence-zoomable-img max-w-full h-auto rounded shadow-sm transition-transform duration-200 origin-top cursor-zoom-in"
+                                     onclick="openImageModal('{{ p.page_image.url }}', 'Page {{ p.page_number }} - Q{{ q.number }}')">
+                                {% else %}
+                                <div class="p-12 text-center theme-text-muted text-xs">No page image rendered.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="p-8 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-800 text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+                            <i data-lucide="alert-circle" class="w-8 h-8 text-amber-500 mx-auto"></i>
+                            <div class="text-xs font-bold theme-text-primary">No specific pages mapped to Question Q{{ q.number }}</div>
+                            <p class="text-[11px] theme-text-muted max-w-xs mx-auto">This question may have been skipped by the student or unmapped during ingestion.</p>
+                            <button type="button" onclick="openAllPagesModal()" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5">
+                                <i data-lucide="layers" class="w-3.5 h-3.5"></i> Inspect Full Script Pages
+                            </button>
+                        </div>
+                    {% endif %}
+
+                    <!-- Collapsible Raw OCR Transcription Accordion -->
+                    <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/50">
+                        <button type="button" 
+                                onclick="toggleOcrAccordion({{ idx }})" 
+                                class="w-full p-3 flex items-center justify-between text-left text-xs font-bold theme-text-primary hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors">
+                            <span class="flex items-center gap-2">
+                                <i data-lucide="align-left" class="w-3.5 h-3.5 text-brand-500"></i> Raw OCR Text Transcription (Q{{ q.number }})
+                            </span>
+                            <i data-lucide="chevron-down" id="ocrChevron_{{ idx }}" class="w-3.5 h-3.5 theme-text-muted transition-transform"></i>
+                        </button>
+                        <div id="ocrContent_{{ idx }}" class="hidden p-3 pt-0 border-t border-slate-200 dark:border-slate-800/60 text-xs theme-text-secondary font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto bg-slate-100/50 dark:bg-slate-950/50">
+                            {{ ans.extracted_text|default:"[No text extracted for this question]" }}
+                        </div>
+                    </div>
+
+                </div>
+                {% endwith %}
                 {% endfor %}
             </div>
         </div>
 
-        <!-- Right Panel (7 Cols): Per-Question Evaluation Cards & Override Workbench -->
-        <div class="lg:col-span-7 glass-card p-4 rounded-2xl flex flex-col min-h-0">
+        <!-- RIGHT PANEL (6 Cols = 50%): Benchmark Reference & Step-by-Step Scoring -->
+        <div class="lg:col-span-6 glass-card p-4 rounded-2xl flex flex-col min-h-0 shadow-xl border border-slate-200 dark:border-slate-800/80">
+            
+            <!-- Right Panel Secondary Tab Switcher -->
             <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
-                <h2 class="font-bold text-xs theme-text-primary flex items-center gap-2">
-                    <i data-lucide="check-square" class="w-4 h-4 text-emerald-500"></i> Question-by-Question AI Evaluation & Teacher Review
-                </h2>
+                <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <button type="button" onclick="switchRightTab('eval')" id="subTab_eval" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-500"></i> AI Evaluation & Steps
+                    </button>
+                    <button type="button" onclick="switchRightTab('benchmark')" id="subTab_benchmark" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5">
+                        <i data-lucide="book-open" class="w-3.5 h-3.5 text-brand-500"></i> Master Benchmark Key
+                    </button>
+                    <button type="button" onclick="switchRightTab('rubric')" id="subTab_rubric" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5">
+                        <i data-lucide="check-square" class="w-3.5 h-3.5 text-purple-500"></i> Rubric & Outcomes
+                    </button>
+                </div>
+
+                <div class="text-right">
+                    <span class="text-[10px] font-bold uppercase tracking-wider theme-text-muted block">Question Weight</span>
+                    <span id="activeQWeightBadge" class="text-sm font-black text-brand-500 font-mono">10.0 Marks</span>
+                </div>
             </div>
 
-            <div class="flex-1 overflow-y-auto mt-3 space-y-6 pr-1">
-
-                {% if is_mcq %}
-                <!-- MCQ / Quiz Evaluation Matrix & Summary Header -->
-                <div class="mb-6 p-5 rounded-2xl border-2 border-purple-500/40 bg-purple-500/5 space-y-4 shadow-xl">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/20 pb-3">
-                        <div>
-                            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 font-extrabold text-xs">
-                                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> MCQ / Quiz Evaluation Engine
-                            </div>
-                            <h3 class="text-base font-extrabold theme-text-primary mt-1">Automatic Mark Detection Matrix</h3>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <button type="button" onclick="runMcqEvaluationWorkspace({{ exam.id }})" id="wsMcqEvalBtn" class="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 cursor-pointer">
-                                <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)
-                            </button>
-                            <span class="text-xs font-bold theme-text-muted">Total Score:</span>
-                            <span class="text-lg font-black text-purple-600 dark:text-purple-400 font-mono">{{ mcq_summary.total_score }} / {{ mcq_summary.max_score }} ({{ mcq_summary.percentage }}%)</span>
-                        </div>
-                    </div>
-
-                    <!-- Top Performance Summary Counters -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                            <span class="block text-[10px] font-extrabold uppercase">✓ Correct</span>
-                            <span class="text-lg font-black">{{ mcq_summary.total_correct }}</span>
-                        </div>
-                        <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
-                            <span class="block text-[10px] font-extrabold uppercase">✗ Incorrect</span>
-                            <span class="text-lg font-black">{{ mcq_summary.total_incorrect }}</span>
-                        </div>
-                        <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
-                            <span class="block text-[10px] font-extrabold uppercase">⚠️ Multi-Mark / Rejected</span>
-                            <span class="text-lg font-black">{{ mcq_summary.total_rejected }}</span>
-                        </div>
-                        <div class="p-3 rounded-xl bg-slate-500/10 border border-slate-500/20 theme-text-muted">
-                            <span class="block text-[10px] font-extrabold uppercase">— Blank / Unattempted</span>
-                            <span class="text-lg font-black">{{ mcq_summary.total_not_attempted }}</span>
-                        </div>
-                    </div>
-
-                    <!-- MCQ Evaluation Table -->
-                    <div class="overflow-x-auto rounded-xl border border-purple-500/20">
-                        <table class="w-full text-left text-xs font-sans">
-                            <thead class="bg-purple-900/10 theme-text-muted uppercase font-bold text-[10px] border-b border-purple-500/20">
-                                <tr>
-                                    <th class="px-3 py-2.5">Q#</th>
-                                    <th class="px-3 py-2.5">Scheme</th>
-                                    <th class="px-3 py-2.5">Student Mark Detected</th>
-                                    <th class="px-3 py-2.5">Answer Key</th>
-                                    <th class="px-3 py-2.5">Verdict Status</th>
-                                    <th class="px-3 py-2.5 text-right">Score</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-purple-500/10 font-medium">
-                                {% for item in mcq_breakdown %}
-                                <tr class="hover:bg-purple-500/5 transition-colors">
-                                    <td class="px-3 py-2.5 font-extrabold theme-text-primary font-mono">{{ item.question_number }}</td>
-                                    <td class="px-3 py-2.5 font-mono text-[10px] theme-text-muted">{{ item.scheme }}</td>
-                                    <td class="px-3 py-2.5">
-                                        {% if item.detected_answer %}
-                                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-300 font-bold font-mono text-[11px] border border-purple-500/30">
-                                            {{ item.mark_type }}: {{ item.detected_answer|join:", " }}
-                                        </span>
-                                        {% else %}
-                                        <span class="text-slate-400 italic text-[11px]">— Blank</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="px-3 py-2.5 font-mono font-bold text-emerald-600 dark:text-emerald-400">Key: {{ item.correct_answer }}</td>
-                                    <td class="px-3 py-2.5">
-                                        {% if item.verdict == 'CORRECT' %}
-                                        <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-[10px] border border-emerald-500/30">✓ Correct</span>
-                                        {% elif item.verdict == 'INCORRECT' %}
-                                        <span class="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-500/30">✗ Incorrect</span>
-                                        {% elif item.verdict == 'REJECTED_MULTIPLE_MARKS' %}
-                                        <span class="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/30">⚠️ Multiple Marked / Invalid</span>
-                                        {% else %}
-                                        <span class="px-2 py-0.5 rounded-full bg-slate-500/20 theme-text-muted font-bold text-[10px] border border-slate-500/30">— Unattempted</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="px-3 py-2.5 text-right font-mono font-bold theme-text-primary">{{ item.marks_awarded }} / {{ item.max_marks }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                {% endif %}
-
+            <!-- Right Panel Scrollable Content Body -->
+            <div class="flex-1 overflow-y-auto mt-3 pr-1 space-y-4" id="rightContentContainer">
                 {% for item in normalized_answers %}
-                {% with ans=item.answer eval=item.evaluation_result q=item.q %}
-                <div class="border border-slate-200 dark:border-slate-800 rounded-2xl p-5 bg-slate-50/50 dark:bg-slate-900/40 space-y-4 shadow-lg">
+                {% with idx=forloop.counter0 q=item.q eval=item.evaluation_result ans=item.answer %}
+                <div id="qRightPanel_{{ idx }}" class="q-right-panel space-y-4 {% if not forloop.first %}hidden{% endif %}">
                     
-                    <!-- Question Header & Badges -->
-                    <div class="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-3">
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-0.5 rounded bg-brand-500/10 text-brand-500 font-extrabold text-xs">Q{{ q.number }}</span>
-                                <span class="text-xs font-semibold theme-text-muted">CO: {{ q.co }} | PO: {{ q.po }} | Bloom: {{ q.bloom }}</span>
-                            </div>
-                            <h3 class="text-sm font-bold theme-text-primary mt-1">{{ q.question_display_text }}</h3>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <span class="text-xs theme-text-muted block font-semibold">Allocated Marks</span>
-                            <span class="text-lg font-black text-brand-500">{{ q.marks }}</span>
-                        </div>
-                    </div>
-
-                    <!-- Stored Attachments (Figures, Tables, Formulas) -->
-                    {% if q.figures or q.tables or q.formulas %}
-                    <div class="p-3 rounded-xl bg-slate-100/70 dark:bg-slate-800/40 space-y-2 border border-slate-200 dark:border-slate-700/40 text-xs">
-                        <span class="font-bold theme-text-muted block text-[11px] uppercase tracking-wider">Stored Question Attachments</span>
+                    <!-- TAB CONTENT 1: AI Evaluation Breakdown & Step Scoring -->
+                    <div id="rightTabContent_eval_{{ idx }}" class="right-tab-pane space-y-4">
                         
-                        {% for fig in q.figures %}
-                        <div class="flex items-center gap-3">
-                            <span class="font-bold text-brand-500 dark:text-brand-400">Figure:</span>
-                            {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-24 rounded border border-slate-300 dark:border-slate-700">{% endif %}
-                            <span class="theme-text-muted text-[11px]">{{ fig.caption }}</span>
-                        </div>
-                        {% endfor %}
+                        <!-- AI Assessment Summary Card -->
+                        <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2.5 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
+                                    <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">AI Evaluation Feedback</span>
+                                    <span class="text-[10px] font-mono theme-text-muted">(Confidence: {{ eval.confidence_score|default:"0.85" }})</span>
+                                </div>
+                                <span class="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono" id="rightScoreBadge_{{ eval.id }}">
+                                    {{ eval.obtained_marks|default:"0.0" }} / {{ q.marks }}
+                                </span>
+                            </div>
 
-                        {% for tbl in q.tables %}
-                        <div class="space-y-1">
-                            <span class="font-bold text-emerald-600 dark:text-emerald-400">Table / Matrix ({{ tbl.rows }}x{{ tbl.columns }}):</span>
-                            <div class="overflow-x-auto">
-                                <table class="text-[10px] border-collapse border border-slate-300 dark:border-slate-700">
-                                    {% for row in tbl.cell_json %}
-                                    <tr>
-                                        {% for cell in row %}
-                                        <td class="border border-slate-300 dark:border-slate-700 px-2 py-1 bg-slate-100 dark:bg-slate-900 font-mono theme-text-primary">{{ cell }}</td>
-                                        {% endfor %}
-                                    </tr>
+                            <p class="text-xs theme-text-primary leading-relaxed font-medium">
+                                {{ eval.feedback_text|default:"Evaluation completed. Review point-by-point breakdown below." }}
+                            </p>
+
+                            <div class="flex flex-wrap items-center gap-2 pt-1">
+                                <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold theme-text-muted">Bloom: {{ q.bloom }}</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold theme-text-muted">CO: {{ q.co }}</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-[10px] font-bold theme-text-muted">PO: {{ q.po }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Step-by-Step Benchmark Breakdown Table -->
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                            <div class="p-3 bg-slate-100/70 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                                <h3 class="font-extrabold text-xs theme-text-primary flex items-center gap-1.5">
+                                    <i data-lucide="list-ordered" class="w-3.5 h-3.5 text-brand-500"></i> Step-by-Step Grounded Marking
+                                </h3>
+                                <span class="text-[10px] font-bold theme-text-muted">Point-by-point deduction</span>
+                            </div>
+
+                            <div class="divide-y divide-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/40">
+                                {% if item.rubric_breakdown %}
+                                    {% for step in item.rubric_breakdown %}
+                                    <div class="p-3 space-y-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-850/50 transition-colors">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="font-bold theme-text-primary flex-1">
+                                                <span class="text-brand-500 font-mono font-black mr-1">Step {{ step.step_num }}:</span>
+                                                <span>{{ step.description }}</span>
+                                            </div>
+                                            <div class="flex items-center gap-1 shrink-0 font-mono font-bold">
+                                                <input type="number" 
+                                                       step="0.5" 
+                                                       min="0" 
+                                                       max="{{ step.allocated }}" 
+                                                       value="{{ step.awarded }}" 
+                                                       oninput="recalculateStepMarks({{ idx }}, {{ eval.id }})" 
+                                                       class="step-score-input-{{ idx }} w-14 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-center theme-text-primary focus:ring-1 focus:ring-brand-500 outline-none">
+                                                <span class="theme-text-muted">/ {{ step.allocated }}</span>
+                                            </div>
+                                        </div>
+
+                                        {% if step.grounding_evidence %}
+                                        <div class="p-2 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] font-mono space-y-0.5">
+                                            <span class="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 block">Matched Handwritten Evidence:</span>
+                                            <span class="theme-text-secondary">"{{ step.grounding_evidence }}"</span>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if step.comment %}
+                                        <div class="text-[11px] theme-text-muted flex items-start gap-1">
+                                            <span class="font-bold text-amber-500">Note:</span>
+                                            <span>{{ step.comment }}</span>
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                     {% endfor %}
-                                </table>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-
-                    <!-- Student Extracted Answer (OCR) -->
-                    <div class="p-3 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                        <span class="text-[11px] font-bold theme-text-muted block uppercase tracking-wider">Student Extracted Answer (OCR)</span>
-                        <p class="text-xs theme-text-primary font-mono whitespace-pre-wrap leading-relaxed">{{ ans.extracted_text|default:"[No answer text extracted]" }}</p>
-                    </div>
-
-                    <!-- AI Evaluation Breakdown -->
-                    {% if eval %}
-                    <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
-                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">AI Evaluation Feedback</span>
-                                <span class="text-[10px] theme-text-muted">(Confidence: {{ eval.confidence }})</span>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-base font-black text-emerald-600 dark:text-emerald-400" id="marks_disp_{{ eval.id }}">{{ eval.obtained_marks }} / {{ eval.maximum_marks }}</span>
+                                {% else %}
+                                    <div class="p-4 text-center theme-text-muted text-xs">
+                                        Standard rubric evaluation. Adjust total marks directly in the bottom action bar.
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
 
-                        <p class="text-xs theme-text-primary leading-relaxed font-medium">{{ eval.feedback_text }}</p>
-
-                        <!-- Strengths & Mistakes lists -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
-                            {% if eval.strengths_json %}
-                            <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                <span class="font-bold text-emerald-600 dark:text-emerald-500 block mb-1">Strengths</span>
-                                <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
-                                    {% for s in eval.strengths_json %}<li>{{ s }}</li>{% endfor %}
+                        <!-- Strengths & Mistakes Two-Column Cards -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-1.5">
+                                <span class="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                                    <i data-lucide="check" class="w-3.5 h-3.5"></i> Demonstrated Strengths
+                                </span>
+                                <ul class="list-disc list-inside space-y-1 text-[11px] theme-text-secondary">
+                                    {% for s in item.strengths %}<li>{{ s }}</li>{% empty %}<li class="text-slate-400 italic">No specific strengths flagged</li>{% endfor %}
                                 </ul>
                             </div>
-                            {% endif %}
 
-                            {% if eval.mistakes_json %}
-                            <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                                <span class="font-bold text-rose-600 dark:text-rose-500 block mb-1">Mistakes / Missing</span>
-                                <ul class="list-disc list-inside space-y-0.5 text-[11px] theme-text-secondary">
-                                    {% for m in eval.mistakes_json %}<li>{{ m }}</li>{% endfor %}
+                            <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-1.5">
+                                <span class="font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Deductions & Gaps
+                                </span>
+                                <ul class="list-disc list-inside space-y-1 text-[11px] theme-text-secondary">
+                                    {% for m in item.mistakes %}<li>{{ m }}</li>{% empty %}<li class="text-slate-400 italic">No errors flagged</li>{% endfor %}
                                 </ul>
                             </div>
-                            {% endif %}
                         </div>
 
-                        <!-- Teacher Review & Manual Score Assignment / Override Controls -->
-                        <div class="pt-3 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold theme-text-muted">Manual Evaluate / Assign Marks:</span>
-                                <input type="number" step="0.5" min="0" max="{{ q.marks }}" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks }}" class="w-20 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs font-bold theme-text-primary text-center focus:ring-2 focus:ring-amber-500 outline-none">
-                                <span class="text-xs theme-text-muted">/ {{ q.marks }}</span>
-                                <button onclick="submitReview({{ eval.id }}, 'OVERRIDE')" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5">
-                                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Assign / Save Marks
+                    </div>
+
+                    <!-- TAB CONTENT 2: Master Benchmark Key Reference -->
+                    <div id="rightTabContent_benchmark_{{ idx }}" class="right-tab-pane space-y-4 hidden">
+                        
+                        <!-- Question-Specific Master Golden Text & Structured Steps -->
+                        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-xs text-brand-600 dark:text-brand-400 uppercase tracking-wider block">Question Q{{ q.number }} Benchmark Solution</span>
+                                {% if master_solution_file_url %}
+                                <button type="button" onclick="openImageModal('{{ master_solution_file_url }}', 'Teacher Master Baseline Solution Document')" class="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[11px] font-bold theme-text-primary transition-all inline-flex items-center gap-1">
+                                    <i data-lucide="file-text" class="w-3 h-3 text-brand-500"></i> View Baseline Doc
                                 </button>
+                                {% endif %}
                             </div>
+
+                            <div class="text-xs theme-text-primary leading-relaxed whitespace-pre-wrap font-sans">
+                                {{ item.master_solution_text|default:"No dedicated master solution text uploaded for this question." }}
+                            </div>
+
+                            {% if item.master_solution_steps %}
+                            <div class="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5">
+                                <span class="text-[10px] font-extrabold uppercase tracking-wider theme-text-muted block">Expected Benchmark Steps:</span>
+                                <div class="space-y-1 text-xs font-mono">
+                                    {% for step in item.master_solution_steps %}
+                                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                                        <span>Step {{ step.step_num }}: {{ step.description }}</span>
+                                        <span class="font-bold text-brand-500">{{ step.marks }} Marks</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Stored Figures, Tables, Formulas for Question -->
+                        {% if q.figures or q.tables or q.formulas %}
+                        <div class="p-3 rounded-xl bg-slate-100/70 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+                            <span class="font-bold theme-text-muted block text-[11px] uppercase tracking-wider">Exam Attachments</span>
+                            
+                            {% for fig in q.figures %}
+                            <div class="flex items-center gap-3">
+                                <span class="font-bold text-brand-500">Figure:</span>
+                                {% if fig.image %}<img src="{{ fig.image.url }}" alt="{{ fig.caption }}" loading="lazy" decoding="async" class="max-h-24 rounded border border-slate-300 dark:border-slate-700 cursor-pointer" onclick="openImageModal('{{ fig.image.url }}', '{{ fig.caption }}')">{% endif %}
+                                <span class="theme-text-muted text-[11px]">{{ fig.caption }}</span>
+                            </div>
+                            {% endfor %}
+
+                            {% for tbl in q.tables %}
+                            <div class="space-y-1">
+                                <span class="font-bold text-emerald-600 dark:text-emerald-400">Table ({{ tbl.rows }}x{{ tbl.columns }}):</span>
+                                <div class="overflow-x-auto">
+                                    <table class="text-[10px] border-collapse border border-slate-300 dark:border-slate-700">
+                                        {% for row in tbl.cell_json %}
+                                        <tr>
+                                            {% for cell in row %}
+                                            <td class="border border-slate-300 dark:border-slate-700 px-2 py-1 bg-slate-100 dark:bg-slate-950 font-mono theme-text-primary">{{ cell }}</td>
+                                            {% endfor %}
+                                        </tr>
+                                        {% endfor %}
+                                    </table>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                    </div>
+
+                    <!-- TAB CONTENT 3: Rubric & Outcomes -->
+                    <div id="rightTabContent_rubric_{{ idx }}" class="right-tab-pane space-y-4 hidden">
+                        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+                            <div>
+                                <span class="font-bold theme-text-muted uppercase text-[10px] tracking-wider block">Question Prompt Text</span>
+                                <p class="text-xs theme-text-primary mt-1 font-medium">{{ q.question_display_text }}</p>
+                            </div>
+                            
+                            <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
+                                <span class="font-bold theme-text-muted uppercase text-[10px] tracking-wider block">Grading Rubric & Evaluation Standard</span>
+                                <p class="text-xs theme-text-secondary mt-1 whitespace-pre-wrap">{{ q.rubric|default:"Standard scoring rubric applies." }}</p>
+                            </div>
+
+                            {% if q.alternative_answers %}
+                            <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
+                                <span class="font-bold text-amber-500 uppercase text-[10px] tracking-wider block">Accepted Alternative Approaches</span>
+                                <p class="text-xs theme-text-secondary mt-1">{{ q.alternative_answers }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- BOTTOM INTERACTIVE OVERRIDE & ACTION DOCK -->
+                    <div class="p-4 rounded-2xl bg-slate-100/90 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 space-y-3 shadow-lg shrink-0 mt-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            
+                            <!-- Score Input -->
                             <div class="flex items-center gap-2">
-                                <button onclick="submitReview({{ eval.id }}, 'APPROVE')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-1">
+                                <label class="text-xs font-bold theme-text-primary">Assigned Score:</label>
+                                <div class="flex items-center gap-1 bg-white dark:bg-slate-950 px-2 py-1 rounded-xl border border-slate-300 dark:border-slate-700 shadow-inner">
+                                    <input type="number" 
+                                           step="0.5" 
+                                           min="0" 
+                                           max="{{ q.marks }}" 
+                                           id="override_input_{{ eval.id }}" 
+                                           value="{{ eval.obtained_marks|default:'0.0' }}" 
+                                           class="w-16 text-center text-sm font-black font-mono text-brand-600 dark:text-brand-400 bg-transparent outline-none">
+                                    <span class="text-xs font-bold theme-text-muted">/ {{ q.marks }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Override Action Buttons -->
+                            <div class="flex items-center gap-2">
+                                <button type="button" 
+                                        onclick="submitReview({{ eval.id }}, 'OVERRIDE', {{ idx }})" 
+                                        class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
+                                    <i data-lucide="save" class="w-3.5 h-3.5"></i> Save Score Override
+                                </button>
+                                
+                                <button type="button" 
+                                        onclick="submitReview({{ eval.id }}, 'APPROVE', {{ idx }})" 
+                                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
                                     <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
                                 </button>
-                                <button onclick="openReevalModal()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-all shadow flex items-center gap-1">
-                                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Re-Evaluate
+
+                                <button type="button" 
+                                        onclick="nextQuestionTab({{ idx }})" 
+                                        class="px-3.5 py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary font-bold rounded-xl text-xs transition-all flex items-center gap-1">
+                                    Next <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Teacher Comment / Audit Feedback Box -->
+                        <div>
+                            <input type="text" 
+                                   id="review_comment_{{ eval.id }}" 
+                                   placeholder="Add optional teacher evaluation comment or override rationale..." 
+                                   class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs theme-text-primary outline-none focus:ring-1 focus:ring-brand-500">
+                        </div>
                     </div>
-                    {% endif %}
 
                 </div>
                 {% endwith %}
@@ -295,208 +477,221 @@
     </div>
 </div>
 
-<!-- Fixed Bottom Action Bar -->
-<div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 px-6 shadow-2xl flex items-center justify-between">
-    <div class="flex items-center gap-3">
-        <a href="{% url 'evaluate_answer_scripts_list' submission.examination.id %}" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
-            <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
-        </a>
-        <button type="button" onclick="triggerRerunOCR({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
-            <i data-lucide="scan" class="w-4 h-4"></i> Re-run OCR
-        </button>
-        <button type="button" onclick="triggerRerunMapping({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all inline-flex items-center gap-1.5">
-            <i data-lucide="git-merge" class="w-4 h-4"></i> Re-run Mapping
-        </button>
-        <button type="button" onclick="openReevalModal()" class="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
-            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Re-evaluate
-        </button>
-        <button type="button" onclick="openPromptOverrideModal()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-md">
-            <i data-lucide="message-square-plus" class="w-4 h-4"></i> Prompt Override
-        </button>
+<!-- Image Modal for Deep Zoom -->
+<div id="imageZoomModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 hidden">
+    <div class="flex items-center justify-between w-full max-w-5xl pb-2">
+        <h3 id="imageModalTitle" class="text-sm font-bold text-white">Full Resolution Script Preview</h3>
+        <button onclick="closeImageModal()" class="text-white hover:text-rose-400 text-xl font-bold p-2">&times;</button>
     </div>
-
-    <div class="flex items-center gap-3">
-        <button type="button" onclick="saveDraftWorkspace({{ submission.id }})" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-md">
-            <i data-lucide="save" class="w-4 h-4"></i> Save Draft
-        </button>
-        {% if not submission.is_finalized %}
-        <button type="button" onclick="finalizeSubmissionEvaluation({{ submission.id }})" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold transition-all inline-flex items-center gap-1.5 shadow-xl">
-            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Finalize Evaluation
-        </button>
-        {% else %}
-        <span class="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
-            <i data-lucide="lock" class="w-4 h-4"></i> Finalized & Locked
-        </span>
-        {% endif %}
-        <button type="button" onclick="cancelEvaluation({{ submission.id }})" class="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 text-xs font-bold transition-all border border-rose-500/30">
-            Cancel
-        </button>
+    <div class="max-w-5xl max-h-[85vh] overflow-auto rounded-xl border border-slate-800 bg-slate-900 p-2 flex items-center justify-center">
+        <img id="imageModalTarget" src="" alt="Zoom Preview" class="max-w-full h-auto rounded shadow-2xl">
     </div>
 </div>
 
-<!-- Re-Evaluation Options Modal -->
-<div id="reevalModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-    <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl border border-purple-500/30 space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+<!-- All Pages Overview Modal -->
+<div id="allPagesModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-5xl w-full p-6 rounded-2xl shadow-2xl border border-slate-700 space-y-4 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 shrink-0">
             <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
-                <i data-lucide="refresh-cw" class="w-4 h-4 text-purple-500 dark:text-purple-400"></i> Re-Evaluation Settings & Tuning Options
+                <i data-lucide="layers" class="w-4 h-4 text-brand-500"></i> All Submission Pages ({{ all_pages|length }})
             </h3>
-            <button onclick="closeReevalModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
+            <button onclick="closeAllPagesModal()" class="theme-text-muted hover:theme-text-primary text-lg">&times;</button>
         </div>
 
-        <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Strictness Level</label>
-                    <select id="reevalStrictness" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Lenient">Lenient</option>
-                        <option value="Balanced" selected>Balanced</option>
-                        <option value="Strict">Strict Mode</option>
-                    </select>
+        <div class="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-1">
+            {% for p in all_pages %}
+            <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-900 p-2 space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] font-bold theme-text-muted">
+                    <span>Page {{ p.page_number }}</span>
+                    <span>Conf: {{ p.ocr_confidence|floatformat:2 }}</span>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold theme-text-muted mb-1">Evaluation Mode</label>
-                    <select id="reevalEvalMode" class="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary">
-                        <option value="Rubric-based" selected>Use Rubric Strictly</option>
-                        <option value="Concept-based">Use Lenient Mode</option>
-                        <option value="Keyword-based">Keyword-based</option>
-                    </select>
-                </div>
+                {% if p.page_image %}
+                <img src="{{ p.page_image.url }}" alt="Page {{ p.page_number }}" class="w-full h-auto rounded border border-slate-300 dark:border-slate-800 cursor-pointer hover:opacity-90 transition-opacity" onclick="openImageModal('{{ p.page_image.url }}', 'Submission Page {{ p.page_number }}')">
+                {% endif %}
             </div>
-
-            <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Temperature / Creativity Sampling</label>
-                <div class="flex items-center gap-3">
-                    <input type="range" id="reevalTemp" min="0.0" max="1.0" step="0.1" value="0.2" oninput="document.getElementById('tempValDisp').innerText = this.value" class="flex-1">
-                    <span id="tempValDisp" class="font-mono text-xs font-bold theme-text-primary">0.2</span>
-                </div>
-            </div>
-
-            <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-                <span class="block text-xs font-bold text-slate-400">Ink & Annotation Removal Options</span>
-                <div class="grid grid-cols-2 gap-2 text-xs text-slate-300">
-                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreRedInk" checked class="rounded border-slate-700"> Ignore Red Ink</label>
-                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreBlueInk" class="rounded border-slate-700"> Ignore Blue Ink</label>
-                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreGreenInk" class="rounded border-slate-700"> Ignore Green Ink</label>
-                    <label class="flex items-center gap-2"><input type="checkbox" id="ignoreHighlighter" class="rounded border-slate-700"> Ignore Yellow Highlighter</label>
-                </div>
-            </div>
-
-            <div>
-                <label class="block text-xs font-bold theme-text-muted mb-1">Additional Teacher Prompt / Custom Guidance</label>
-                <textarea id="reevalCustomPrompt" rows="2" placeholder="e.g. Be more strict regarding mathematical derivations." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
-            </div>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-2">
-            <button onclick="closeReevalModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
-            <button onclick="submitReevalV3()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shadow-lg">Run Re-Evaluation</button>
-        </div>
-    </div>
-</div>
-
-<!-- Prompt Override Modal -->
-<div id="promptOverrideModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl border border-indigo-500/30 space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-            <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
-                <i data-lucide="message-square-plus" class="w-4 h-4 text-indigo-500"></i> Prompt Override Guidance
-            </h3>
-            <button onclick="closePromptOverrideModal()" class="theme-text-muted hover:theme-text-primary">&times;</button>
-        </div>
-
-        <div class="space-y-3">
-            <p class="text-xs text-slate-400">Enter custom grading instructions. These instructions will be appended to the AI evaluation prompt for all answers in this submission.</p>
-            <textarea id="promptOverrideInput" rows="4" placeholder="e.g. Award partial marks for correct derivation steps. Ignore spelling mistakes." class="w-full p-3 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs theme-text-primary font-mono"></textarea>
-        </div>
-
-        <div class="flex justify-end gap-3 pt-2">
-            <button onclick="closePromptOverrideModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-xs font-bold theme-text-primary">Cancel</button>
-            <button onclick="savePromptOverride()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg">Save & Apply Prompt</button>
+            {% endfor %}
         </div>
     </div>
 </div>
 
 <script>
-function openReevalModal() { document.getElementById('reevalModal').classList.remove('hidden'); }
-function closeReevalModal() { document.getElementById('reevalModal').classList.add('hidden'); }
-function openPromptOverrideModal() { document.getElementById('promptOverrideModal').classList.remove('hidden'); }
-function closePromptOverrideModal() { document.getElementById('promptOverrideModal').classList.add('hidden'); }
+// State Management for Interactive Workbench
+let activeQuestionIndex = 0;
+let currentZoomScale = 1.0;
+const totalQuestions = {{ normalized_answers|length|default:0 }};
 
-function savePromptOverride() {
-    const val = document.getElementById('promptOverrideInput').value;
-    document.getElementById('reevalCustomPrompt').value = val;
-    closePromptOverrideModal();
-    alert("✓ Prompt override saved. Click Re-evaluate or Save Draft to apply.");
-}
+// Question Data Cache for Dynamic Header Badges
+const questionData = [
+    {% for item in normalized_answers %}
+    {
+        qId: {{ item.q.id }},
+        qNum: "{{ item.q.number }}",
+        marks: "{{ item.q.marks }}",
+        evalId: {% if item.evaluation_result %}{{ item.evaluation_result.id }}{% else %}null{% endif %},
+        pagesText: "{% if item.page_numbers %}Pages: Pg {{ item.page_numbers|join:', ' }}{% else %}Unmapped{% endif %}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
 
-async function triggerRerunOCR(subId) {
-    if(!confirm("Re-run OCR engine on working images?")) return;
-    alert("✓ OCR engine re-run initiated.");
-    window.location.reload();
-}
+function switchQuestionTab(index) {
+    if (index < 0 || index >= totalQuestions) return;
+    activeQuestionIndex = index;
 
-async function triggerRerunMapping(subId) {
-    if(!confirm("Re-run Question Mapping analysis?")) return;
-    window.location.href = `/teacher/exam/{{ submission.examination.id }}/evaluate-wizard/`;
-}
-
-async function saveDraftWorkspace(subId) {
-    alert("✓ Draft submission state auto-saved successfully.");
-}
-
-async function cancelEvaluation(subId) {
-    if(!confirm("Discard Evaluation?\n\nYES: Purge temporary files and return to dashboard.\nNO: Continue evaluation review.")) return;
-
-    try {
-        const resp = await fetch(`/api/submission/${subId}/delete/`, {
-            method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-        });
-        const data = await resp.json();
-        if(data.success) {
-            alert("Submission discarded & temporary files purged.");
-            window.location.href = "{% url 'evaluate_answer_scripts_list' submission.examination.id %}";
+    // 1. Update Tab Button Styles
+    document.querySelectorAll('.q-nav-tab').forEach((tab, idx) => {
+        if (idx === index) {
+            tab.className = "q-nav-tab px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 border bg-brand-600 text-white border-brand-500 shadow-md ring-2 ring-brand-500/20 active-tab";
         } else {
-            alert("Error: " + data.error);
+            tab.className = "q-nav-tab px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 border bg-slate-100 dark:bg-slate-900 theme-text-primary border-slate-200 dark:border-slate-800 hover:border-brand-500/40";
         }
-    } catch(err) {
-        alert("Cancel failed: " + err.message);
+    });
+
+    // 2. Toggle Left Evidence Panels
+    document.querySelectorAll('.q-evidence-panel').forEach((panel, idx) => {
+        if (idx === index) panel.classList.remove('hidden');
+        else panel.classList.add('hidden');
+    });
+
+    // 3. Toggle Right Scoring Panels
+    document.querySelectorAll('.q-right-panel').forEach((panel, idx) => {
+        if (idx === index) panel.classList.remove('hidden');
+        else panel.classList.add('hidden');
+    });
+
+    // 4. Update Header Badges
+    const currentQ = questionData[index];
+    if (currentQ) {
+        const badge = document.getElementById('activeQPageBadge');
+        if (badge) badge.innerText = currentQ.pagesText;
+        const weightBadge = document.getElementById('activeQWeightBadge');
+        if (weightBadge) weightBadge.innerText = `${currentQ.marks} Marks`;
+    }
+
+    // Reset Zoom for the new active view
+    resetActiveImageZoom();
+}
+
+function nextQuestionTab(currentIndex) {
+    const nextIdx = (currentIndex + 1) % totalQuestions;
+    switchQuestionTab(nextIdx);
+}
+
+function switchRightTab(tabType) {
+    const activeIdx = activeQuestionIndex;
+    const rightPanel = document.getElementById(`qRightPanel_${activeIdx}`);
+    if (!rightPanel) return;
+
+    // Toggle Content Panes
+    rightPanel.querySelectorAll('.right-tab-pane').forEach(pane => pane.classList.add('hidden'));
+    const targetPane = document.getElementById(`rightTabContent_${tabType}_${activeIdx}`);
+    if (targetPane) targetPane.classList.remove('hidden');
+
+    // Update Sub Tab Buttons
+    ['eval', 'benchmark', 'rubric'].forEach(type => {
+        const btn = document.getElementById(`subTab_${type}`);
+        if (type === tabType) {
+            btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5";
+        } else {
+            btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5";
+        }
+    });
+}
+
+function toggleOcrAccordion(idx) {
+    const content = document.getElementById(`ocrContent_${idx}`);
+    const chevron = document.getElementById(`ocrChevron_${idx}`);
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        chevron.style.transform = 'rotate(180deg)';
+    } else {
+        content.classList.add('hidden');
+        chevron.style.transform = 'rotate(0deg)';
     }
 }
 
-async function submitReevalV3() {
-    const payload = {
-        strictness: document.getElementById('reevalStrictness').value,
-        eval_mode: document.getElementById('reevalEvalMode').value,
-        custom_prompt: document.getElementById('reevalCustomPrompt').value
-    };
+// Zoom & Pan Engine
+function zoomActiveImage(delta) {
+    currentZoomScale = Math.max(0.6, Math.min(3.0, currentZoomScale + delta));
+    applyZoom();
+}
 
-    try {
-        const resp = await fetch(`/api/submission/{{ submission.id }}/reevaluate-v3/`, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
-        });
-        const data = await resp.json();
-        if(data.success) {
-            alert("Re-Evaluation completed successfully!");
-            window.location.reload();
-        } else {
-            alert("Error: " + data.error);
-        }
-    } catch(err) {
-        alert("Re-evaluation failed: " + err.message);
+function resetActiveImageZoom() {
+    currentZoomScale = 1.0;
+    applyZoom();
+}
+
+function applyZoom() {
+    const activePanel = document.getElementById(`qEvidence_${activeQuestionIndex}`);
+    if (!activePanel) return;
+
+    activePanel.querySelectorAll('.evidence-zoomable-img').forEach(img => {
+        img.style.transform = `scale(${currentZoomScale})`;
+    });
+
+    const ind = document.getElementById('zoomLevelIndicator');
+    if (ind) ind.innerText = `${Math.round(currentZoomScale * 100)}%`;
+}
+
+// Step Marks Recalculation Engine
+function recalculateStepMarks(qIdx, evalId) {
+    const inputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
+    let sum = 0.0;
+    inputs.forEach(input => {
+        const val = parseFloat(input.value) || 0.0;
+        sum += val;
+    });
+
+    // Update the total override input for this question
+    const overrideInput = document.getElementById(`override_input_${evalId}`);
+    if (overrideInput) {
+        overrideInput.value = sum.toFixed(1);
     }
 }
 
-async function submitReview(resultId, action) {
+// Modal Handlers
+function openImageModal(imgUrl, title) {
+    document.getElementById('imageModalTarget').src = imgUrl;
+    document.getElementById('imageModalTitle').innerText = title || "High Resolution Image";
+    document.getElementById('imageZoomModal').classList.remove('hidden');
+}
+
+function closeImageModal() {
+    document.getElementById('imageZoomModal').classList.add('hidden');
+}
+
+function openFullscreenViewer() {
+    const activePanel = document.getElementById(`qEvidence_${activeQuestionIndex}`);
+    if (!activePanel) return;
+    const firstImg = activePanel.querySelector('.evidence-zoomable-img');
+    if (firstImg) {
+        openImageModal(firstImg.src, `Question Q${questionData[activeQuestionIndex].qNum} Evidence`);
+    }
+}
+
+function openAllPagesModal() {
+    document.getElementById('allPagesModal').classList.remove('hidden');
+}
+
+function closeAllPagesModal() {
+    document.getElementById('allPagesModal').classList.add('hidden');
+}
+
+// Teacher Review & Score Override Persistence
+async function submitReview(resultId, action, qIdx) {
+    if (!resultId || resultId === 'None' || resultId === 'null') {
+        alert("Evaluation record ID not found for this question yet. Please ensure evaluation is complete.");
+        return;
+    }
+
     const overrideInput = document.getElementById(`override_input_${resultId}`);
+    const commentInput = document.getElementById(`review_comment_${resultId}`);
     const newMarks = overrideInput ? overrideInput.value : null;
+    const comments = commentInput ? commentInput.value : '';
 
     const formData = new FormData();
     formData.append('action', action);
-    if(newMarks !== null) formData.append('new_marks', newMarks);
+    if (newMarks !== null) formData.append('new_marks', newMarks);
+    if (comments) formData.append('comments', comments);
 
     try {
         const resp = await fetch(`/api/evaluation-result/${resultId}/review/`, {
@@ -504,13 +699,40 @@ async function submitReview(resultId, action) {
             body: formData,
             headers: { 'X-CSRFToken': '{{ csrf_token }}' }
         });
-        const data = await resp.json();
-        if(data.success) {
-            document.getElementById(`marks_disp_${resultId}`).innerText = `${data.new_obtained_marks} / ${data.new_submission_total}`;
-            document.getElementById('submissionTotal').innerText = `${data.new_submission_total} (Updated)`;
-            alert(`Score updated successfully! (${action})`);
+
+        const contentType = resp.headers.get('content-type') || '';
+        let data;
+        if (contentType.includes('application/json')) {
+            data = await resp.json();
         } else {
-            alert('Error: ' + data.error);
+            const errText = await resp.text();
+            throw new Error(`Server returned HTTP ${resp.status}: ${errText.substring(0, 100)}`);
+        }
+
+        if (data.success) {
+            // 1. Update Right Panel Score Badge
+            const rightBadge = document.getElementById(`rightScoreBadge_${resultId}`);
+            if (rightBadge && questionData[qIdx]) {
+                rightBadge.innerText = `${data.new_obtained_marks} / ${questionData[qIdx].marks}`;
+            }
+
+            // 2. Update Top Tab Score Badge
+            if (questionData[qIdx]) {
+                const tabScore = document.getElementById(`tabScore_${questionData[qIdx].qId}`);
+                if (tabScore) tabScore.innerText = `${data.new_obtained_marks}/${questionData[qIdx].marks}`;
+            }
+
+            // 3. Update Aggregated Score in Top Header
+            const totalElem = document.getElementById('submissionTotal');
+            if (totalElem) {
+                totalElem.innerText = `${data.new_submission_total} (${data.submission_percentage}%)`;
+            }
+
+            // Visual confirmation toast
+            const actionText = action === 'APPROVE' ? 'Approved' : 'Overridden';
+            alert(`✓ Question Q${questionData[qIdx].qNum} score successfully ${actionText} (${data.new_obtained_marks} marks).`);
+        } else {
+            alert('Error: ' + (data.error || 'Review could not be saved.'));
         }
     } catch(err) {
         alert('Action failed: ' + err.message);
@@ -518,12 +740,116 @@ async function submitReview(resultId, action) {
 }
 
 async function finalizeSubmissionEvaluation(subId) {
-    if(!confirm("Finalize Evaluation & Purge Temporary Processing Files?\n\nFinal marks will be locked, report archived, and temporary working images cleaned up.")) return;
+    const curName = document.getElementById('displayStudentName') ? document.getElementById('displayStudentName').innerText.trim() : '';
+    const curRoll = document.getElementById('displayStudentRoll') ? document.getElementById('displayStudentRoll').innerText.replace('Roll:', '').trim() : '';
+    const finName = document.getElementById('finalizeStudentNameInput');
+    const finRoll = document.getElementById('finalizeStudentRollInput');
+    if (finName && curName) finName.value = curName;
+    if (finRoll && curRoll) finRoll.value = (curRoll === 'N/A' ? '' : curRoll);
+    document.getElementById('finalizeModal').classList.remove('hidden');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function openEditStudentModal() {
+    const nameElem = document.getElementById('displayStudentName');
+    const rollElem = document.getElementById('displayStudentRoll');
+    if (nameElem) document.getElementById('modalStudentNameInput').value = nameElem.innerText.trim();
+    if (rollElem) {
+        const rVal = rollElem.innerText.replace('Roll:', '').trim();
+        document.getElementById('modalStudentRollInput').value = (rVal === 'N/A' ? '' : rVal);
+    }
+    document.getElementById('editStudentModal').classList.remove('hidden');
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function closeEditStudentModal() {
+    document.getElementById('editStudentModal').classList.add('hidden');
+}
+
+async function saveStudentInformation(subId) {
+    const name = document.getElementById('modalStudentNameInput').value.trim();
+    const roll = document.getElementById('modalStudentRollInput').value.trim();
+
+    if (!name) {
+        alert('Student Name cannot be empty.');
+        return;
+    }
+
+    const btn = document.getElementById('saveStudentInfoBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving...`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    try {
+        const resp = await fetch(`/api/submission/${subId}/update-info/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                student_name: name,
+                student_roll_no: roll
+            })
+        });
+
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById('displayStudentName').innerText = data.student_name;
+            document.getElementById('displayStudentRoll').innerText = `Roll: ${data.student_roll_no || 'N/A'}`;
+            const finName = document.getElementById('finalizeStudentNameInput');
+            const finRoll = document.getElementById('finalizeStudentRollInput');
+            if (finName) finName.value = data.student_name;
+            if (finRoll) finRoll.value = data.student_roll_no;
+            closeEditStudentModal();
+            alert('✓ ' + data.message);
+        } else {
+            alert('Error updating information: ' + (data.error || 'Unknown error'));
+        }
+    } catch(err) {
+        alert('Exception: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> Save Information`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+    }
+}
+
+function closeFinalizeModal() {
+    document.getElementById('finalizeModal').classList.add('hidden');
+}
+
+async function executeFinalizeEvaluation(subId) {
+    const name = document.getElementById('finalizeStudentNameInput').value.trim();
+    const roll = document.getElementById('finalizeStudentRollInput').value.trim();
+
+    if (!name) {
+        alert('Please provide a valid Student Name before finalizing.');
+        return;
+    }
+
+    const btn = document.getElementById('confirmFinalizeBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Finalizing & Generating Report...`;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
 
     try {
         const resp = await fetch(`/api/submission/${subId}/finalize/`, {
             method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                student_name: name,
+                student_roll_no: roll
+            })
         });
         const data = await resp.json();
         if(data.success) {
@@ -531,49 +857,102 @@ async function finalizeSubmissionEvaluation(subId) {
             window.location.reload();
         } else {
             alert("Finalization Error: " + data.error);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report`;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
         }
     } catch(err) {
         alert("Finalization Exception: " + err.message);
-    }
-}
-function runMcqEvaluationWorkspace(examId) {
-    const btn = document.getElementById('wsMcqEvalBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Re-evaluating...`;
-        lucide.createIcons();
-    }
-
-    fetch(`/api/exam/${examId}/evaluate-quiz/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: JSON.stringify({ scheme: 'ALPHA_UPPER', marks_per_question: 1.0 })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') {
-            alert(`✅ MCQ Evaluation Completed!\nScore: ${data.summary.total_score} / ${data.summary.max_score} (${data.summary.percentage}%)\nCorrect: ${data.summary.total_correct}, Incorrect: ${data.summary.total_incorrect}`);
-            window.location.reload();
-        } else {
-            alert(`❌ Error: ${data.error || 'Evaluation failed'}`);
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = `<i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)`;
-                lucide.createIcons();
-            }
-        }
-    })
-    .catch(err => {
-        alert(`❌ Network error: ${err.message}`);
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = `<i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> ⚡ Re-Evaluate MCQ Quiz (AI)`;
-            lucide.createIcons();
+            btn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
-    });
+    }
 }
 </script>
+
+<!-- Edit Student Information Modal -->
+<div id="editStudentModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-md w-full p-6 rounded-2xl shadow-2xl relative space-y-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base theme-text-primary flex items-center gap-2">
+                <i data-lucide="user-check" class="w-5 h-5 text-brand-500"></i> Edit Student Information
+            </h3>
+            <button type="button" onclick="closeEditStudentModal()" class="theme-text-muted hover:theme-text-primary cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Full Name</label>
+                <input type="text" id="modalStudentNameInput" value="{{ submission.student_name }}" placeholder="e.g. John Doe" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Roll / ID Number</label>
+                <input type="text" id="modalStudentRollInput" value="{{ submission.student_roll_no }}" placeholder="e.g. 2024-CSE-042" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold font-mono focus:ring-2 focus:ring-brand-500 outline-none transition-all">
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onclick="closeEditStudentModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted rounded-xl transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="saveStudentInfoBtn" onclick="saveStudentInformation({{ submission.id }})" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
+                <i data-lucide="save" class="w-4 h-4"></i> Save Information
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Finalize Confirmation & Verification Modal -->
+<div id="finalizeModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="glass-card max-w-lg w-full p-6 rounded-2xl shadow-2xl relative space-y-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h3 class="font-bold text-base text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                <i data-lucide="check-circle-2" class="w-5 h-5"></i> Finalize Evaluation & Lock Report
+            </h3>
+            <button type="button" onclick="closeFinalizeModal()" class="theme-text-muted hover:theme-text-primary cursor-pointer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <div class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 rounded-xl text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+            <p class="font-bold flex items-center gap-1.5">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> Verify Student Information & Lock Marks
+            </p>
+            <p class="text-[11px] opacity-90">Verify or adjust the student's name and roll number below before generating the final evaluated PDF report.</p>
+        </div>
+
+        <div class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Full Name</label>
+                <input type="text" id="finalizeStudentNameInput" value="{{ submission.student_name }}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1">Student Roll / ID Number</label>
+                <input type="text" id="finalizeStudentRollInput" value="{{ submission.student_roll_no }}" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 theme-text-primary text-sm font-semibold font-mono focus:ring-2 focus:ring-emerald-500 outline-none">
+            </div>
+
+            <div class="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-between text-xs font-bold">
+                <span class="theme-text-muted">Aggregated Marks:</span>
+                <span class="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks|default:"0.0" }} / {{ submission.total_max_marks|default:"0.0" }} ({{ submission.percentage|default:"0" }}%)</span>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button type="button" onclick="closeFinalizeModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-bold theme-text-muted rounded-xl transition-all cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="confirmFinalizeBtn" onclick="executeFinalizeEvaluation({{ submission.id }})" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
+                <i data-lucide="lock" class="w-4 h-4"></i> Confirm & Finalize Report
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}

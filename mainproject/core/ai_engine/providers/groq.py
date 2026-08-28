@@ -66,6 +66,39 @@ class GroqProvider(BaseAIProvider):
 
         return cleaned
 
+    @classmethod
+    def _compress_image_bytes(cls, raw_bytes: Any, max_dim: int = 1000, quality: int = 85) -> tuple:
+        """
+        Compresses image bytes to JPEG with max dimension <= max_dim and quality <= 85.
+        Guarantees high handwriting clarity while avoiding Groq HTTP 413 (Payload Too Large).
+        """
+        if not raw_bytes:
+            return raw_bytes, 'image/jpeg'
+        if isinstance(raw_bytes, str):
+            import base64
+            try:
+                raw_bytes = base64.b64decode(raw_bytes)
+            except Exception:
+                raw_bytes = raw_bytes.encode('utf-8')
+        try:
+            import cv2
+            import numpy as np
+            nparr = np.frombuffer(raw_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                if max(h, w) > max_dim:
+                    scale = float(max_dim) / float(max(h, w))
+                    new_w = max(1, int(w * scale))
+                    new_h = max(1, int(h * scale))
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                success, enc = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+                if success:
+                    return enc.tobytes(), 'image/jpeg'
+        except Exception:
+            pass
+        return raw_bytes, 'image/jpeg'
+
     def _call_api(self, prompt: str, system_instruction: Optional[str] = None, image_bytes: Optional[bytes] = None, mime_type: str = 'image/jpeg', extra_files: Optional[List[Dict[str, Any]]] = None, timeout: Optional[float] = None) -> str:
         if not self.api_key:
             raise ValueError("Groq API Key is not configured.")
@@ -84,20 +117,22 @@ class GroqProvider(BaseAIProvider):
         if image_bytes:
             selected_model = "qwen/qwen3.6-27b"
             import base64
-            b64 = base64.b64encode(image_bytes).decode('utf-8')
+            comp_bytes, comp_mime = self._compress_image_bytes(image_bytes, max_dim=1000, quality=85)
+            b64 = base64.b64encode(comp_bytes).decode('utf-8')
             content_list = [
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}}
+                {"type": "image_url", "image_url": {"url": f"data:{comp_mime};base64,{b64}"}}
             ]
             if extra_files and isinstance(extra_files, list):
                 for ef in extra_files:
                     ef_b = ef.get('bytes') if isinstance(ef, dict) else (ef.get('image_bytes') if isinstance(ef, dict) else ef)
-                    ef_m = ef.get('mime_type', 'image/png') if isinstance(ef, dict) else 'image/png'
                     if ef_b:
-                        b64_ef = base64.b64encode(ef_b).decode('utf-8')
-                        content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_m};base64,{b64_ef}"}})
+                        ef_comp, ef_mime = self._compress_image_bytes(ef_b, max_dim=1000, quality=85)
+                        b64_ef = base64.b64encode(ef_comp).decode('utf-8')
+                        content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_mime};base64,{b64_ef}"}})
             messages.append({"role": "user", "content": content_list})
         else:
+            selected_model = self.model_name or "qwen/qwen3.6-27b"
             messages.append({"role": "user", "content": prompt})
 
         payload = {

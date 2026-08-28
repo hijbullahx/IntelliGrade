@@ -64,6 +64,7 @@ SECURE_SSL_REDIRECT = get_env_bool('DJANGO_SECURE_SSL_REDIRECT', default=False, 
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OLLAMA_ENDPOINT = os.getenv('OLLAMA_ENDPOINT', 'http://127.0.0.1:11434/api/generate')
 DEFAULT_AI_PROVIDER = os.environ.get('DEFAULT_AI_PROVIDER', 'GROQ')
 
 INSTALLED_APPS = [

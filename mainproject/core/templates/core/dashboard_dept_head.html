@@ -17,69 +17,88 @@
     </div>
 
     <!-- Analytics Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+    <!-- Analytics Cards (5 Core Metrics) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <!-- 1. Faculty Members Card -->
-        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-cyan-500">
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-cyan-500">
             <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Faculty Members</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view Department Faculty Roster">
+            <div class="mt-2 flex items-baseline justify-between">
+                <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="text-2xl font-black text-cyan-600 dark:text-cyan-400 hover:underline inline-flex items-center gap-1 cursor-pointer text-left focus:outline-none" title="Click to view Department Faculty Roster">
                     <span>{{ stats.faculty_count }}</span>
-                    <i data-lucide="chevron-down" id="faculty-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                    <i data-lucide="chevron-down" id="faculty-chevron" class="w-3.5 h-3.5 opacity-70 transition-transform"></i>
                 </button>
-                <div class="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500">
-                    <i data-lucide="users" class="w-5 h-5"></i>
+                <div class="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                    <i data-lucide="users" class="w-4 h-4"></i>
                 </div>
             </div>
-            <p class="text-[11px] theme-text-muted mt-2">Click count to view department faculty roster</p>
+            <p class="text-[10px] theme-text-muted mt-1">Teachers in department</p>
         </div>
 
-        <!-- 2. Active Courses Card -->
-        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-brand-500">
+        <!-- 2. Department Students Card -->
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-emerald-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Total Students</span>
+            <div class="mt-2 flex items-baseline justify-between">
+                <button type="button" onclick="toggleDeptSection('students-section', 'students-chevron')" class="text-2xl font-black text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 cursor-pointer text-left focus:outline-none" title="Click to view Department Student Roster">
+                    <span>{{ stats.students_count }}</span>
+                    <i data-lucide="chevron-down" id="students-chevron" class="w-3.5 h-3.5 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                </div>
+            </div>
+            <p class="text-[10px] theme-text-muted mt-1">Enrolled & examined</p>
+        </div>
+
+        <!-- 3. Active Courses Card -->
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-brand-500">
             <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Active Courses</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="text-3xl font-extrabold text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-1.5 cursor-pointer text-left focus:outline-none" title="Click to view Department Course Roster">
+            <div class="mt-2 flex items-baseline justify-between">
+                <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="text-2xl font-black text-brand-600 dark:text-brand-400 hover:underline inline-flex items-center gap-1 cursor-pointer text-left focus:outline-none" title="Click to view Department Course Catalog">
                     <span>{{ stats.active_courses }}</span>
-                    <i data-lucide="chevron-down" id="courses-chevron" class="w-4 h-4 opacity-70 transition-transform"></i>
+                    <i data-lucide="chevron-down" id="courses-chevron" class="w-3.5 h-3.5 opacity-70 transition-transform"></i>
                 </button>
-                <div class="p-2.5 rounded-xl bg-brand-500/10 text-brand-500">
-                    <i data-lucide="book-open" class="w-5 h-5"></i>
+                <div class="p-2 rounded-xl bg-brand-500/10 text-brand-500">
+                    <i data-lucide="book-open" class="w-4 h-4"></i>
                 </div>
             </div>
-            <p class="text-[11px] theme-text-muted mt-2">Click count to view department course catalog</p>
+            <p class="text-[10px] theme-text-muted mt-1">Department curriculum</p>
         </div>
 
-        <!-- 3. Pass Rate Card -->
-        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-emerald-500">
-            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Department Pass Rate</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">{{ stats.pass_rate }}</span>
-                <div class="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-500">
-                    <i data-lucide="trending-up" class="w-5 h-5"></i>
+        <!-- 4. Published Exams Card -->
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-indigo-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Published Exams</span>
+            <div class="mt-2 flex items-baseline justify-between">
+                <button type="button" onclick="toggleDeptSection('exams-section', 'exams-chevron')" class="text-2xl font-black text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1 cursor-pointer text-left focus:outline-none" title="Click to view Department Examinations Roster">
+                    <span>{{ stats.published_exams }}</span>
+                    <i data-lucide="chevron-down" id="exams-chevron" class="w-3.5 h-3.5 opacity-70 transition-transform"></i>
+                </button>
+                <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+                    <i data-lucide="calendar-check" class="w-4 h-4"></i>
                 </div>
             </div>
-            <p class="text-[11px] theme-text-muted mt-2">Based on evaluated script outcomes</p>
+            <p class="text-[10px] theme-text-muted mt-1">Examinations created</p>
         </div>
 
-        <!-- 4. AI Approval Rate Card -->
-        <div class="glass-card p-5 rounded-2xl border-l-4 border-l-purple-500">
-            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Teacher AI Approval Rate</span>
-            <div class="mt-3 flex items-baseline justify-between">
-                <span class="text-3xl font-extrabold text-purple-600 dark:text-purple-400">{{ stats.ai_approval_rate }}</span>
-                <div class="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
-                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+        <!-- 5. Semester Pass Rate Card (Accurate Semester-Wise from Routine) -->
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-l-teal-500">
+            <span class="text-xs font-medium theme-text-muted uppercase tracking-wider">Pass Rate ({{ stats.current_semester }})</span>
+            <div class="mt-2 flex items-baseline justify-between">
+                <span class="text-2xl font-black text-teal-600 dark:text-teal-400">{{ stats.pass_rate }}</span>
+                <div class="p-2 rounded-xl bg-teal-500/10 text-teal-500">
+                    <i data-lucide="trending-up" class="w-4 h-4"></i>
                 </div>
             </div>
-            <p class="text-[11px] theme-text-muted mt-2">AI evaluations approved by faculty</p>
+            <p class="text-[10px] theme-text-muted mt-1">{{ stats.passed_count }}/{{ stats.evaluated_submissions }} scripts passed (&ge; 40%)</p>
         </div>
     </div>
 
-    <!-- Collapsible 1: Department Faculty Roster Table (Hidden by default until Faculty Card count is clicked) -->
+    <!-- Collapsible 1: Department Faculty Roster Table -->
     <div id="faculty-section" class="space-y-4 hidden transition-all duration-300">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
                 <i data-lucide="users" class="w-5 h-5 text-cyan-500"></i> Department Faculty Members Roster &bull; <span class="text-cyan-600 dark:text-cyan-400">{{ stats.dept_name }}</span>
             </h2>
-            <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+            <button type="button" onclick="toggleDeptSection('faculty-section', 'faculty-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer">
                 <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Roster
             </button>
         </div>
@@ -121,13 +140,110 @@
         </div>
     </div>
 
-    <!-- Collapsible 2: Department Course Catalog Table (Hidden by default until Courses Card count is clicked) -->
+    <!-- Collapsible 2: Department Students Roster Table -->
+    <div id="students-section" class="space-y-4 hidden transition-all duration-300">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="graduation-cap" class="w-5 h-5 text-emerald-500"></i> Department Enrolled Students Roster &bull; <span class="text-emerald-600 dark:text-emerald-400">{{ stats.dept_name }}</span>
+            </h2>
+            <button type="button" onclick="toggleDeptSection('students-section', 'students-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Roster
+            </button>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Student Name</th>
+                        <th class="px-5 py-4">Student ID / Roll</th>
+                        <th class="px-5 py-4">Email Address</th>
+                        <th class="px-5 py-4 text-center">Evaluated Exams</th>
+                        <th class="px-5 py-4 text-right">Average Performance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for st in dept_students %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-bold theme-text-primary flex items-center gap-2">
+                            <i data-lucide="user" class="w-4 h-4 text-emerald-500"></i>
+                            <span>{{ st.name }}</span>
+                        </td>
+                        <td class="px-5 py-4"><span class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-bold">{{ st.student_id }}</span></td>
+                        <td class="px-5 py-4 theme-text-muted">{{ st.email }}</td>
+                        <td class="px-5 py-4 text-center font-bold">{{ st.submissions_count }}</td>
+                        <td class="px-5 py-4 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{{ st.avg_score }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-5 py-8 text-center theme-text-muted italic">
+                            No student records found for {{ stats.dept_name }}.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Collapsible 3: Department Examinations Roster Table -->
+    <div id="exams-section" class="space-y-4 hidden transition-all duration-300">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
+                <i data-lucide="calendar-check" class="w-5 h-5 text-indigo-500"></i> Department Examinations Roster & Tabulation Sheets
+            </h2>
+            <button type="button" onclick="toggleDeptSection('exams-section', 'exams-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Roster
+            </button>
+        </div>
+
+        <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-100 dark:bg-slate-900/90 theme-text-muted uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                        <th class="px-5 py-4">Examination Title</th>
+                        <th class="px-5 py-4">Course</th>
+                        <th class="px-5 py-4">Assigned Faculty</th>
+                        <th class="px-5 py-4">Exam Date</th>
+                        <th class="px-5 py-4 text-center">Evaluated / Total</th>
+                        <th class="px-5 py-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-800/60 theme-text-secondary font-medium">
+                    {% for ex in dept_exams %}
+                    <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
+                        <td class="px-5 py-4 font-bold theme-text-primary">{{ ex.title }}</td>
+                        <td class="px-5 py-4"><span class="px-2 py-0.5 rounded bg-brand-500/10 text-brand-600 dark:text-brand-400 font-mono font-bold">{{ ex.course_code }}</span> {{ ex.course_title }}</td>
+                        <td class="px-5 py-4 font-semibold text-slate-700 dark:text-slate-300">{{ ex.faculty_name }}</td>
+                        <td class="px-5 py-4 theme-text-muted">{{ ex.exam_date|date:"M d, Y" }}</td>
+                        <td class="px-5 py-4 text-center">
+                            <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">{{ ex.evaluated_count }}</span> / {{ ex.total_submissions }}
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <a href="{{ ex.tabulation_url }}" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold inline-flex items-center gap-1 shadow-sm transition-all">
+                                <i data-lucide="table" class="w-3 h-3"></i> View Tabulation
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-5 py-8 text-center theme-text-muted italic">
+                            No examinations scheduled yet in this department.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Collapsible 4: Department Course Catalog Table -->
     <div id="courses-section" class="space-y-4 hidden transition-all duration-300">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
                 <i data-lucide="book-open" class="w-5 h-5 text-brand-500"></i> Department Active Courses Catalog &bull; <span class="text-brand-600 dark:text-brand-400">{{ stats.dept_name }}</span>
             </h2>
-            <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
+            <button type="button" onclick="toggleDeptSection('courses-section', 'courses-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer">
                 <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Catalog
             </button>
         </div>
@@ -166,37 +282,6 @@
         </div>
     </div>
 
-    <!-- Department Performance Overview -->
-    <div class="glass-card p-6 rounded-2xl space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
-                <i data-lucide="pie-chart" class="w-5 h-5 text-cyan-500"></i> Course Evaluation Progress
-            </h2>
-            <span class="text-xs theme-text-muted font-medium">Real-time script evaluation metrics</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {% for item in course_progress_list %}
-            <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
-                <div class="flex items-center justify-between text-xs font-bold">
-                    <span class="theme-text-primary flex items-center gap-1.5">
-                        <i data-lucide="book-open" class="w-3.5 h-3.5 text-brand-500"></i>
-                        <span>{{ item.code }}: {{ item.title }}</span>
-                    </span>
-                    <span class="{% if item.progress_percent == 100 %}text-emerald-600 dark:text-emerald-400{% elif item.progress_percent > 0 %}text-brand-600 dark:text-brand-400{% else %}theme-text-muted{% endif %} font-mono">
-                        {{ item.status_text }}
-                    </span>
-                </div>
-                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                    <div class="{% if item.progress_percent == 100 %}bg-emerald-500{% elif item.progress_percent > 0 %}bg-brand-500{% else %}bg-slate-400/40{% endif %} h-full transition-all duration-500" style="width: {{ item.progress_percent }}%;"></div>
-                </div>
-            </div>
-            {% empty %}
-            <div class="col-span-2 p-8 text-center theme-text-muted italic">
-                No active courses found for this department.
-            </div>
-            {% endfor %}
-        </div>
     <!-- Departmental AI Evaluation Governance & Animation Showcase Card -->
     <div class="glass-card p-6 md:p-8 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden relative">
         <div class="grid lg:grid-cols-12 gap-8 items-center">

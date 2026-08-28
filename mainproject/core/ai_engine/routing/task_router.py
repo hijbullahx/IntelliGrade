@@ -7,6 +7,7 @@ from core.ai_engine.providers.gemini import GeminiProvider
 from core.ai_engine.providers.openai import OpenAIProvider
 from core.ai_engine.providers.openrouter import OpenRouterProvider
 from core.ai_engine.providers.ollama import OllamaProvider
+from core.ai_engine.providers.local_vision import LocalOfflineVisionProvider
 from .task_types import TaskType, ProviderStrategy
 
 class ProviderHealthTracker:
@@ -46,14 +47,15 @@ class TaskRouter:
     """
 
     TASK_CHAINS: Dict[TaskType, List[Type[BaseAIProvider]]] = {
-        TaskType.OCR_TEXT: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
-        TaskType.ROUTINE_PARSE: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
-        TaskType.QUESTION_MAPPING: [GeminiProvider, GroqProvider, OpenAIProvider, OpenRouterProvider],
-        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, OpenAIProvider, OpenRouterProvider, GroqProvider],
-        TaskType.ANSWER_GRADING: [GeminiProvider, GroqProvider, OpenAIProvider, OpenRouterProvider],
-        TaskType.FEEDBACK_GENERATION: [GeminiProvider, GroqProvider, OpenRouterProvider],
-        TaskType.REPORT_SUMMARY: [GeminiProvider, GroqProvider, OpenRouterProvider],
-        TaskType.COMPLEX_REASONING: [GeminiProvider, OpenAIProvider, GroqProvider, OpenRouterProvider],
+        TaskType.OCR_TEXT: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ROUTINE_PARSE: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.QUESTION_MAPPING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ANSWER_GRADING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.FEEDBACK_GENERATION: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.REPORT_SUMMARY: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.COMPLEX_REASONING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.GENERIC: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
     }
 
     TASK_MAX_IMAGES: Dict[TaskType, int] = {
@@ -65,23 +67,28 @@ class TaskRouter:
         TaskType.FEEDBACK_GENERATION: 0,
         TaskType.REPORT_SUMMARY: 0,
         TaskType.COMPLEX_REASONING: 5,
+        TaskType.GENERIC: 5,
     }
 
     @classmethod
     def is_transient_error(cls, error_msg: str) -> bool:
         """
         Classifies errors into transient (eligible for single retry) vs non-transient.
-        Transient: timeout, 502 Bad Gateway, 503 Service Unavailable, temporary network failure.
-        Non-transient: 401 Auth, 403 Forbidden, 429 Rate Limit, insufficient_quota, model_not_found.
+        Transient: temporary remote network hiccup, 502 Bad Gateway, 503 Service Unavailable.
+        Non-transient: Connection Refused (dead local daemon), 401 Auth, 403 Forbidden, 429 Rate Limit, insufficient_quota.
         """
         if not error_msg or not isinstance(error_msg, str):
             return False
         err_lower = error_msg.lower()
 
+        # Immediate failover for dead local daemons / connection refused
+        if any(term in err_lower for term in ['connection refused', 'failed to establish a new connection', '10061', 'winerror 10061', 'refused']):
+            return False
+
         if any(term in err_lower for term in ['401', '403', '429', 'unauthorized', 'invalid api key', 'insufficient_quota', 'quota_exceeded', 'resource_exhausted', 'model_not_found']):
             return False
 
-        if any(term in err_lower for term in ['timeout', 'timed out', '502', '503', 'service unavailable', 'connection error', 'connection reset', 'network failure']):
+        if any(term in err_lower for term in ['timed out', 'timeout', '502', '503', 'service unavailable', 'network failure']):
             return True
 
         return False
@@ -130,13 +137,20 @@ class TaskRouter:
 
             candidate_chain.append(p_cls)
 
+        # Set 30.0s timeout budget for local CPU inference on Moondream/Ollama, 6.0s for cloud APIs
+        is_local_cpu_inference = any(
+            issubclass(p, (LocalOfflineVisionProvider, OllamaProvider)) or p in (LocalOfflineVisionProvider, OllamaProvider)
+            for p in candidate_chain
+        )
+        timeout_budget = 30.0 if is_local_cpu_inference else 6.0
+
         return ProviderStrategy(
             task_type=task_type,
             execution_chain=candidate_chain,
             requires_local_deterministic=requires_local,
             max_images=max_imgs,
             requires_json=requires_json,
-            timeout_seconds=6.0,
+            timeout_seconds=timeout_budget,
             manual_review_threshold=0.70
         )
 

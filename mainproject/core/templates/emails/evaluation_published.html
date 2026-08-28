@@ -1,23 +1,65 @@
 {% extends 'emails/base_email.html' %}
 
-{% block title %}Evaluation Results Published - {{ exam_title }}{% endblock %}
+{% block title %}Evaluation Results Published - {{ course_code }}: {{ exam_title }}{% endblock %}
 
 {% block content %}
-<h2 style="color: #ffffff; margin-top: 0;">Evaluation Results Published</h2>
-<p>Dear <strong>{{ student_name }}</strong>,</p>
-<p>Your answer script evaluation for <strong>{{ exam_title }}</strong> has been processed, verified, and officially published.</p>
+<h2 style="color: #ffffff; margin-top: 0; font-size: 20px;">Official Answer Script Evaluation Published</h2>
+<p>Dear <strong>{{ student_name }}</strong>{% if student_id %} (ID: {{ student_id }}){% endif %},</p>
+<p>Your examination script for <strong>{{ course_code }} - {{ course_title }}</strong> (<em>{{ exam_title }}</em>) has been evaluated, verified, and officially recorded in the institutional OBE grade portal.</p>
 
-<div style="background-color: #0f172a; padding: 20px; border-radius: 12px; border: 1px solid #10b981; margin: 20px 0;">
-    <p style="margin: 0; color: #6ee7b7; font-size: 12px; font-weight: 700; text-transform: uppercase;">Official Result Summary</p>
-    <p style="margin: 8px 0 0; color: #ffffff; font-size: 18px; font-weight: 800;">
-        Score: <span style="color: #34d399;">{{ score }}</span> | Grade: <span style="color: #38bdf8;">{{ grade }}</span>
-    </p>
+<!-- Performance Summary Card -->
+<div style="background-color: #0f172a; padding: 22px; border-radius: 14px; border: 1px solid #10b981; margin: 20px 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 12px; margin-bottom: 12px;">
+        <span style="color: #6ee7b7; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Official Performance Summary</span>
+        <span style="background-color: #065f46; color: #6ee7b7; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 800;">Grade: {{ grade }}</span>
+    </div>
+    <div style="margin: 10px 0;">
+        <p style="margin: 0; color: #94a3b8; font-size: 13px;">Total Marks Awarded:</p>
+        <p style="margin: 4px 0 0; color: #ffffff; font-size: 24px; font-weight: 900;">
+            <span style="color: #34d399;">{{ score }}</span> <span style="font-size: 14px; color: #94a3b8; font-weight: 400;">({{ percentage }}%)</span>
+        </p>
+    </div>
     {% if remarks %}
-    <p style="margin: 8px 0 0; color: #94a3b8; font-size: 13px;"><em>Remarks: {{ remarks }}</em></p>
+    <p style="margin: 8px 0 0; color: #cbd5e1; font-size: 13px; border-top: 1px dashed #334155; padding-top: 8px;"><em>Remarks: {{ remarks }}</em></p>
     {% endif %}
 </div>
 
-<p>You can view your detailed question-by-question breakdown, rubrics, and feedback in the student dashboard.</p>
+<!-- Question Breakdown (if available) -->
+{% if answers %}
+<div style="margin-top: 24px;">
+    <h3 style="color: #f8fafc; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">Question-by-Question Mark Breakdown</h3>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #cbd5e1; background-color: #0f172a; border-radius: 10px; overflow: hidden;">
+        <thead>
+            <tr style="background-color: #1e293b; color: #94a3b8; text-align: left;">
+                <th style="padding: 10px 14px; font-weight: 600;">Question</th>
+                <th style="padding: 10px 14px; font-weight: 600; text-align: right;">Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ans in answers %}
+            <tr style="border-bottom: 1px solid #1e293b;">
+                <td style="padding: 10px 14px;">
+                    <strong style="color: #38bdf8;">Question {{ ans.question_number }}</strong>
+                    {% if ans.feedback_text %}
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">{{ ans.feedback_text|truncatechars:120 }}</div>
+                    {% endif %}
+                </td>
+                <td style="padding: 10px 14px; text-align: right; font-weight: 700; color: #34d399; font-family: monospace;">
+                    {{ ans.obtained_marks }} / {{ ans.maximum_marks }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 
-<a href="{{ script_url|default:'http://127.0.0.1:8000/' }}" class="btn-primary">View Evaluated Script Breakdown</a>
+<p style="margin-top: 24px; color: #cbd5e1; font-size: 13px;">
+    📎 <strong>Evaluated Script PDF Attached:</strong> An official certified PDF copy of your evaluated examination script with complete mark distributions and instructor feedback is attached to this email.
+</p>
+<p style="margin-top: 8px; color: #94a3b8; font-size: 13px;">
+    You can also view and download your complete evaluated answer script, annotations, and detailed rubrics directly in your student workspace.
+</p>
+
+<a href="{{ script_url|default:'http://127.0.0.1:8000/dashboard/student/' }}" class="btn-primary" style="text-align: center; display: inline-block; margin-top: 10px;">Open Student Dashboard & Download PDF</a>
 {% endblock %}

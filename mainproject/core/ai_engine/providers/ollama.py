@@ -28,16 +28,20 @@ class OllamaProvider(BaseAIProvider):
 
     def _auto_detect_model(self) -> str:
         """
-        Auto-detects installed models from local Ollama server.
+        Auto-detects installed models from local Ollama server, prioritizing text LLMs.
         """
         try:
             url = f"{self.host}/api/tags"
             req = urllib.request.Request(url, headers={'User-Agent': 'IntelliGrade-AI/1.0'})
             with urllib.request.urlopen(req, timeout=3) as response:
                 res_data = json.loads(response.read().decode('utf-8'))
-                models = res_data.get('models', [])
-                if models and len(models) > 0:
-                    return models[0]['name']
+                models = [m['name'] for m in res_data.get('models', [])]
+                for preferred in ['llama3', 'llama3.1', 'llama3.2', 'qwen', 'mistral', 'phi3', 'gemma', 'deepseek', 'moondream']:
+                    for m in models:
+                        if preferred in m.lower():
+                            return m
+                if models:
+                    return models[0]
         except Exception:
             pass
         return "llama3"
@@ -63,7 +67,8 @@ class OllamaProvider(BaseAIProvider):
             method='POST'
         )
 
-        req_timeout = timeout if (timeout is not None and timeout > 0) else 10.0
+        default_timeout = 3.5 if 'moondream' in str(self.model_name).lower() else 10.0
+        req_timeout = timeout if (timeout is not None and timeout > 0) else default_timeout
         try:
             with urllib.request.urlopen(req, timeout=req_timeout) as response:
                 res_data = json.loads(response.read().decode('utf-8'))

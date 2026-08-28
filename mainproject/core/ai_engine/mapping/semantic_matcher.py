@@ -7,8 +7,9 @@ Computes similarity scores and flags ambiguous matches (confidence < 0.75 or clo
 import re
 import json
 from typing import List, Dict, Any, Tuple, Optional
-from core.utils.question_accessor import QuestionAccessor, QuestionDTO
+from core.utils.question_accessor import QuestionAccessor, QuestionDTO, normalize_q_code
 from core.ai_engine.providers.factory import AIProviderFactory
+from core.ai_engine.routing.task_types import TaskType
 
 class SemanticQuestionMatcher:
     """
@@ -125,8 +126,8 @@ class SemanticQuestionMatcher:
         top_score = top_match['score']
         score_gap = top_score - (second_match['score'] if second_match else 0.0)
 
-        # Step 2: If keyword score is ambiguous or low, call LLM classification
-        if top_score < 0.75 or score_gap < 0.10:
+        # Step 2: If keyword score is near zero and ai_provider is explicitly provided, call LLM classification as fallback
+        if top_score <= 0.05 and ai_provider and len(stored_questions) > 1:
             llm_result = cls._run_llm_semantic_classification(extracted_text, stored_questions, ai_provider)
             if llm_result:
                 return llm_result
@@ -138,8 +139,8 @@ class SemanticQuestionMatcher:
             'best_question': top_match['q_obj'],
             'confidence': top_score,
             'is_ambiguous': is_ambiguous,
-            'scores': [{'q_id': s['q_id'], 'q_num': s['q_num'], 'score': s['score']} for s in term_scores],
-            'reason': f"Matched Q{top_match['q_num']} via keyword term overlap (score: {top_score}, gap: {round(score_gap, 2)})."
+            'scores': [{'q_id': s['q_id'], 'q_num': normalize_q_code(s['q_num']), 'score': s['score']} for s in term_scores],
+            'reason': f"Matched {normalize_q_code(top_match['q_num'])} via keyword term overlap (score: {top_score}, gap: {round(score_gap, 2)})."
         }
 
     @classmethod
@@ -157,7 +158,8 @@ class SemanticQuestionMatcher:
             questions_summary = []
             for q in stored_questions:
                 q_dto = QuestionDTO.from_model(q)
-                questions_summary.append(f"ID {q_dto.id} (Q{q_dto.number}): {q_dto.prompt_text[:120]}")
+                norm_num = normalize_q_code(q_dto.number)
+                questions_summary.append(f"ID {q_dto.id} ({norm_num}): {q_dto.prompt_text[:120]}")
 
             prompt = f"""You are an academic classifier. Identify which question the following unlabelled student answer belongs to based ONLY on conceptual and semantic topic similarity.
 
@@ -179,7 +181,8 @@ Return ONLY a valid JSON object matching this schema:
 """
             raw_response = ai_provider.generate_completion(
                 prompt=prompt,
-                system_instruction="You return strict JSON question classification."
+                system_instruction="You return strict JSON question classification.",
+                task_type=TaskType.QUESTION_MAPPING
             )
             clean_json = (raw_response or "").strip()
             if "```json" in clean_json:
@@ -191,7 +194,19 @@ Return ONLY a valid JSON object matching this schema:
             if match:
                 clean_json = match.group(0)
 
-            data = json.loads(clean_json) if clean_json else {}
+            data = {}
+            if clean_json:
+                try:
+                    data = json.loads(clean_json)
+                except Exception:
+                    # Fallback regex extraction if JSON is malformed/truncated
+                    m_id = re.search(r'"matched_question_id"\s*:\s*([0-9]+)', clean_json)
+                    if m_id:
+                        data['matched_question_id'] = int(m_id.group(1))
+                    m_conf = re.search(r'"confidence"\s*:\s*([0-9\.]+)', clean_json)
+                    if m_conf:
+                        data['confidence'] = float(m_conf.group(1))
+
             matched_val = data.get('matched_question_id')
             matched_id = int(matched_val) if (matched_val is not None and str(matched_val).isdigit()) else 0
             conf = float(data.get('confidence', 0.70)) if data.get('confidence') is not None else 0.70
@@ -202,7 +217,7 @@ Return ONLY a valid JSON object matching this schema:
                         'best_question': q,
                         'confidence': conf,
                         'is_ambiguous': conf < 0.75,
-                        'scores': [{'q_id': getattr(q, 'id', 0), 'q_num': QuestionAccessor.get_question_number(q), 'score': conf}],
+                        'scores': [{'q_id': getattr(q, 'id', 0), 'q_num': normalize_q_code(QuestionAccessor.get_question_number(q)), 'score': conf}],
                         'reason': f"LLM semantic classification: {data.get('reason', 'Matched via context')}"
                     }
         except Exception as e:

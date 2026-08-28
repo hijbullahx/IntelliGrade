@@ -200,6 +200,28 @@ class DocumentService:
                     candidates.append(e_res)
 
         if not candidates:
+            # For handwritten images, OCR engines often return < 30 chars.
+            # Do NOT halt execution — return a VisionFallback marker so the caller
+            # can route to a multimodal vision model instead of crashing the pipeline.
+            is_image_upload = (
+                mime_type.startswith('image/')
+                or not doc_bytes.startswith(b'%PDF')
+            )
+            if is_image_upload:
+                print(
+                    f"[DOCUMENT SERVICE] Image OCR yielded <30 chars — emitting VisionFallback "
+                    f"(mime={mime_type}). Vision model will be used as primary extractor."
+                )
+                return {
+                    "text": "",
+                    "confidence": 0.0,
+                    "quality_score": 0.0,
+                    "char_count": 0,
+                    "engine": "VisionFallback",
+                    "raw_image_bytes": doc_bytes,
+                    "page_renders": page_renders or [],
+                }
+            # Only raise for PDF documents where OCR is expected to work
             from core.ai_engine.parser.academic_parser import PipelineValidationError
             raise PipelineValidationError(
                 "[STRICT OCR FAILURE] All available OCR engines returned insufficient readable characters (< 30). "
@@ -211,6 +233,25 @@ class DocumentService:
         print(f"[DOCUMENT SERVICE OCR] Selected Engine: {best['engine']} | Text Length: {best['char_count']} chars | Quality Score: {best.get('quality_score', 0):.2f} | Confidence: {best['confidence']}")
 
         if best["char_count"] < 30:
+            # Same image-vs-PDF check for the secondary guard
+            is_image_upload = (
+                mime_type.startswith('image/')
+                or not doc_bytes.startswith(b'%PDF')
+            )
+            if is_image_upload:
+                print(
+                    f"[DOCUMENT SERVICE] Best candidate only has {best['char_count']} chars for image upload "
+                    f"— emitting VisionFallback. Vision model will be used as primary extractor."
+                )
+                return {
+                    "text": best.get("text", ""),
+                    "confidence": 0.0,
+                    "quality_score": 0.0,
+                    "char_count": best["char_count"],
+                    "engine": "VisionFallback",
+                    "raw_image_bytes": doc_bytes,
+                    "page_renders": page_renders or [],
+                }
             from core.ai_engine.parser.academic_parser import PipelineValidationError
             raise PipelineValidationError(
                 f"[STRICT OCR FAILURE] Extracted text length ({best['char_count']} chars) is below the minimum threshold (30 chars)."

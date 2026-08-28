@@ -9,6 +9,7 @@ from .groq import GroqProvider
 from .openai import OpenAIProvider
 from .openrouter import OpenRouterProvider
 from .ollama import OllamaProvider
+from .local_vision import LocalOfflineVisionProvider
 from core.ai_engine.routing.task_types import TaskType, ProviderStrategy
 from core.ai_engine.routing.task_router import TaskRouter, ProviderHealthTracker
 
@@ -34,22 +35,29 @@ class FailoverAIProvider(BaseAIProvider):
         if self.primary_provider:
             self._chain.append(self.primary_provider)
 
-        if gemini_key and not any(isinstance(p, GeminiProvider) for p in self._chain):
-            self._chain.append(GeminiProvider(api_key=gemini_key))
-
-        if groq_key and not any(isinstance(p, GroqProvider) for p in self._chain):
-            self._chain.append(GroqProvider(api_key=groq_key))
-
-        if openai_key and not any(isinstance(p, OpenAIProvider) for p in self._chain):
-            self._chain.append(OpenAIProvider(api_key=openai_key))
-
-        if openrouter_key and not any(isinstance(p, OpenRouterProvider) for p in self._chain):
-            self._chain.append(OpenRouterProvider(api_key=openrouter_key))
+        # Local Offline & Ollama Providers Priority 1
+        if not any(isinstance(p, LocalOfflineVisionProvider) for p in self._chain):
+            self._chain.append(LocalOfflineVisionProvider())
 
         if not any(isinstance(p, OllamaProvider) for p in self._chain):
             self._chain.append(OllamaProvider())
 
-        print(f"[AI PROVIDER STATUS] Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'} | OpenRouter: {'CONFIGURED' if openrouter_key else 'NOT CONFIGURED'} | Ollama: CONFIGURED")
+        # Fast Cloud Fallback Priority 2: Groq
+        if groq_key and not any(isinstance(p, GroqProvider) for p in self._chain):
+            self._chain.append(GroqProvider(api_key=groq_key))
+
+        # Cloud Aggregator Priority 3: OpenRouter
+        if openrouter_key and not any(isinstance(p, OpenRouterProvider) for p in self._chain):
+            self._chain.append(OpenRouterProvider(api_key=openrouter_key))
+
+        # Direct Cloud Providers Priority 4: Gemini & OpenAI
+        if gemini_key and not any(isinstance(p, GeminiProvider) for p in self._chain):
+            self._chain.append(GeminiProvider(api_key=gemini_key))
+
+        if openai_key and not any(isinstance(p, OpenAIProvider) for p in self._chain):
+            self._chain.append(OpenAIProvider(api_key=openai_key))
+
+        print(f"[AI PROVIDER STATUS] Local Offline Vision: CONFIGURED | Ollama: CONFIGURED | Groq: {'CONFIGURED' if groq_key else 'NOT CONFIGURED'} | OpenRouter: {'CONFIGURED' if openrouter_key else 'NOT CONFIGURED'} | Gemini: {'CONFIGURED' if gemini_key else 'NOT CONFIGURED'} | OpenAI: {'CONFIGURED' if openai_key else 'NOT CONFIGURED'}")
 
     @staticmethod
     def _extract_image_count(args: tuple, kwargs: dict) -> int:
@@ -97,10 +105,12 @@ class FailoverAIProvider(BaseAIProvider):
         # Legacy fallback when task_type is None or strategy is unmapped
         if has_imgs:
             order_priority = {
-                GeminiProvider: 1,
-                OpenAIProvider: 2,
-                OpenRouterProvider: 3,
-                GroqProvider: 4
+                LocalOfflineVisionProvider: 1,
+                OllamaProvider: 2,
+                GroqProvider: 3,
+                OpenRouterProvider: 4,
+                GeminiProvider: 5,
+                OpenAIProvider: 6
             }
             available = [
                 p for p in self._chain
@@ -112,10 +122,11 @@ class FailoverAIProvider(BaseAIProvider):
         else:
             order_priority = {
                 GroqProvider: 1,
-                OpenRouterProvider: 2,
-                GeminiProvider: 3,
-                OpenAIProvider: 4,
-                OllamaProvider: 5
+                GeminiProvider: 2,
+                OpenAIProvider: 3,
+                OllamaProvider: 4,
+                OpenRouterProvider: 5,
+                LocalOfflineVisionProvider: 6
             }
             available = [p for p in self._chain if p.get_capabilities().get('supports_text', False) and not ProviderHealthTracker.is_on_cooldown(p.__class__)]
             available.sort(key=lambda p: order_priority.get(p.__class__, 99))
@@ -144,14 +155,16 @@ class FailoverAIProvider(BaseAIProvider):
             elif method_name == 'analyze_question_full':
                 task_type = TaskType.COMPLEX_REASONING
 
-        # Per-task-type budget overrides — vision grading needs adequate window
+        # Per-task-type budget overrides — global 45.0s budget for multi-page batch evaluations
         _TASK_BUDGETS = {
-            'answer_grading': 30.0,
-            'answer_visual_read': 30.0,
-            'complex_reasoning': 30.0,
-            'ocr_text': 16.0,
+            'answer_grading': 45.0,
+            'answer_visual_read': 45.0,
+            'complex_reasoning': 45.0,
+            'ocr_text': 45.0,
+            'routine_parse': 45.0,
+            'question_mapping': 45.0,
         }
-        env_budget = float(getattr(settings, 'AI_TOTAL_TIMEOUT_BUDGET', None) or os.environ.get('AI_TOTAL_TIMEOUT_BUDGET', 16.0))
+        env_budget = float(getattr(settings, 'AI_TOTAL_TIMEOUT_BUDGET', None) or os.environ.get('AI_TOTAL_TIMEOUT_BUDGET', 45.0))
         task_key = task_type.value if task_type else None
         total_budget = _TASK_BUDGETS.get(task_key, env_budget)
         overall_start = time.monotonic()
@@ -210,7 +223,13 @@ class FailoverAIProvider(BaseAIProvider):
             if passed_timeout is not None:
                 provider_timeout = min(float(passed_timeout), remaining_budget)
             else:
-                provider_timeout = min(float(os.environ.get('AI_REQUEST_TIMEOUT', 8.0)), remaining_budget)
+                if isinstance(provider, OllamaProvider) and 'moondream' in str(getattr(provider, 'model_name', '')).lower():
+                    default_to = 3.5
+                elif isinstance(provider, (LocalOfflineVisionProvider, OllamaProvider)):
+                    default_to = 12.0
+                else:
+                    default_to = float(os.environ.get('AI_REQUEST_TIMEOUT', 8.0))
+                provider_timeout = min(default_to, remaining_budget)
             call_kwargs['timeout'] = provider_timeout
 
             attempt = 0
@@ -249,9 +268,8 @@ class FailoverAIProvider(BaseAIProvider):
                     # Non-transient or max attempts reached: mark cooldown and failover
                     is_auth_fail = any(term in last_error.lower() for term in ['401', '403', 'invalid api key', 'unauthenticated'])
                     status_code = 'AUTH_FAILURE' if is_auth_fail else ('RATE_LIMITED' if ('429' in last_error or 'quota' in last_error.lower()) else 'OFFLINE')
-                    self.log_health_event(provider_name, status_code, error_msg=last_error, response_time_ms=elapsed_ms)
-
-                    ProviderHealthTracker.mark_cooldown(provider.__class__, duration_seconds=60.0)
+                    cooldown_secs = 15.0 if status_code == 'RATE_LIMITED' else 60.0
+                    ProviderHealthTracker.mark_cooldown(provider.__class__, duration_seconds=cooldown_secs)
 
                     if is_auth_fail:
                         print(f"[AI PROVIDER AUTH FAILURE] {provider_name}: Authentication error ({last_error[:100]}). Immediately failing over...")

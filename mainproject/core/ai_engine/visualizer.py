@@ -95,8 +95,9 @@ class LayoutVisualizer:
                 draw.text((x0 + 5, max(0, y0 - 23)), tag_label, fill=(255, 255, 255), font=small_font)
 
             # 3. Draw Question Bounding Boxes (Blue)
+            from core.utils.question_accessor import normalize_q_code
             for q_idx, q in enumerate(parsed_questions):
-                q_num = q.get('question_number', f"Q{q_idx+1}")
+                q_num = normalize_q_code(q.get('question_number') or (q_idx + 1))
                 assoc_figs = q.get('associated_figures', [])
                 assoc_tbls = q.get('associated_tables', [])
                 assoc_forms = q.get('associated_formulas', [])
@@ -113,7 +114,7 @@ class LayoutVisualizer:
                 if assoc_forms: badge_info.append(f"{len(assoc_forms)}FORM")
                 badge_txt = f" ({', '.join(badge_info)})" if badge_info else ""
 
-                lbl_text = f"Q{q_num}{badge_txt}"
+                lbl_text = f"{q_num}{badge_txt}"
                 draw.rectangle([20, q_top + 5, 280, q_top + 35], fill=color)
                 draw.text((25, q_top + 8), lbl_text, fill=(255, 255, 255), font=font)
 

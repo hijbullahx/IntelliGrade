@@ -14,6 +14,290 @@
 }
 </style>
 
+<!-- Interactive Scanning Progress & Execution Log Modal (Top Level) -->
+<div id="scanProgressModal" onclick="if(event.target === this) closeScanProgressModal();" style="display: none; z-index: 999999;" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md items-center justify-center p-4">
+    <div class="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0 flex flex-col max-h-[92vh]">
+        
+        <!-- Modal macOS Header Bar -->
+        <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block shadow-[0_0_8px_#f43f5e]"></span>
+                    <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block shadow-[0_0_8px_#f59e0b]"></span>
+                    <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block shadow-[0_0_8px_#10b981]"></span>
+                </div>
+                <div class="h-4 w-px bg-slate-800 mx-1"></div>
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-purple-400"></i>
+                    <span class="font-mono text-xs font-bold text-white tracking-wide">WRITTEN / REGULAR QUESTION PAPER SCANNER & VISION ENGINE</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="scanActiveModelBadge" class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-mono font-bold">
+                    AI Active
+                </span>
+                <button type="button" onclick="closeScanProgressModal()" class="text-slate-400 hover:text-white font-extrabold text-2xl px-2.5 py-0.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer leading-none" title="Close Pop-up">&times;</button>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: Input & Configuration View        -->
+        <!-- ========================================== -->
+        <div id="scanModalInputView" class="p-6 space-y-5 flex-1 overflow-y-auto">
+            
+            <!-- Tab Switcher -->
+            <div class="flex items-center gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
+                <button type="button" id="tabQPUploadBtn" onclick="switchScanModalTab('upload')" class="flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow">
+                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload Document / Photo(s)
+                </button>
+                <button type="button" id="tabQPTextBtn" onclick="switchScanModalTab('text')" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
+                    <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Paste Question Paper Text
+                </button>
+            </div>
+
+            <!-- TAB 1 CONTENT: File Dropzone & Camera Options -->
+            <div id="modalQPTabUploadContent" class="space-y-4">
+                
+                <!-- Dual Action Zone: Browse / Drag Files OR Live Camera -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    
+                    <!-- 1. Browse / Drag Dropzone -->
+                    <label for="modalQPFileInput" id="modalQPDropzone" class="border-2 border-dashed border-purple-500/30 hover:border-purple-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Browse / Drag Files</p>
+                            <p class="text-[10px] text-slate-400">PDF, PNG, JPG (Multi-select)</p>
+                        </div>
+                    </label>
+
+                    <!-- 2. Direct Device Camera Capture Option -->
+                    <label for="modalQPCameraInput" class="border-2 border-dashed border-cyan-500/30 hover:border-cyan-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <i data-lucide="camera" class="w-5 h-5"></i>
+                        </div>
+                        <div class="space-y-0.5">
+                            <p class="text-xs font-bold text-white">Capture from Camera</p>
+                            <p class="text-[10px] text-slate-400">Take photo of question paper sheet</p>
+                        </div>
+                    </label>
+
+                </div>
+
+                <!-- Hidden Inputs for File Browser & Direct Camera -->
+                <input type="file" id="modalQPFileInput" onchange="handleModalQPFilesSelect(this)" accept="image/*,.pdf,.txt,.doc,.docx" multiple class="hidden">
+                <input type="file" id="modalQPCameraInput" onchange="handleModalQPCameraCapture(this)" accept="image/*" capture="environment" class="hidden">
+
+                <!-- Selected Files / Photos Gallery Container -->
+                <div id="modalQPFilesGallerySection" class="hidden space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Staged Question Photos / Documents:
+                        </span>
+                        <span id="modalQPTotalFilesCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold font-mono">
+                            0 Files
+                        </span>
+                    </div>
+
+                    <!-- Dynamic List of Uploaded/Snapped Photos -->
+                    <div id="modalQPFilesList" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Add More Photos / Files Action Bar -->
+                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+                        <div class="flex items-center gap-2">
+                            <label for="modalQPFileInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="plus" class="w-3 h-3"></i> Add More Files
+                            </label>
+                            <label for="modalQPCameraInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded-lg border border-cyan-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
+                                <i data-lucide="camera" class="w-3 h-3"></i> Take Another Photo
+                            </label>
+                        </div>
+                        <button type="button" onclick="clearAllModalQPFiles()" class="text-[11px] text-rose-400 hover:underline flex items-center gap-1">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2 CONTENT: Raw Textarea -->
+            <div id="modalQPTabTextContent" class="hidden space-y-2">
+                <label class="block text-xs font-bold text-slate-300">Paste Question Paper Content / Text</label>
+                <textarea id="modalQPTextArea" rows="6" placeholder="Paste questions here (e.g.&#10;Question 1: Explain the difference between Process and Thread with diagrams. [10 Marks]&#10;Question 2: Derive the time complexity of QuickSort in best and worst cases. [10 Marks])..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none leading-relaxed"></textarea>
+                <p class="text-[10px] text-slate-400">The AI layout engine extracts questions, sub-parts, marks, and formulas directly from text.</p>
+            </div>
+
+            <!-- Modal Info Banner -->
+            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-400">
+                <i data-lucide="info" class="w-4 h-4 text-purple-400 shrink-0 mt-0.5"></i>
+                <p>Upon scanning, the AI layout engine renders document pages at 300 DPI, detects tables, figures, formulas, and structures the examination questions automatically.</p>
+            </div>
+
+            <!-- Modal Action Controls -->
+            <div class="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
+                <button type="button" onclick="closeScanProgressModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-all cursor-pointer">Cancel</button>
+                <button type="button" id="modalQPStartScanBtn" onclick="runAIQuestionScanFromModal()" class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> Start AI Question Paper Scan
+                </button>
+            </div>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: Live Scanning & Progress Terminal -->
+        <!-- ========================================== -->
+        <div id="scanModalProgressView" class="hidden p-6 space-y-4 flex-1 flex flex-col min-h-0 bg-slate-950">
+            
+            <!-- Live Progress Header -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span id="scanStatusBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5 animate-pulse">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> LIVE EXECUTING
+                    </span>
+                    <span id="qpScanTimer" class="font-mono text-xs text-amber-400 font-bold">0.0s</span>
+                </div>
+                <div class="flex items-center gap-2 font-mono text-xs">
+                    <span class="text-slate-400">Pipeline:</span>
+                    <span id="scanProgressPercent" class="text-purple-400 font-bold">0%</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] font-mono">
+                    <span id="scanCurrentStageBadge" class="text-cyan-400 font-bold">Initializing Document Analysis Engine...</span>
+                </div>
+                <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                    <div id="scanProgressBar" class="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-400 rounded-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+
+            <!-- Laser Scanning & Terminal Split Body -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0">
+                
+                <!-- Left: Laser Scanning Animation Viewport -->
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between items-center relative overflow-hidden">
+                    <div class="text-center w-full mb-1">
+                        <span class="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Vision Scanner</span>
+                        <span class="text-[11px] font-mono text-emerald-400 font-bold truncate block" id="qpScannerFileLabel">Document Ingestion</span>
+                    </div>
+
+                    <!-- Scanning Graphic with Laser Beam -->
+                    <div class="relative w-full h-36 rounded-lg overflow-hidden border border-purple-500/40 bg-black flex items-center justify-center shadow-inner">
+                        <div class="text-center space-y-1.5 opacity-80">
+                            <i data-lucide="brain-circuit" class="w-10 h-10 text-purple-400 mx-auto animate-pulse"></i>
+                            <span class="text-[10px] font-mono text-purple-300 block">Spatial Grid & Academic Parser</span>
+                        </div>
+                        
+                        <!-- Laser Beam -->
+                        <div class="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_#a855f7] animate-laser-scan"></div>
+                    </div>
+
+                    <div class="w-full text-center mt-2">
+                        <span class="text-[10px] font-mono text-slate-500">Figure, Table & Formula Matrix</span>
+                    </div>
+                </div>
+
+                <!-- Right: Real-time Terminal Log Console Stream (Spans 2 cols) -->
+                <div class="col-span-2 flex flex-col min-h-0 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                            <i data-lucide="terminal" class="w-3 h-3 text-emerald-400"></i> Real-Time Pipeline Execution Log
+                        </span>
+                        <span class="text-[9px] font-mono text-slate-500">Staging extracted items</span>
+                    </div>
+                    
+                    <div id="scanLogConsole" class="flex-1 bg-black font-mono text-[11px] text-emerald-400 p-3.5 rounded-xl h-44 overflow-y-auto border border-slate-800 space-y-1 shadow-inner select-text">
+                        <!-- Dynamic logs appended here -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- In-Modal Unfinalized Staged Paper Preview Container -->
+            <div id="modalScannedPreviewBox" class="hidden space-y-2 border-t border-slate-800 pt-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i> Staged Scanned Paper Preview (Unfinalized)
+                    </span>
+                    <span class="text-[10px] text-slate-400 italic font-mono">Click Finalize This to commit to DB or Quit to dismiss</span>
+                </div>
+                <div id="modalScannedQuestionsContainer" class="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    <!-- Dynamic inline scanned items -->
+                </div>
+            </div>
+
+            <!-- Modal Footer Controls -->
+            <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                <div id="scanInProgressControls" class="flex items-center justify-between w-full">
+                    <div class="flex items-center gap-2 text-slate-400 text-[11px]">
+                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        <span>Processing document layout & AI extraction...</span>
+                    </div>
+                    <button type="button" onclick="stopScan()" id="stopScanBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
+                        <i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> Stop Scanning
+                    </button>
+                </div>
+
+                <div id="scanCompletedControls" class="hidden flex items-center justify-end gap-2.5 w-full flex-wrap">
+                    <button type="button" onclick="quitScan()" id="quitScanBtn" class="px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i> 🚪 Quit
+                    </button>
+                    <button type="button" onclick="viewScannedItems()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center gap-1.5">
+                        <i data-lucide="eye" class="w-3.5 h-3.5 text-cyan-400"></i> 👁️ View Scanned
+                    </button>
+                    <button type="button" onclick="finalizeScannedPaper()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ✅ Finalize This
+                    </button>
+                    <button type="button" onclick="openSupplementaryModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-1.5">
+                        <i data-lucide="file-plus" class="w-3.5 h-3.5"></i> 📄 Supplementary Doc
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<script>
+window.openScanQuestionModal = function() {
+    var modal = document.getElementById('scanProgressModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        modal.style.zIndex = '999999';
+        if (typeof resetScanModalToInput === 'function') resetScanModalToInput();
+        if (window.lucide) lucide.createIcons();
+    }
+};
+
+window.closeScanProgressModal = function() {
+    var modal = document.getElementById('scanProgressModal');
+    if (modal) {
+        modal.style.display = 'none';
+        if (window.qpScanTimerInterval) clearInterval(window.qpScanTimerInterval);
+    }
+};
+
+window.scrollToQuestionBuilder = function() {
+    var form = document.getElementById('questionBuilderForm');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var promptEl = document.getElementById('qPrompt');
+        if (promptEl) {
+            setTimeout(function() { promptEl.focus(); }, 350);
+        }
+        form.classList.add('ring-2', 'ring-cyan-500', 'shadow-2xl');
+        setTimeout(function() {
+            form.classList.remove('ring-2', 'ring-cyan-500', 'shadow-2xl');
+        }, 2500);
+    }
+};
+</script>
+
 <div class="max-w-6xl mx-auto space-y-8">
     
     <!-- Top Navigation Header -->
@@ -38,9 +322,19 @@
             
             <div class="flex items-center gap-3 w-full md:w-auto">
                 {% if selected_exam %}
-                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
-                    <i data-lucide="check-square" class="w-4 h-4"></i> Evaluate Answer Scripts
-                </a>
+                    {% if questions and questions.count > 0 and selected_exam.master_solution_file or selected_exam.master_solution_parsed %}
+                    <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 shrink-0 animate-pulse">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i> 🚀 Launch Evaluation Wizard &rarr;
+                    </a>
+                    {% elif questions and questions.count > 0 %}
+                    <button type="button" onclick="document.getElementById('masterSolutionFileInput').click()" title="Please upload Baseline Answer Script first to enable Evaluation Wizard" class="px-4 py-2.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 font-bold text-xs rounded-xl flex items-center gap-2 shrink-0 transition-all cursor-pointer">
+                        <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i> 🔒 Upload Baseline Answer First
+                    </button>
+                    {% else %}
+                    <button type="button" disabled title="Upload, scan, and finalize the Question Paper first." class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed opacity-60 flex items-center gap-2 shrink-0 border border-slate-300 dark:border-slate-700">
+                        <i data-lucide="lock" class="w-3.5 h-3.5"></i> Launch Evaluation Wizard
+                    </button>
+                    {% endif %}
                 {% endif %}
                 <!-- Assigned Exam Selector Dropdown -->
                 <div class="w-full md:w-80">
@@ -82,23 +376,23 @@
     </div>
     {% else %}
 
-    <!-- AI Question Paper Extraction Banner (Modal Trigger) -->
+    <!-- AI Question Paper Extraction Banner (For Regular / Written Examination Papers & Scripts) -->
     <div class="glass-card p-6 rounded-2xl border border-purple-500/20 shadow-lg space-y-4">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="space-y-1.5 flex-1">
                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 text-xs font-semibold">
-                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> AI Vision & HTR Question Extractor
+                    <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Regular / Written Examination Papers & Scripts
                 </div>
                 <h3 class="font-extrabold text-base theme-text-primary tracking-tight">
-                    Scan & Extract Question Paper with AI Engine
+                    Scan & Extract Regular Questions (AI Engine)
                 </h3>
                 <p class="theme-text-muted text-xs leading-relaxed max-w-xl">
-                    Click below to upload or capture your Question Paper (PDF or Image). IntelliGrade AI will automatically extract questions, diagrams, matrices, and rubrics for your review before saving.
+                    Upload or capture your <strong>regular written / subjective Question Paper</strong> (PDF or Image). IntelliGrade AI will automatically extract questions, sub-parts, figures, tables, and rubrics for written student answer script evaluation.
                 </p>
 
                 <div id="qpStatusBadge" class="pt-1">
                     {% if selected_exam.question_paper_file or questions %}
-                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs">
+                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs flex-wrap">
                         {% csrf_token %}
                         <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
                         <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] border border-emerald-500/20">
@@ -114,78 +408,85 @@
                         </button>
                     </form>
                     {% else %}
-                    <span class="text-[11px] theme-text-muted italic">No Question Paper document uploaded or configured yet for this examination.</span>
+                    <span class="text-[11px] theme-text-muted italic">No regular Question Paper document uploaded or configured yet for this examination.</span>
                     {% endif %}
                 </div>
             </div>
 
             <div class="flex items-center gap-3 shrink-0">
-                <button type="button" onclick="scanAcademicPaper()" id="scanAcademicBtn" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2.5 cursor-pointer">
-                    <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Question Paper (AI Engine)
+                {% if questions and questions.count > 0 %}
+                <button type="button" disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Click Reset & Re-scan to scan a new paper." class="px-5 py-3 bg-slate-800 text-slate-400 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-75 flex items-center gap-2">
+                    <i data-lucide="lock" class="w-4 h-4 text-amber-400"></i> 🔒 🧠 Scan Locked ({{ questions.count }} Qs Active)
                 </button>
+                <form method="POST" class="inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+                    <button type="submit" name="clear_document" value="question_paper_file" onclick="localStorage.removeItem('finalized_exam_{{ selected_exam.id }}'); return confirm('Reset and remove all {{ questions.count }} configured questions and previous paper from this exam?');" class="px-4 py-3 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer" title="Reset paper to enable scanning a new question paper">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 🗑️ Reset & Re-scan
+                    </button>
+                </form>
+                {% else %}
+                <div class="flex items-center gap-2.5">
+                    <button type="button" onclick="openScanQuestionModal()" id="scanAcademicBtn" class="px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer">
+                        <i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract (AI Engine)
+                    </button>
+                    <button type="button" onclick="scrollToQuestionBuilder()" id="manualBuilderBtn" class="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 font-extrabold text-xs rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+                        <i data-lucide="file-pen" class="w-4 h-4 text-cyan-400"></i> ✍️ Manual Question Builder
+                    </button>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- Dedicated MCQ Examination Control Hub (Shows when examination is selected) -->
-    {% if selected_exam %}
-    <div class="glass-card p-5 rounded-2xl border border-purple-500/30 bg-slate-900/90 shadow-xl space-y-4">
+    <!-- Master / Benchmark Answer Script (Golden Solution) Card (Shows after questions are configured) -->
+    {% if selected_exam and questions and questions.count > 0 %}
+    <div class="glass-card p-6 rounded-2xl border border-emerald-500/30 bg-slate-900/90 shadow-xl space-y-4">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div class="space-y-1">
-                <div class="flex items-center gap-2">
-                    <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold uppercase font-mono tracking-wider">
-                        ✓ Configured MCQ Examination
-                    </span>
-                    <span class="text-xs font-bold text-slate-300 font-mono">
-                        {{ questions.count }} Question(s) Saved
-                    </span>
+            <div class="space-y-1.5 flex-1">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i> Model Answer Baseline Active
                 </div>
-                <h3 class="font-extrabold text-base text-white flex items-center gap-2">
-                    MCQ Examination Control & Student Script Hub
+                <h3 class="font-extrabold text-base text-white tracking-tight flex items-center gap-2">
+                    Master / Baseline Model Answer ({% if selected_exam.master_solution_file %}Uploaded File{% else %}Configured in Questions{% endif %})
                 </h3>
-                <p class="text-xs text-slate-400">
-                    Review configured MCQ questions, option choices & answer keys, or launch AI evaluation for student answer scripts.
+                <p class="text-slate-300 text-xs leading-relaxed max-w-xl">
+                    Student scripts will be evaluated against the model solutions and step-by-step marking criteria saved in this examination paper.
                 </p>
+
+                <div id="masterStatusBadge" class="pt-1">
+                    {% if selected_exam.master_solution_file %}
+                    <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs flex-wrap">
+                        {% csrf_token %}
+                        <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
+                        <span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-[11px] border border-emerald-500/30">
+                            ✓ Master Document Attached
+                        </span>
+                        <a href="{{ selected_exam.master_solution_file.url }}" target="_blank" class="text-[11px] text-amber-400 font-bold hover:underline inline-flex items-center gap-1">
+                            <i data-lucide="external-link" class="w-3 h-3"></i> View Baseline Document
+                        </a>
+                        <button type="submit" name="clear_document" value="master_solution_file" onclick="return confirm('Remove saved Master Solution document from this exam? (Manual question rubrics will remain active)')" class="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline ml-2 cursor-pointer">
+                            🗑️ Reset Document
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                        <span>Model solutions & rubrics saved during question creation are active for grading.</span>
+                    </span>
+                    {% endif %}
+                </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-3 shrink-0">
-                <!-- Button 1: View Configured MCQ Paper & Keys -->
-                <button type="button" onclick="toggleSavedMcqViewer()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-purple-300 font-extrabold text-xs rounded-xl border border-purple-500/30 transition-all flex items-center gap-2 cursor-pointer">
-                    <i data-lucide="eye" class="w-4 h-4 text-purple-400"></i> View Configured MCQ Paper & Keys
+                <input type="file" id="masterSolutionFileInput" accept=".pdf,image/*" class="hidden" onchange="uploadMasterSolutionFile(this)">
+                <button type="button" onclick="document.getElementById('masterSolutionFileInput').click()" id="btnUploadMasterSolution" class="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> {% if selected_exam.master_solution_file %}📁 Replace Master Script PDF{% else %}📁 Attach Master Script PDF (Optional){% endif %}
                 </button>
-
-                <!-- Button 2: Scan & Evaluate Student Answer Scripts -->
-                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 shrink-0">
-                    <i data-lucide="check-square" class="w-4 h-4"></i> ⚡ Evaluate Student Answer Scripts &rarr;
+                
+                <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer animate-pulse">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> 🚀 Launch Evaluation Wizard &rarr;
                 </a>
-            </div>
-        </div>
-
-        <!-- Collapsible Saved MCQ Viewer Panel -->
-        <div id="savedMcqViewerPanel" class="hidden p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                <h4 class="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
-                    <i data-lucide="list-checks" class="w-4 h-4"></i> Finalized MCQ Questions & Ground-Truth Answer Keys
-                </h4>
-                <span class="text-[10px] font-mono text-purple-400 font-bold">Total: {{ questions.count }} Question(s)</span>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
-                {% for q in questions %}
-                <div class="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
-                    <div class="flex items-start justify-between font-bold gap-2">
-                        <span class="text-cyan-300 font-mono">{{ q.question_number }}. {{ q.prompt_text }}</span>
-                        <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono shrink-0">
-                            Key: <strong>{% if q.rubric %}{{ q.rubric.ideal_answer|default:"B" }}{% else %}B{% endif %}</strong>
-                        </span>
-                    </div>
-                    <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-800/80 pt-1.5">
-                        <span>CO: <strong class="text-slate-200">{{ q.co_mapping|default:"CO1" }}</strong> | Bloom: <strong class="text-slate-200">{{ q.bloom_level|default:"C1" }}</strong></span>
-                        <span class="font-mono text-emerald-400 font-bold">{{ q.max_marks }} Marks</span>
-                    </div>
-                </div>
-                {% empty %}
-                <p class="text-xs text-slate-500 italic text-center py-3">No MCQ questions configured yet.</p>
-                {% endfor %}
             </div>
         </div>
     </div>
@@ -235,16 +536,45 @@
                 {% csrf_token %}
                 <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
 
+                {% if questions and questions.count > 0 %}
+                <!-- Paper Finalized & Active Locked Banner -->
+                <div id="builderLockedNotice" class="glass-card p-4 rounded-2xl border-2 border-emerald-500/40 bg-slate-900/90 text-xs space-y-2.5 shadow-xl">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <h4 class="font-extrabold text-white text-xs">Paper Finalized & Active ({{ questions.count }} Questions Saved)</h4>
+                                <p class="text-[11px] text-slate-400">Questions and grading rubrics are locked to ensure grading integrity.</p>
+                            </div>
+                        </div>
+                        <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5 shrink-0 animate-pulse">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 🚀 Launch Evaluation Wizard &rarr;
+                        </a>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
+                        <span class="text-slate-400 italic">"Save & Add Next Question" is disabled for this finalized paper.</span>
+                        <button type="button" onclick="toggleBuilderUnlock()" id="unlockBuilderBtn" class="text-cyan-400 hover:text-cyan-300 font-bold underline flex items-center gap-1 cursor-pointer">
+                            <i data-lucide="unlock" class="w-3 h-3"></i> Unlock Builder to Manually Edit/Add
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Builder Header & Sticky Action Controls -->
                 <div class="glass-card p-5 rounded-2xl space-y-4 sticky top-4 z-20 shadow-xl border border-brand-500/20">
                     <div class="flex items-center justify-between gap-4">
                         <div>
                             <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
-                                <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
+                                <i data-lucide="edit-3" class="w-4 h-4 text-brand-500"></i> Manual Question Builder
                             </h3>
-                            <p class="text-[10px] theme-text-muted">Choose creation method below: Fill fields manually or write prompt & auto-analyze</p>
+                            <p class="text-[10px] theme-text-muted">Enter examination questions, marking criteria, model answers, and OBE mappings manually.</p>
                         </div>
                         <div class="flex items-center gap-2">
+                            <button type="button" onclick="startNewQuestion()" class="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm" title="Clear form & start creating the next question">
+                                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> + Next Question
+                            </button>
                             {% if questions %}
                             <button type="button" onclick="openIUBATPreviewModal()" class="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
                                 <i data-lucide="printer" class="w-3.5 h-3.5 text-white"></i> Preview Paper
@@ -257,29 +587,15 @@
                         </div>
                     </div>
 
-                    <!-- Creation Method Selection Cards -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                        <div class="p-3 rounded-xl border-2 border-brand-500/50 bg-brand-500/5 flex items-center gap-2.5">
-                            <span class="w-7 h-7 rounded-lg bg-brand-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
-                            <div>
-                                <span class="font-extrabold text-xs theme-text-primary block">Method 1: Direct Manual Entry</span>
-                                <span class="text-[10px] theme-text-muted">Type prompt, criteria, marks & taxonomy manually</span>
-                            </div>
+                    <!-- Question Builder Header Banner -->
+                    <div class="p-3 rounded-xl border border-brand-500/30 bg-brand-500/5 flex items-center gap-3">
+                        <div class="p-2 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
                         </div>
-                        <div class="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center gap-2.5">
-                            <span class="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
-                            <div>
-                                <span class="font-extrabold text-xs theme-text-primary block">Method 2: AI Auto-Analyze</span>
-                                <span class="text-[10px] theme-text-muted">Type question prompt & click ✨ AI Auto-Analyze</span>
-                            </div>
+                        <div>
+                            <span class="font-extrabold text-xs theme-text-primary block">Manual Question & Rubric Builder</span>
+                            <span class="text-[10px] theme-text-muted">Configure question statements, criteria, marking distribution, and OBE taxonomy</span>
                         </div>
-                        <button type="button" onclick="openMcqModal()" class="p-3 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all flex items-center gap-2.5 cursor-pointer text-left w-full">
-                            <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">3</span>
-                            <div>
-                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400 block flex items-center gap-1">Method 3: MCQ Quiz System &rarr;</span>
-                                <span class="text-[10px] theme-text-muted">Insert MCQ Key &rarr; Grade by Student ID</span>
-                            </div>
-                        </button>
                     </div>
                 </div>
 
@@ -295,7 +611,7 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Question Identifier / Number</label>
-                            <input type="text" name="question_number" id="qNumber" placeholder="e.g. Q1 (a)" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-brand-500 outline-none">
+                            <input type="text" name="question_number" id="qNumber" value="Q{{ questions|length|add:1 }}" placeholder="e.g. Q1 (a)" required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-brand-500 outline-none">
                         </div>
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Allocated Marks</label>
@@ -310,7 +626,7 @@
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
                             <i data-lucide="tag" class="w-4 h-4 text-purple-500"></i> Sections 3 & 4: Question Category & Command Verbs
                         </span>
-                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Detected</span>
+                        <span class="text-[10px] theme-text-muted font-bold">Academic Categorization</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -360,13 +676,8 @@
                     </div>
 
                     <div>
-                        <div class="flex items-center justify-between mb-1">
-                            <label class="block text-xs font-bold theme-text-secondary">Question Statement / Prompt Text</label>
-                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer" title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
-                                <i data-lucide="sparkles" class="w-3 h-3"></i> ✨ AI Auto-Analyze Question Text
-                            </button>
-                        </div>
-                        <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Question Statement / Prompt Text <span class="text-rose-500">*</span></label>
+                        <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement (e.g. '(a) Explain the difference between Process and Thread with diagrams. [5 Marks]&#10;(b) Describe PCB and TCB state transitions. [5 Marks]')..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
                     </div>
 
                     <!-- Manual Question Figure / Diagram Upload Dropzone -->
@@ -388,41 +699,52 @@
                 <div class="glass-card p-5 rounded-2xl space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
-                            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Sections 9-11: CO, Bloom & PO Mapping
+                            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Sections 9-11: Course Outcomes (CO), Bloom Taxonomy & Program Outcomes (PO)
                         </span>
-                        <span class="text-[10px] text-emerald-500 font-bold">OBE Aligned</span>
+                        <span class="text-[10px] text-emerald-500 font-bold">BAETE OBE Aligned</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Course Outcome (CO)</label>
                             <select name="co_mapping" id="qCOSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                                <option value="CO1" selected>CO1 - Core Fundamental Knowledge</option>
-                                <option value="CO2">CO2 - Analytical Problem Solving</option>
-                                <option value="CO3">CO3 - Design & Implementation</option>
-                                <option value="CO4">CO4 - Modern Tool & System Evaluation</option>
+                                <option value="CO1" selected>CO1 - Core Fundamental Principles & Theoretical Knowledge</option>
+                                <option value="CO2">CO2 - Analytical Problem Solving & Mathematical Formulation</option>
+                                <option value="CO3">CO3 - Design, Implementation & Engineering Synthesis</option>
+                                <option value="CO4">CO4 - Critical Investigation & Complex Problem Evaluation</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold theme-text-secondary mb-1">Bloom Taxonomy Level</label>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Bloom's Taxonomy Level</label>
                             <select name="bloom_level" id="qBloomSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                                <option value="Remember">1. Remember (Recall)</option>
-                                <option value="Understand" selected>2. Understand (Explain)</option>
-                                <option value="Apply">3. Apply (Execute)</option>
-                                <option value="Analyze">4. Analyze (Differentiate)</option>
-                                <option value="Evaluate">5. Evaluate (Justify)</option>
-                                <option value="Create">6. Create (Design)</option>
+                                <option value="Remember">1. Remember (Knowledge Recall)</option>
+                                <option value="Understand" selected>2. Understand (Comprehension & Explanation)</option>
+                                <option value="Apply">3. Apply (Execution & Implementation)</option>
+                                <option value="Analyze">4. Analyze (Differentiate & Breakdown)</option>
+                                <option value="Evaluate">5. Evaluate (Assessment, Validation & Justification)</option>
+                                <option value="Create">6. Create (Design & Synthesis)</option>
                             </select>
                         </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold theme-text-secondary mb-1.5">Program Outcome (PO) Checkbox Matrix</label>
-                        <div class="grid grid-cols-4 gap-2 text-[11px]">
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(a)" checked class="rounded text-brand-600"> <span class="font-bold">PO(a)</span> Math/Sci</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(b)" class="rounded text-brand-600"> <span class="font-bold">PO(b)</span> Analysis</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(c)" checked class="rounded text-brand-600"> <span class="font-bold">PO(c)</span> Design</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(d)" class="rounded text-brand-600"> <span class="font-bold">PO(d)</span> Investigation</label>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-bold theme-text-secondary">Program Outcome (PO) Matrix (BAETE Standard PO1–PO12)</label>
+                            <span class="text-[10px] theme-text-muted font-mono">Select applicable outcomes</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px]">
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO1" checked class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO1 / PO(a)</span> Engineering Knowledge</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO2" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO2 / PO(b)</span> Problem Analysis</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO3" checked class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO3 / PO(c)</span> Design of Solutions</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO4" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO4 / PO(d)</span> Investigation</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO5" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO5 / PO(e)</span> Modern Tool Usage</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO6" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO6 / PO(f)</span> Engineer & Society</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO7" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO7 / PO(g)</span> Environment & Sustainability</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO8" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO8 / PO(h)</span> Ethics</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO9" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO9 / PO(i)</span> Individual & Team Work</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO10" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO10 / PO(j)</span> Communication</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO11" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO11 / PO(k)</span> Project Management</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO12" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO12 / PO(l)</span> Life-long Learning</label>
                         </div>
                     </div>
                 </div>
@@ -431,9 +753,9 @@
                 <div class="glass-card p-5 rounded-2xl space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
-                            <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i> Sections 12-16: KP, CEP, CEA & Complexity
+                            <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i> Sections 12-16: Knowledge Profile (KP), Complex Problem (CEP) & Activity (CEA)
                         </span>
-                        <span class="text-[10px] theme-text-muted">Engineering Attributes</span>
+                        <span class="text-[10px] text-amber-500 font-bold">Engineering Classification</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -452,26 +774,40 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3 text-[11px]">
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Knowledge Profile (KP)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP1" checked> KP1 Natural Sci</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP3" checked> KP3 Engineering</label>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Knowledge Profile (KP)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP1" checked> <span class="font-semibold">KP1:</span> Natural Sciences</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP2"> <span class="font-semibold">KP2:</span> Mathematics & Computing</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP3" checked> <span class="font-semibold">KP3:</span> Engineering Fundamentals</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP4"> <span class="font-semibold">KP4:</span> Specialist Engineering</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP5"> <span class="font-semibold">KP5:</span> Engineering Design</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP6"> <span class="font-semibold">KP6:</span> Engineering Practice</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP7"> <span class="font-semibold">KP7:</span> Engineering in Society</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP8"> <span class="font-semibold">KP8:</span> Research Literature</label>
                             </div>
                         </div>
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Complex Problems (CEP)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP1" checked> CEP1 Depth Knowledge</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP2"> CEP2 Conflicting Req</label>
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Complex Problems (CEP)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP1" checked> <span class="font-semibold">CEP1:</span> In-depth Knowledge</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP2" checked> <span class="font-semibold">CEP2:</span> Conflicting Requirements</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP3"> <span class="font-semibold">CEP3:</span> Depth of Analysis</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP4"> <span class="font-semibold">CEP4:</span> Unfamiliar Issues</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP5"> <span class="font-semibold">CEP5:</span> Beyond Standard Codes</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP6"> <span class="font-semibold">CEP6:</span> Diverse Stakeholders</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP7"> <span class="font-semibold">CEP7:</span> Interdependence</label>
                             </div>
                         </div>
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Complex Activities (CEA)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA1" checked> CEA1 Diverse Resources</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA2"> CEA2 Novel Solution</label>
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Complex Activities (CEA)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA1" checked> <span class="font-semibold">CEA1:</span> Diverse Resources</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA2"> <span class="font-semibold">CEA2:</span> Significant Interactions</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA3"> <span class="font-semibold">CEA3:</span> Innovation & Novelty</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA4"> <span class="font-semibold">CEA4:</span> Societal Consequences</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA5"> <span class="font-semibold">CEA5:</span> Unfamiliarity</label>
                             </div>
                         </div>
                     </div>
@@ -483,7 +819,7 @@
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
                             <i data-lucide="award" class="w-4 h-4 text-purple-500"></i> Sections 17-22: Grading Rubrics & Expected Answer
                         </span>
-                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Generated</span>
+                        <span class="text-[10px] theme-text-muted font-bold">Academic Rubrics</span>
                     </div>
 
                     <div>
@@ -494,6 +830,17 @@
                     <div>
                         <label class="block text-xs font-bold theme-text-secondary mb-1">Expected Model Ideal Answer</label>
                         <textarea name="ideal_answer" id="qIdealAnswer" rows="3" placeholder="Model answer reference..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
+                    </div>
+
+                    <!-- Master / Benchmark Golden Ground Truth Solution (Auto-extracted or Editable) -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                <i data-lucide="award" class="w-3.5 h-3.5"></i> Master / Benchmark Solution (Golden Ground Truth)
+                            </label>
+                            <span class="text-[10px] text-amber-500 font-bold font-mono">Auto-extracted or Fine-tune</span>
+                        </div>
+                        <textarea name="master_solution_text" id="qMasterSolution" rows="3" placeholder="Extracted step-by-step golden benchmark solution from Master Script (e.g. intermediate derivations, matrices, formulas)..." class="w-full bg-slate-100 dark:bg-slate-900 border border-amber-500/30 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-amber-500 outline-none font-mono text-[11px]"></textarea>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -512,10 +859,21 @@
                         <textarea name="teacher_notes" id="qNotes" rows="2" placeholder="Private internal grading notes..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-xs theme-text-primary focus:ring-2 focus:ring-purple-500 outline-none"></textarea>
                     </div>
 
-                    <div class="pt-2 border-t border-slate-200 dark:border-slate-800">
-                        <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer">
-                            <i data-lucide="check-circle-2" class="w-4 h-4"></i> Save Question & Rubric to Database
-                        </button>
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <button type="submit" id="saveAndNextBtn" name="action_type" value="save_and_next" {% if questions and questions.count > 0 %}disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Unlock builder above to add questions." class="w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2"{% else %}class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"{% endif %}>
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i> Save & Add Next Question
+                            </button>
+                            <button type="submit" id="saveOnlyBtn" name="action_type" value="save_only" {% if questions and questions.count > 0 %}disabled title="Examination paper is already finalized with {{ questions.count }} question(s). Unlock builder above to edit." class="w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2"{% else %}class="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"{% endif %}>
+                                <i data-lucide="check-circle-2" class="w-4 h-4"></i> Save Question & Rubric
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between text-xs pt-1">
+                            <button type="button" onclick="startNewQuestion()" class="text-xs font-bold text-slate-500 hover:text-brand-500 flex items-center gap-1.5 transition-colors cursor-pointer">
+                                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear Form / Create New Question (+)
+                            </button>
+                            <span class="text-[11px] theme-text-muted">Item <strong class="text-brand-500">Q{{ questions|length|add:1 }}</strong> of examination paper</span>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -523,6 +881,22 @@
 
         <!-- Right Col: List of Questions Configured for Selected Exam -->
         <div class="lg:col-span-5 space-y-4">
+            {% if questions and questions.count > 0 %}
+            <!-- Primary Evaluation Call to Action Card -->
+            <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-teal-950/90 to-slate-900/90 border-2 border-emerald-500/50 shadow-xl space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-emerald-400 font-extrabold text-xs flex items-center gap-1.5">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i> Paper Configured ({{ questions.count }} Questions)
+                    </span>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px]">READY FOR GRADING</span>
+                </div>
+                <p class="text-[11px] text-slate-300 leading-relaxed">Questions, maximum marks, and marking rubrics are saved in the system. Proceed to upload and grade student answer scripts.</p>
+                <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 animate-pulse">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> 🚀 Launch Evaluation Wizard &rarr;
+                </a>
+            </div>
+            {% endif %}
+
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
                     <i data-lucide="list" class="w-4 h-4 text-purple-500"></i> Configured Exam Paper Items ({{ questions|length }})
@@ -550,7 +924,7 @@
                             {% if q.bloom_level %}<span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono text-[10px] font-bold">{{ q.bloom_level }}</span>{% endif %}
                         </div>
                         <div class="flex items-center gap-1">
-                            <button type="button" onclick="editQuestion('{{ q.question_number }}', '{{ q.max_marks }}', `{{ q.prompt_text|escapejs }}`, `{{ q.rubric.criteria|escapejs }}`, `{{ q.rubric.ideal_answer|escapejs }}`)" class="p-1.5 text-slate-400 hover:text-brand-500 transition-colors">
+                            <button type="button" onclick="editQuestion('{{ q.question_number }}', '{{ q.max_marks }}', `{{ q.prompt_text|escapejs }}`, `{{ q.rubric.criteria|escapejs }}`, `{{ q.rubric.ideal_answer|escapejs }}`, `{{ q.master_solution_text|escapejs }}`)" class="p-1.5 text-slate-400 hover:text-brand-500 transition-colors">
                                 <i data-lucide="edit-3" class="w-4 h-4"></i>
                             </button>
                             <a href="{% url 'delete_question' q.id %}" onclick="return confirm('Delete this question?');" class="p-1.5 text-slate-400 hover:text-rose-500 transition-colors">
@@ -560,6 +934,13 @@
                     </div>
 
                     <p class="text-xs theme-text-primary font-medium line-clamp-3">{{ q.prompt_text }}</p>
+
+                    {% if q.master_solution_text %}
+                    <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] space-y-1">
+                        <span class="font-bold text-amber-600 dark:text-amber-400 block flex items-center gap-1"><i data-lucide="award" class="w-3 h-3"></i> Master Golden Benchmark Solution:</span>
+                        <p class="theme-text-muted whitespace-pre-line font-mono text-[10.5px] line-clamp-2">{{ q.master_solution_text }}</p>
+                    </div>
+                    {% endif %}
 
                     {% if q.rubric %}
                     <div class="p-3 rounded-xl bg-slate-100/60 dark:bg-slate-900/60 text-[11px] space-y-1.5">
@@ -643,7 +1024,11 @@
                 <div class="my-3 space-y-2">
                     {% for fig in q.figures_rel.all %}
                     <div class="inline-block p-2 rounded-xl bg-slate-50 border border-slate-200 text-center max-w-full">
+                        {% if fig.image %}
                         <img src="{{ fig.image.url }}" alt="{{ fig.caption }}" class="max-h-64 object-contain mx-auto rounded-lg shadow-sm border border-slate-200">
+                        {% elif fig.thumbnail %}
+                        <img src="{{ fig.thumbnail.url }}" alt="{{ fig.caption }}" class="max-h-64 object-contain mx-auto rounded-lg shadow-sm border border-slate-200">
+                        {% endif %}
                         <p class="text-[10px] font-bold text-slate-600 mt-1">
                             📷 {{ fig.caption|default:"Figure" }} <span class="text-slate-400 font-mono">(Page {{ fig.page_number }})</span>
                         </p>
@@ -933,12 +1318,17 @@ function openScanQuestionModal() {
 
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    lucide.createIcons();
+    modal.style.display = 'flex';
+    modal.style.zIndex = '99999';
+    if (window.lucide) {
+        lucide.createIcons();
+    }
 }
 
 function closeScanProgressModal() {
     const modal = document.getElementById('scanProgressModal');
     if (!modal) return;
+    modal.style.display = 'none';
     modal.classList.remove('flex');
     modal.classList.add('hidden');
     if (qpScanTimerInterval) clearInterval(qpScanTimerInterval);
@@ -1055,6 +1445,21 @@ function renderQPFilesGallery() {
 
 function scanAcademicPaper() {
     openScanQuestionModal();
+}
+
+function scrollToQuestionBuilder() {
+    const el = document.getElementById('questionBuilderForm');
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('ring-4', 'ring-brand-500', 'transition-all', 'duration-500');
+        setTimeout(() => {
+            el.classList.remove('ring-4', 'ring-brand-500');
+        }, 1500);
+        const qNumberInput = document.getElementById('qNumber');
+        if (qNumberInput) {
+            setTimeout(() => qNumberInput.focus(), 500);
+        }
+    }
 }
 
 function runAIQuestionScanFromModal() {
@@ -1192,8 +1597,10 @@ function runAIQuestionScanFromModal() {
         if (ok && (data.success || data.status === 'success') && qList && qList.length > 0) {
             currentStagedScanData = data;
             const count = data.question_count || qList.length;
+            const isSubjective = qList.some(q => q.question_type === 'Subjective' || (!q.options || q.options.length === 0));
+            const typeLabel = isSubjective ? "Subjective" : "MCQ";
             updateScanProgress(100, "🎉 Scan Complete!");
-            appendScanLog(`🎉 Success! Extracted ${count} MCQ questions with option keys & marks.`, 'success');
+            appendScanLog(`🎉 Success! Extracted ${count} ${typeLabel} questions with OBE mappings & criteria.`, 'success');
             appendScanLog(`⚠️ Extracted paper staged in memory. Click Finalize & Save to commit to database.`, 'warn');
 
             const statusBadge = document.getElementById('scanStatusBadge');
@@ -1276,12 +1683,6 @@ function quitScan() {
     closeScanProgressModal();
 }
 
-function closeScanProgressModal() {
-    const modal = document.getElementById('scanProgressModal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
-}
-
 function viewScannedItems() {
     if (!currentStagedScanData || (!currentStagedScanData.data && !currentStagedScanData.questions)) {
         alert("No scanned paper data available to view.");
@@ -1301,58 +1702,68 @@ function renderModalInlinePreview(data) {
     if (!container) return;
     container.innerHTML = '';
 
-    const questions = data.data.questions || [];
+    const questions = data.data ? (data.data.questions || []) : (data.questions || []);
     questions.forEach((q, idx) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-xs font-sans text-slate-200';
 
         let figsHtml = '';
-        if (q.associated_figures && q.associated_figures.length > 0) {
-            figsHtml += '<div class="my-1.5 flex flex-wrap gap-2">';
-            q.associated_figures.forEach(fig => {
-                figsHtml += `
-                    <div class="p-1 rounded bg-slate-900 border border-slate-700 text-center">
-                        <img src="${fig.image_url || fig.thumbnail_url || ''}" alt="${fig.caption || 'Figure'}" class="max-h-32 object-contain mx-auto rounded">
-                        <p class="text-[9px] font-bold text-slate-400 mt-0.5">📷 ${fig.caption || 'Figure'}</p>
-                    </div>
-                `;
-            });
-            figsHtml += '</div>';
-        }
-
-        let tblsHtml = '';
-        if (q.associated_tables && q.associated_tables.length > 0) {
-            tblsHtml += '<div class="my-1.5 overflow-x-auto">';
-            q.associated_tables.forEach(tbl => {
-                tblsHtml += `
-                    <p class="text-[10px] font-bold text-cyan-400 mb-0.5">${tbl.element_type === 'MATRIX' ? '🔢 Matrix Grid' : '📊 Table'} ${tbl.caption || ''}</p>
-                `;
-                if (tbl.cell_json && Array.isArray(tbl.cell_json)) {
-                    tblsHtml += '<table class="text-[10px] border-collapse border border-slate-700 font-mono bg-slate-900 my-1">';
-                    tbl.cell_json.forEach(row => {
-                        tblsHtml += '<tr>';
-                        row.forEach(cell => {
-                            tblsHtml += `<td class="border border-slate-700 px-2 py-0.5 text-center font-bold text-slate-200">${cell}</td>`;
-                        });
-                        tblsHtml += '</tr>';
-                    });
-                    tblsHtml += '</table>';
-                }
-            });
-            tblsHtml += '</div>';
+        const figUrl = q.figure_url || (q.associated_figures && q.associated_figures.length > 0 ? q.associated_figures[0].image_url : null);
+        if (figUrl) {
+            figsHtml += `
+                <div class="my-1.5 p-1 rounded bg-slate-900 border border-slate-700 text-center">
+                    <img src="${figUrl}" alt="Figure" class="max-h-32 object-contain mx-auto rounded">
+                    <p class="text-[9px] font-bold text-slate-400 mt-0.5">📷 Figure Preview</p>
+                </div>
+            `;
         }
 
         itemDiv.innerHTML = `
             <div class="flex items-start justify-between font-bold">
                 <span class="text-xs text-cyan-300 font-mono">${q.question_number || 'Q' + (idx+1)}. ${q.prompt_text || ''}</span>
-                <span class="font-mono text-purple-400 font-extrabold text-xs ml-2">[${q.allocated_marks || 10} Marks]</span>
+                <span class="font-mono text-purple-400 font-extrabold text-xs ml-2">[${q.allocated_marks || q.marks || 10} Marks]</span>
             </div>
             ${figsHtml}
-            ${tblsHtml}
         `;
         container.appendChild(itemDiv);
     });
     lucide.createIcons();
+}
+
+function formatMarkdownTables(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let inTable = false;
+    let html = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        let trimmed = line.trim();
+        
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            if (!inTable) {
+                html += '<div class="overflow-x-auto my-2.5 rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-sm"><table class="w-full text-[11px] border-collapse font-mono text-center"><tbody class="divide-y divide-slate-800">';
+                inTable = true;
+            }
+            if (trimmed.includes('---') || trimmed.includes(':---')) continue;
+            const cells = trimmed.split('|').slice(1, -1);
+            html += '<tr class="hover:bg-slate-800/50 transition-colors">' + cells.map((c, idx) => {
+                const isHeader = c.includes('**') || idx === 0;
+                const cleanCell = c.replace(/\*\*/g, '').trim();
+                return `<td class="border-r border-slate-800/80 px-2.5 py-1.5 ${isHeader ? 'font-extrabold text-cyan-300 bg-slate-800/40' : 'font-medium text-slate-200'}">${cleanCell}</td>`;
+            }).join('') + '</tr>';
+        } else {
+            if (inTable) {
+                html += '</tbody></table></div>';
+                inTable = false;
+            }
+            if (trimmed) {
+                html += `<p class="leading-relaxed my-1">${trimmed}</p>`;
+            }
+        }
+    }
+    if (inTable) html += '</tbody></table></div>';
+    return html || text;
 }
 
 function renderScannedPaperPreview(data) {
@@ -1376,61 +1787,105 @@ function renderScannedPaperPreview(data) {
     const questions = data.data ? (data.data.questions || []) : (data.questions || []);
     questions.forEach((q, idx) => {
         const itemDiv = document.createElement('div');
-        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200';
+        itemDiv.className = 'p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 text-xs font-sans text-slate-200 shadow-sm';
 
         const qNum = q.question_number || q.q_num || ('Q' + (idx + 1));
         const promptText = q.prompt_text || q.question_text || '';
         const defaultMark = q.allocated_marks || q.marks || 10.0;
-        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().toUpperCase().trim();
+        const keyVal = (q.correct_answer || q.answer_key || q.correct_option || q.key || 'A').toString().trim();
         const optsList = q.options || [];
+        const isSubjective = (q.question_type === 'Subjective') || (!optsList || optsList.length === 0);
 
         const coVal = q.co || 'CO1';
         const bloomVal = q.bloom_level || 'C1';
         const poVal = q.po || 'PO1';
         const coPoBadge = `<span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-mono font-bold">[${coVal}, ${bloomVal}, ${poVal}]</span>`;
+        const typeBadge = isSubjective 
+            ? `<span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">Subjective</span>`
+            : `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">MCQ Quiz</span>`;
 
-        let optsHtml = '';
-        if (optsList && optsList.length > 0) {
-            optsHtml = `
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300">
-                ${optsList.map(opt => `<div class="font-medium">${opt}</div>`).join('')}
+        let figureHtml = '';
+        const figUrl = q.figure_url || (q.associated_figures && q.associated_figures.length > 0 ? q.associated_figures[0].image_url : null);
+        if (figUrl) {
+            figureHtml = `
+            <div class="my-3 p-3 rounded-xl bg-slate-900 border border-slate-800 text-center flex flex-col items-center shadow-sm">
+                <span class="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold mb-2">📷 Attached Diagram / Figure</span>
+                <img src="${figUrl}" alt="Figure for ${qNum}" class="max-h-64 object-contain rounded-lg border border-slate-700 shadow-md" onerror="this.parentElement.style.display='none';">
             </div>`;
         }
 
-        let keySelectHtml = `
-        <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
-            <div class="flex items-center gap-2">
-                <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
-                <div class="flex items-center gap-1">
-                    ${['A', 'B', 'C', 'D'].map(optKey => {
-                        const isChecked = (optKey === keyVal) ? 'checked' : '';
-                        return `
-                        <label class="cursor-pointer">
-                            <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
-                            <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
-                        </label>
-                        `;
-                    }).join('')}
+        const hasTable = promptText.includes('|');
+        const formattedPromptHtml = formatMarkdownTables(promptText);
+        const promptDisplayHtml = hasTable ? `
+            <div class="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 space-y-1.5">
+                <div class="text-xs text-slate-200">${formattedPromptHtml}</div>
+                <details class="text-[11px] text-slate-400 pt-1">
+                    <summary class="cursor-pointer font-bold hover:text-cyan-300 transition-colors">✏️ Edit Raw Prompt / Table Markdown</summary>
+                    <textarea id="preview_prompt_${qNum}" rows="4" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono w-full mt-1.5 focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
+                </details>
+            </div>
+        ` : `
+            <textarea id="preview_prompt_${qNum}" rows="2" onchange="updateStagedPrompt('${qNum}', this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-medium w-full focus:ring-2 focus:ring-purple-500 outline-none resize-y">${promptText}</textarea>
+        `;
+
+        let bodyContentHtml = '';
+        if (isSubjective) {
+            bodyContentHtml = `
+            <div class="space-y-2 pt-1 border-t border-slate-800/80">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5 text-blue-400"></i> Model Answer & Marking Criteria:
+                    </label>
+                    <textarea id="preview_criteria_${qNum}" rows="2" onchange="updateStagedCriteria('${qNum}', this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 font-sans focus:ring-2 focus:ring-purple-500 outline-none resize-y" placeholder="Enter model answer or marking rubric breakdown...">${keyVal}</textarea>
                 </div>
-            </div>
-            <div class="flex items-center gap-1">
-                <span class="text-[11px] text-slate-400 font-bold">Mark:</span>
-                <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateMcqMarkFromPreview('${qNum}', this.value)" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono font-bold text-center focus:ring-2 focus:ring-purple-500 outline-none">
-            </div>
-        </div>`;
+                <div class="flex items-center justify-end gap-2">
+                    <span class="text-[11px] text-slate-400 font-bold">Max Marks:</span>
+                    <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateStagedMark('${qNum}', this.value)" class="w-20 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-purple-400 font-mono font-extrabold text-center focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+            </div>`;
+        } else {
+            let optsHtml = `
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300">
+                ${optsList.map(opt => `<div class="font-medium">${opt}</div>`).join('')}
+            </div>`;
+
+            let keySelectHtml = `
+            <div class="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-extrabold text-purple-400">Answer Key:</span>
+                    <div class="flex items-center gap-1">
+                        ${['A', 'B', 'C', 'D'].map(optKey => {
+                            const isChecked = (optKey === keyVal.toUpperCase()) ? 'checked' : '';
+                            return `
+                            <label class="cursor-pointer">
+                                <input type="radio" name="preview_key_${qNum}" value="${optKey}" ${isChecked} onchange="updateMcqKeyFromPreview('${qNum}', '${optKey}')" class="hidden peer">
+                                <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${optKey}</span>
+                            </label>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[11px] text-slate-400 font-bold">Mark:</span>
+                    <input type="number" step="0.5" id="preview_mark_${qNum}" value="${defaultMark}" onchange="updateMcqMarkFromPreview('${qNum}', this.value)" class="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white font-mono font-bold text-center focus:ring-2 focus:ring-purple-500 outline-none">
+                </div>
+            </div>`;
+            bodyContentHtml = optsHtml + keySelectHtml;
+        }
 
         itemDiv.innerHTML = `
             <div class="flex items-start justify-between font-bold gap-3">
-                <div class="flex-1 space-y-1">
+                <div class="flex-1 space-y-1.5">
                     <div class="flex items-center gap-2">
                         <span class="text-sm text-cyan-300 font-mono font-extrabold">${qNum}.</span>
+                        ${typeBadge}
                         ${coPoBadge}
                     </div>
-                    <input type="text" id="preview_prompt_${qNum}" value="${promptText.replace(/"/g, '&quot;')}" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold w-full focus:ring-2 focus:ring-purple-500 outline-none">
+                    ${promptDisplayHtml}
                 </div>
             </div>
-            ${optsHtml}
-            ${keySelectHtml}
+            ${figureHtml}
+            ${bodyContentHtml}
         `;
 
         if (container) container.appendChild(itemDiv.cloneNode(true));
@@ -1445,6 +1900,41 @@ function renderScannedPaperPreview(data) {
         modalPreviewBox.classList.remove('hidden');
     }
     lucide.createIcons();
+}
+
+function updateStagedMark(qNum, val) {
+    updateMcqMarkFromPreview(qNum, val);
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.marks = parseFloat(val) || 10.0;
+            targetQ.allocated_marks = parseFloat(val) || 10.0;
+        }
+    }
+}
+
+function updateStagedCriteria(qNum, val) {
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.correct_answer = val;
+            targetQ.ideal_answer = val;
+            targetQ.key = val;
+        }
+    }
+}
+
+function updateStagedPrompt(qNum, val) {
+    if (window.currentStagedScanData) {
+        const qList = window.currentStagedScanData.questions || (window.currentStagedScanData.data ? window.currentStagedScanData.data.questions : []);
+        const targetQ = qList.find(q => (q.question_number || q.q_num) === qNum);
+        if (targetQ) {
+            targetQ.prompt_text = val;
+            targetQ.question_text = val;
+        }
+    }
 }
 
 function updateMcqKeyFromPreview(qNum, keyVal) {
@@ -1492,7 +1982,9 @@ function finalizeScannedPaper() {
                 co_mapping: q.co || 'CO1',
                 bloom_level: q.bloom_level || 'C1',
                 po_mapping: q.po || 'PO1',
-                options: q.options || []
+                options: q.options || [],
+                figure_url: q.figure_url || '',
+                associated_figures: q.associated_figures || []
             }))));
         }
     }
@@ -1506,19 +1998,26 @@ function finalizeScannedPaper() {
         headers: { 'X-CSRFToken': getCookie('csrftoken') },
         body: formData
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
+    .then(async r => {
+        const text = await r.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch(e) {
+            console.error("[FINALIZE SERVER RAW RESPONSE]:", text);
+            throw new Error(`Server returned status ${r.status} with non-JSON response. Please refresh and try again.`);
+        }
+        return { status: r.status, ok: r.ok, data };
+    })
+    .then(res => {
+        const data = res.data;
+        if (res.ok && data.success) {
             localStorage.setItem("finalized_exam_{{ selected_exam.id }}", "true");
-            const goEval = confirm("✅ Examination Paper Finalized & Saved Successfully!\n\nThe questions, figures, rubrics, and supplementary documents are committed to the database.\n\nWould you like to open the Answer Script Evaluation Hub now to upload and evaluate student answer scripts?");
+            alert("✅ Examination Paper Finalized & Saved Successfully!\n\nStep 2: Please upload your Teacher's Baseline Master Solution Script to enable the Evaluation Wizard.");
             closeScanProgressModal();
-            if (goEval) {
-                window.location.href = "{% url 'evaluate_answer_scripts_list' selected_exam.id %}";
-            } else {
-                window.location.reload();
-            }
+            window.location.reload();
         } else {
-            alert(data.error || 'Failed to finalize scanned paper.');
+            alert(data.error || data.message || 'Failed to finalize scanned paper.');
         }
     })
     .catch(err => {
@@ -1575,290 +2074,159 @@ document.addEventListener("DOMContentLoaded", function() {
     localStorage.removeItem("finalized_exam_{{ selected_exam.id }}");
     {% endif %}
 
-    const hasSavedPaper = {% if selected_exam.question_paper_file and questions %}true{% else %}false{% endif %};
-    const isLocked = hasSavedPaper && (localStorage.getItem("finalized_exam_{{ selected_exam.id }}") === "true");
     const scanBtn = document.getElementById('scanAcademicBtn');
-    const badge = document.getElementById('qpStatusBadge');
-
-    if (isLocked && scanBtn) {
-        scanBtn.disabled = true;
-        scanBtn.className = "px-5 py-2.5 bg-slate-400 dark:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl cursor-not-allowed flex items-center gap-2";
-        scanBtn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i> 🔒 Finalized & Locked (Remove to Scan New)`;
-        
-        if (badge) {
-            badge.innerHTML += `
-                <div class="mt-2 text-[11px] text-amber-500 font-bold flex items-center gap-1">
-                    🔒 Examination Paper Finalized & Saved. Remove document above to enable scanning a new paper.
-                </div>
-            `;
-        }
-        lucide.createIcons();
-    } else if (scanBtn) {
-        scanBtn.disabled = false;
-        scanBtn.className = "px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2";
-        scanBtn.innerHTML = `<i data-lucide="brain-circuit" class="w-4 h-4"></i> 🧠 Scan & Extract Questions (AI Engine)`;
-        lucide.createIcons();
+    if (scanBtn) {
+        scanBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            openScanQuestionModal();
+        });
     }
 });
 
-function editQuestion(num, marks, prompt, criteria, ideal) {
+function scrollToQuestionBuilder() {
+    const form = document.getElementById('questionBuilderForm');
+    if (!form) return;
+    if (!isBuilderUnlocked && document.getElementById('builderLockedNotice')) {
+        toggleBuilderUnlock();
+    }
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const promptEl = document.getElementById('qPrompt');
+    if (promptEl) {
+        setTimeout(() => {
+            promptEl.focus();
+            promptEl.classList.add('ring-4', 'ring-brand-500/50');
+            setTimeout(() => promptEl.classList.remove('ring-4', 'ring-brand-500/50'), 1500);
+        }, 400);
+    }
+}
+
+let isBuilderUnlocked = false;
+function toggleBuilderUnlock() {
+    isBuilderUnlocked = !isBuilderUnlocked;
+    const saveNext = document.getElementById('saveAndNextBtn');
+    const saveOnly = document.getElementById('saveOnlyBtn');
+    const unlockBtn = document.getElementById('unlockBuilderBtn');
+
+    if (isBuilderUnlocked) {
+        if (saveNext) {
+            saveNext.disabled = false;
+            saveNext.className = "w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer";
+            saveNext.title = "";
+        }
+        if (saveOnly) {
+            saveOnly.disabled = false;
+            saveOnly.className = "w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer";
+            saveOnly.title = "";
+        }
+        if (unlockBtn) {
+            unlockBtn.innerHTML = `<i data-lucide="lock" class="w-3 h-3 text-amber-400"></i> Lock Builder (Disable Manual Save)`;
+        }
+    } else {
+        if (saveNext) {
+            saveNext.disabled = true;
+            saveNext.className = "w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2";
+            saveNext.title = "Examination paper is already finalized. Unlock builder above to add questions.";
+        }
+        if (saveOnly) {
+            saveOnly.disabled = true;
+            saveOnly.className = "w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2";
+            saveOnly.title = "Examination paper is already finalized. Unlock builder above to edit questions.";
+        }
+        if (unlockBtn) {
+            unlockBtn.innerHTML = `<i data-lucide="unlock" class="w-3 h-3 text-cyan-400"></i> Unlock Builder to Manually Edit/Add`;
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
+function editQuestion(num, marks, prompt, criteria, ideal, master_sol) {
+    if (!isBuilderUnlocked && {% if questions and questions.count > 0 %}true{% else %}false{% endif %}) {
+        toggleBuilderUnlock();
+    }
     document.getElementById('qNumber').value = num;
     document.getElementById('qMarks').value = marks;
     document.getElementById('qPrompt').value = prompt;
     document.getElementById('qCriteria').value = criteria;
     document.getElementById('qIdealAnswer').value = ideal;
+    const qMaster = document.getElementById('qMasterSolution');
+    if (qMaster) qMaster.value = master_sol || '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+function startNewQuestion() {
+    const existingCount = {{ questions|length }};
+    const nextQNum = `Q${existingCount + 1}`;
+    
+    const qNumEl = document.getElementById('qNumber');
+    if (qNumEl) qNumEl.value = nextQNum;
+    
+    const qMarksEl = document.getElementById('qMarks');
+    if (qMarksEl) qMarksEl.value = "10.0";
+    
+    const fieldsToClear = ['qPrompt', 'qCriteria', 'qIdealAnswer', 'qMasterSolution', 'qKeywords', 'qMistakes', 'qNotes', 'qScenario', 'qExpectedAnswer', 'qAlternativeAnswers'];
+    fieldsToClear.forEach(fId => {
+        const el = document.getElementById(fId);
+        if (el) el.value = '';
+    });
+    
+    const promptEl = document.getElementById('qPrompt');
+    if (promptEl) {
+        promptEl.focus();
+        promptEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function uploadMasterSolutionFile(input) {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    const examId = "{{ selected_exam.id }}";
+    if (!examId) {
+        alert("Please select or create an examination first.");
+        return;
+    }
+
+    const btn = document.getElementById('btnUploadMasterSolution');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Parsing Master Script...`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    const formData = new FormData();
+    formData.append('master_solution_file', file);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch(`/api/exam/${examId}/upload-master-solution/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert("✓ " + data.message);
+            window.location.reload();
+        } else {
+            alert("Error: " + (data.error || "Failed to upload Master Solution"));
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    })
+    .catch(err => {
+        console.error("Master Solution Upload Error:", err);
+        alert("Upload failed: " + err.message);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            if (window.lucide) lucide.createIcons();
+        }
+    });
+}
 </script>
-
-<!-- Interactive Scanning Progress & Execution Log Modal -->
-<div id="scanProgressModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-slate-900 border border-purple-500/30 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-0 flex flex-col max-h-[92vh]">
-        
-        <!-- Modal macOS Header Bar -->
-        <div class="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-1.5">
-                    <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block shadow-[0_0_8px_#f43f5e]"></span>
-                    <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block shadow-[0_0_8px_#f59e0b]"></span>
-                    <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block shadow-[0_0_8px_#10b981]"></span>
-                </div>
-                <div class="h-4 w-px bg-slate-800 mx-1"></div>
-                <div class="flex items-center gap-2">
-                    <i data-lucide="sparkles" class="w-4 h-4 text-purple-400"></i>
-                    <span class="font-mono text-xs font-bold text-white tracking-wide">INTELLIGRADE QUESTION PAPER SCANNER & VISION ENGINE</span>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <span id="scanActiveModelBadge" class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-mono font-bold">
-                    AI Active
-                </span>
-                <button type="button" onclick="closeScanProgressModal()" class="text-slate-400 hover:text-white font-extrabold text-xl px-2 py-0.5 rounded-lg hover:bg-slate-800 transition-colors" title="Close Pop-up">&times;</button>
-            </div>
-        </div>
-
-        <!-- ========================================== -->
-        <!-- VIEW 1: Input & Configuration View        -->
-        <!-- ========================================== -->
-        <div id="scanModalInputView" class="p-6 space-y-5 flex-1 overflow-y-auto">
-            
-            <!-- Tab Switcher -->
-            <div class="flex items-center gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold">
-                <button type="button" id="tabQPUploadBtn" onclick="switchScanModalTab('upload')" class="flex-1 py-2 rounded-lg bg-purple-600 text-white flex items-center justify-center gap-1.5 transition-all shadow">
-                    <i data-lucide="file-up" class="w-3.5 h-3.5"></i> Upload Document / Photo(s)
-                </button>
-                <button type="button" id="tabQPTextBtn" onclick="switchScanModalTab('text')" class="flex-1 py-2 rounded-lg text-slate-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
-                    <i data-lucide="align-left" class="w-3.5 h-3.5"></i> Paste Question Paper Text
-                </button>
-            </div>
-
-            <!-- TAB 1 CONTENT: File Dropzone & Camera Options -->
-            <div id="modalQPTabUploadContent" class="space-y-4">
-                
-                <!-- Dual Action Zone: Browse / Drag Files OR Live Camera -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    
-                    <!-- 1. Browse / Drag Dropzone -->
-                    <label for="modalQPFileInput" id="modalQPDropzone" class="border-2 border-dashed border-purple-500/30 hover:border-purple-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
-                        <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-                        </div>
-                        <div class="space-y-0.5">
-                            <p class="text-xs font-bold text-white">Browse / Drag Files</p>
-                            <p class="text-[10px] text-slate-400">PDF, PNG, JPG (Multi-select)</p>
-                        </div>
-                    </label>
-
-                    <!-- 2. Direct Device Camera Capture Option -->
-                    <label for="modalQPCameraInput" class="border-2 border-dashed border-cyan-500/30 hover:border-cyan-500/70 bg-slate-950/60 hover:bg-slate-950/90 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group flex flex-col items-center justify-center min-h-[140px]">
-                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <i data-lucide="camera" class="w-5 h-5"></i>
-                        </div>
-                        <div class="space-y-0.5">
-                            <p class="text-xs font-bold text-white">Capture from Camera</p>
-                            <p class="text-[10px] text-slate-400">Take photo of question paper sheet</p>
-                        </div>
-                    </label>
-
-                </div>
-
-                <!-- Hidden Inputs for File Browser & Direct Camera -->
-                <input type="file" id="modalQPFileInput" onchange="handleModalQPFilesSelect(this)" accept="image/*,.pdf,.txt,.doc,.docx" multiple class="hidden">
-                <input type="file" id="modalQPCameraInput" onchange="handleModalQPCameraCapture(this)" accept="image/*" capture="environment" class="hidden">
-
-                <!-- Selected Files / Photos Gallery Container -->
-                <div id="modalQPFilesGallerySection" class="hidden space-y-2.5">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                            <i data-lucide="layers" class="w-3.5 h-3.5"></i> Staged Question Photos / Documents:
-                        </span>
-                        <span id="modalQPTotalFilesCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold font-mono">
-                            0 Files
-                        </span>
-                    </div>
-
-                    <!-- Dynamic List of Uploaded/Snapped Photos -->
-                    <div id="modalQPFilesList" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
-                        <!-- Populated by JS -->
-                    </div>
-
-                    <!-- Add More Photos / Files Action Bar -->
-                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
-                        <div class="flex items-center gap-2">
-                            <label for="modalQPFileInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 text-[11px] font-bold rounded-lg border border-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
-                                <i data-lucide="plus" class="w-3 h-3"></i> Add More Files
-                            </label>
-                            <label for="modalQPCameraInput" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-bold rounded-lg border border-cyan-500/20 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer">
-                                <i data-lucide="camera" class="w-3 h-3"></i> Take Another Photo
-                            </label>
-                        </div>
-                        <button type="button" onclick="clearAllModalQPFiles()" class="text-[11px] text-rose-400 hover:underline flex items-center gap-1">
-                            <i data-lucide="trash-2" class="w-3 h-3"></i> Clear All
-                        </button>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- TAB 2 CONTENT: Raw Textarea -->
-            <div id="modalQPTabTextContent" class="hidden space-y-2">
-                <label class="block text-xs font-bold text-slate-300">Paste Question Paper Content / Text</label>
-                <textarea id="modalQPTextArea" rows="6" placeholder="Paste questions here (e.g.&#10;Question 1: Explain the difference between Process and Thread with diagrams. [10 Marks]&#10;Question 2: Derive the time complexity of QuickSort in best and worst cases. [10 Marks])..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-200 font-mono focus:ring-2 focus:ring-purple-500 outline-none leading-relaxed"></textarea>
-                <p class="text-[10px] text-slate-400">The AI layout engine extracts questions, sub-parts, marks, and formulas directly from text.</p>
-            </div>
-
-            <!-- Modal Info Banner -->
-            <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-400">
-                <i data-lucide="info" class="w-4 h-4 text-purple-400 shrink-0 mt-0.5"></i>
-                <p>Upon scanning, the AI layout engine renders document pages at 300 DPI, detects tables, figures, formulas, and structures the examination questions automatically.</p>
-            </div>
-
-            <!-- Modal Action Controls -->
-            <div class="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
-                <button type="button" onclick="closeScanProgressModal()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-all">Cancel</button>
-                <button type="button" id="modalQPStartScanBtn" onclick="runAIQuestionScanFromModal()" class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-2">
-                    <i data-lucide="sparkles" class="w-4 h-4"></i> Start AI Question Paper Scan
-                </button>
-            </div>
-
-        </div>
-
-        <!-- ========================================== -->
-        <!-- VIEW 2: Live Scanning & Progress Terminal -->
-        <!-- ========================================== -->
-        <div id="scanModalProgressView" class="hidden p-6 space-y-4 flex-1 flex flex-col min-h-0 bg-slate-950">
-            
-            <!-- Live Progress Header -->
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <span id="scanStatusBadge" class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold flex items-center gap-1.5 animate-pulse">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> LIVE EXECUTING
-                    </span>
-                    <span id="qpScanTimer" class="font-mono text-xs text-amber-400 font-bold">0.0s</span>
-                </div>
-                <div class="flex items-center gap-2 font-mono text-xs">
-                    <span class="text-slate-400">Pipeline:</span>
-                    <span id="scanProgressPercent" class="text-purple-400 font-bold">0%</span>
-                </div>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="space-y-1.5">
-                <div class="flex items-center justify-between text-[11px] font-mono">
-                    <span id="scanCurrentStageBadge" class="text-cyan-400 font-bold">Initializing Document Analysis Engine...</span>
-                </div>
-                <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
-                    <div id="scanProgressBar" class="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-400 rounded-full w-0 transition-all duration-300"></div>
-                </div>
-            </div>
-
-            <!-- Laser Scanning & Terminal Split Body -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 flex-1 min-h-0">
-                
-                <!-- Left: Laser Scanning Animation Viewport -->
-                <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between items-center relative overflow-hidden">
-                    <div class="text-center w-full mb-1">
-                        <span class="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider block">Vision Scanner</span>
-                        <span class="text-[11px] font-mono text-emerald-400 font-bold truncate block" id="qpScannerFileLabel">Document Ingestion</span>
-                    </div>
-
-                    <!-- Scanning Graphic with Laser Beam -->
-                    <div class="relative w-full h-36 rounded-lg overflow-hidden border border-purple-500/40 bg-black flex items-center justify-center shadow-inner">
-                        <div class="text-center space-y-1.5 opacity-80">
-                            <i data-lucide="brain-circuit" class="w-10 h-10 text-purple-400 mx-auto animate-pulse"></i>
-                            <span class="text-[10px] font-mono text-purple-300 block">Spatial Grid & Academic Parser</span>
-                        </div>
-                        
-                        <!-- Laser Beam -->
-                        <div class="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_#a855f7] animate-laser-scan"></div>
-                    </div>
-
-                    <div class="w-full text-center mt-2">
-                        <span class="text-[10px] font-mono text-slate-500">Figure, Table & Formula Matrix</span>
-                    </div>
-                </div>
-
-                <!-- Right: Real-time Terminal Log Console Stream (Spans 2 cols) -->
-                <div class="col-span-2 flex flex-col min-h-0 space-y-1.5">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                            <i data-lucide="terminal" class="w-3 h-3 text-emerald-400"></i> Real-Time Pipeline Execution Log
-                        </span>
-                        <span class="text-[9px] font-mono text-slate-500">Staging extracted items</span>
-                    </div>
-                    
-                    <div id="scanLogConsole" class="flex-1 bg-black font-mono text-[11px] text-emerald-400 p-3.5 rounded-xl h-44 overflow-y-auto border border-slate-800 space-y-1 shadow-inner select-text">
-                        <!-- Dynamic logs appended here -->
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- In-Modal Unfinalized Staged Paper Preview Container -->
-            <div id="modalScannedPreviewBox" class="hidden space-y-2 border-t border-slate-800 pt-3">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <i data-lucide="eye" class="w-3.5 h-3.5"></i> Staged Scanned Paper Preview (Unfinalized)
-                    </span>
-                    <span class="text-[10px] text-slate-400 italic font-mono">Click Finalize This to commit to DB or Quit to dismiss</span>
-                </div>
-                <div id="modalScannedQuestionsContainer" class="space-y-2 max-h-52 overflow-y-auto pr-1">
-                    <!-- Dynamic inline scanned items -->
-                </div>
-            </div>
-
-            <!-- Modal Footer Controls -->
-            <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
-                <div id="scanInProgressControls" class="flex items-center justify-between w-full">
-                    <div class="flex items-center gap-2 text-slate-400 text-[11px]">
-                        <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-                        <span>Processing document layout & AI extraction...</span>
-                    </div>
-                    <button type="button" onclick="stopScan()" id="stopScanBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5">
-                        <i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> Stop Scanning
-                    </button>
-                </div>
-
-                <div id="scanCompletedControls" class="hidden flex items-center justify-end gap-2.5 w-full flex-wrap">
-                    <button type="button" onclick="quitScan()" id="quitScanBtn" class="px-3.5 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5">
-                        <i data-lucide="x" class="w-3.5 h-3.5"></i> 🚪 Quit
-                    </button>
-                    <button type="button" onclick="viewScannedItems()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 transition-all flex items-center gap-1.5">
-                        <i data-lucide="eye" class="w-3.5 h-3.5 text-cyan-400"></i> 👁️ View Scanned
-                    </button>
-                    <button type="button" onclick="finalizeScannedPaper()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-1.5">
-                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> ✅ Finalize This
-                    </button>
-                    <button type="button" onclick="openSupplementaryModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-purple-600/20 transition-all flex items-center gap-1.5">
-                        <i data-lucide="file-plus" class="w-3.5 h-3.5"></i> 📄 Supplementary Doc
-                    </button>
-                </div>
-            </div>
-
-        </div>
-
-    </div>
-</div>
 
 <!-- Supplementary Document Upload Modal -->
 <div id="supplementaryDocModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
@@ -1889,407 +2257,4 @@ function editQuestion(num, marks, prompt, criteria, ideal) {
     </div>
 </div>
 
-<!-- Method 3: MCQ Question Paper & Student ID Evaluation Modal -->
-<div id="mcqSystemModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-slate-900 border-2 border-purple-500/40 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl p-6 space-y-5 text-slate-200">
-        
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div class="flex items-center gap-2.5">
-                <span class="p-2 rounded-xl bg-purple-500/20 text-purple-400">
-                    <i data-lucide="check-circle-2" class="w-5 h-5"></i>
-                </span>
-                <div>
-                    <h3 class="font-extrabold text-base text-white tracking-tight">Method 3: MCQ Quiz & Answer Key Engine</h3>
-                    <p class="text-xs text-slate-400">Examination: <strong class="text-purple-400">{{ selected_exam.title }}</strong> ({{ selected_exam.course.code }}) | Max Marks: <strong class="text-emerald-400">{{ selected_exam.total_marks|default:100.0 }}</strong></p>
-                </div>
-            </div>
-            <button type="button" onclick="closeMcqModal()" class="text-slate-400 hover:text-white text-xl font-bold cursor-pointer px-2">&times;</button>
-        </div>
-
-        <!-- STEP 1: Insert / Configure MCQ Questions & Answer Key (Hidden if questions exist) -->
-        <div id="mcqStep1Container" class="space-y-4 {% if questions %}hidden{% endif %}">
-            <div class="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-semibold flex items-center justify-between">
-                <span class="flex items-center gap-1.5 font-extrabold text-white">
-                    <i data-lucide="layers" class="w-4 h-4 text-purple-400"></i> Step 1: Configure MCQ Questions & Ground-Truth Answer Key
-                </span>
-                <span class="text-[11px] bg-purple-500/30 px-3 py-1 rounded-xl font-mono font-extrabold text-purple-300 border border-purple-500/30">
-                    Total Marks: <span id="calcTotalMarks">0.0</span> / {{ selected_exam.total_marks|default:100.0 }}
-                </span>
-            </div>
-
-            <!-- Creation Mode Tabs: Manual Builder vs AI Question Paper Scan -->
-            <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
-                <button type="button" onclick="switchMcqMode('manual')" id="mcqTabManualBtn" class="px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer">
-                    ✍️ Manual Question & Key Builder
-                </button>
-                <button type="button" onclick="switchMcqMode('scan')" id="mcqTabScanBtn" class="px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer">
-                    🧠 AI Scan MCQ Question Paper
-                </button>
-            </div>
-
-            <!-- Mode A: AI MCQ Question Paper Scanner -->
-            <div id="mcqScanModeView" class="hidden space-y-3 p-4 rounded-2xl bg-slate-950/60 border border-slate-800 text-xs">
-                <label class="block font-bold text-slate-300">Upload MCQ Question Paper Document (PDF or Image)</label>
-                <input type="file" id="mcqScanFileInput" accept=".pdf,.png,.jpg,.jpeg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-500 cursor-pointer">
-                <p class="text-[10px] text-slate-400">IntelliGrade AI will extract question texts, options (A, B, C, D), answer keys, and assigned marks from your paper document.</p>
-                <button type="button" onclick="runAiMcqQuestionScan({{ selected_exam.id }})" id="aiMcqScanBtn" class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5 cursor-pointer">
-                    <i data-lucide="scan-line" class="w-4 h-4"></i> 🧠 Scan & Extract Questions with AI
-                </button>
-            </div>
-
-            <!-- Mode B: Manual Builder Configuration -->
-            <div id="mcqManualModeView" class="space-y-3">
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
-                        <label class="block text-slate-300 font-bold mb-1">Option Label Scheme</label>
-                        <select id="mcqSchemeSelect" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:ring-2 focus:ring-purple-500 outline-none">
-                            <option value="ALPHA_UPPER" selected>Alphabetic (A, B, C, D)</option>
-                            <option value="NUMERIC">Numeric (1, 2, 3, 4)</option>
-                            <option value="ROMAN_LOWER">Roman Numerals (i, ii, iii, iv)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-slate-300 font-bold mb-1">Default Mark per Question</label>
-                        <input type="number" step="0.5" id="mcqMarksPerQ" value="1.0" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-slate-300 font-bold mb-1">Number of Questions</label>
-                        <select id="mcqNumQSelect" onchange="renderMcqKeyGrid()" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-xs text-white focus:ring-2 focus:ring-purple-500 outline-none">
-                            <option value="5">5 Questions</option>
-                            <option value="10" selected>10 Questions</option>
-                            <option value="15">15 Questions</option>
-                            <option value="20">20 Questions</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Dynamic Key Matrix Input Grid with Individual Question Marks -->
-                <div>
-                    <div class="flex items-center justify-between text-xs font-bold text-slate-300 mb-2">
-                        <span>Select Answer Key & Mark Distribution per Question:</span>
-                        <span id="marksWarningBadge" class="text-rose-400 font-extrabold text-[11px] hidden">⚠️ Total marks exceed exam limit!</span>
-                    </div>
-                    <div id="mcqKeyGrid" class="grid grid-cols-1 gap-2.5 max-h-60 overflow-y-auto p-2.5 rounded-2xl bg-slate-950 border border-slate-800">
-                        <!-- Rendered by renderMcqKeyGrid() -->
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center justify-between pt-2 border-t border-slate-800">
-                <span class="text-[11px] text-slate-400">Save key set to enable Student ID evaluation mode.</span>
-                <button type="button" onclick="saveMcqAnswerKey({{ selected_exam.id }})" id="saveMcqKeyBtn" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5 cursor-pointer">
-                    <i data-lucide="save" class="w-4 h-4"></i> 💾 Save MCQ Questions & Unlock Student Evaluation
-                </button>
-            </div>
-        </div>
-
-        <!-- STEP 2: Student ID-wise Upload & Evaluation (Default View if Questions Exist) -->
-        <div id="mcqStep2Container" class="space-y-4 {% if not questions %}hidden{% endif %} border-t border-slate-800 pt-3">
-            <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <span class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
-                        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-                    </span>
-                    <div>
-                        <span class="font-extrabold text-white block">Student ID MCQ Evaluation Mode</span>
-                        <span class="text-[10px] text-emerald-300">Question Set Established ({{ questions.count }} Questions Configured)</span>
-                    </div>
-                </div>
-                <button type="button" onclick="toggleMcqStep1()" class="px-3 py-1 bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/40 rounded-xl text-[10px] font-bold transition-all cursor-pointer">
-                    ⚙ Edit Question Set & Key
-                </button>
-            </div>
-
-            <!-- Student ID & Name Manual / Auto Insert Fields -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                    <label class="block text-slate-300 font-bold mb-1">Student Roll / ID Number <span class="text-rose-400">*</span></label>
-                    <input type="text" id="mcqStudentRoll" placeholder="e.g. CSE-2024-045" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <span class="text-[10px] text-slate-400">Type manually or let OCR auto-detect from paper.</span>
-                </div>
-                <div>
-                    <label class="block text-slate-300 font-bold mb-1">Student Full Name</label>
-                    <input type="text" id="mcqStudentName" placeholder="e.g. Rahim Ahmed" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                </div>
-            </div>
-
-            <!-- Student Script Upload -->
-            <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Upload Student MCQ Answer Sheet (Image or PDF)</label>
-                <input type="file" id="mcqStudentScriptFile" accept=".pdf,.png,.jpg,.jpeg" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer">
-            </div>
-
-            <div class="flex items-center justify-end gap-3 pt-2">
-                <a href="{% url 'evaluate_answer_scripts_list' selected_exam.id %}" class="px-4 py-2 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-700 inline-flex items-center gap-1">
-                    <i data-lucide="list" class="w-3.5 h-3.5"></i> View All Submissions
-                </a>
-                <button type="button" onclick="runMcqStudentEvaluation({{ selected_exam.id }})" id="runMcqEvalBtn" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer">
-                    <i data-lucide="zap" class="w-4 h-4"></i> ⚡ Run MCQ Evaluation & Grade Student
-                </button>
-            </div>
-        </div>
-
-    </div>
-</div>
-
-<script>
-function openMcqModal() {
-    const modal = document.getElementById('mcqSystemModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        renderMcqKeyGrid();
-        if (window.lucide) lucide.createIcons();
-    }
-}
-
-function closeMcqModal() {
-    const modal = document.getElementById('mcqSystemModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-    }
-}
-
-function toggleMcqStep1() {
-    const st1 = document.getElementById('mcqStep1Container');
-    if (st1) st1.classList.toggle('hidden');
-}
-
-function switchMcqMode(mode) {
-    const manualBtn = document.getElementById('mcqTabManualBtn');
-    const scanBtn = document.getElementById('mcqTabScanBtn');
-    const manualView = document.getElementById('mcqManualModeView');
-    const scanView = document.getElementById('mcqScanModeView');
-
-    if (mode === 'scan') {
-        manualBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer";
-        scanBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer";
-        manualView.classList.add('hidden');
-        scanView.classList.remove('hidden');
-    } else {
-        manualBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-purple-600 text-white shadow-md transition-all cursor-pointer";
-        scanBtn.className = "px-4 py-2 rounded-xl font-extrabold text-xs bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all cursor-pointer";
-        manualView.classList.remove('hidden');
-        scanView.classList.add('hidden');
-    }
-}
-
-function renderMcqKeyGrid() {
-    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
-    const scheme = document.getElementById('mcqSchemeSelect').value;
-    const defaultMark = parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0;
-    const grid = document.getElementById('mcqKeyGrid');
-    if (!grid) return;
-
-    let optionLabels = ['A', 'B', 'C', 'D'];
-    if (scheme === 'NUMERIC') optionLabels = ['1', '2', '3', '4'];
-    else if (scheme === 'ROMAN_LOWER') optionLabels = ['i', 'ii', 'iii', 'iv'];
-
-    let html = '';
-    for (let i = 1; i <= numQ; i++) {
-        html += `
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs gap-2">
-            <div class="flex items-center gap-2">
-                <span class="font-extrabold text-purple-400 font-mono w-10">Q${i}:</span>
-                <input type="text" id="mcq_prompt_q${i}" placeholder="Question text (optional)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-white w-48 outline-none">
-            </div>
-            <div class="flex items-center gap-3">
-                <div class="flex items-center gap-1">
-                    ${optionLabels.map(opt => `
-                        <label class="cursor-pointer">
-                            <input type="radio" name="mcq_opt_q${i}" value="${opt}" ${opt === optionLabels[1] ? 'checked' : ''} class="hidden peer">
-                            <span class="px-2.5 py-1 rounded-md text-[11px] font-bold border border-slate-700 bg-slate-800 text-slate-300 peer-checked:bg-purple-600 peer-checked:text-white peer-checked:border-purple-500 transition-all">${opt}</span>
-                        </label>
-                    `).join('')}
-                </div>
-                <div class="flex items-center gap-1 shrink-0">
-                    <span class="text-[10px] text-slate-400">Mark:</span>
-                    <input type="number" step="0.5" id="mcq_mark_q${i}" value="${defaultMark}" onchange="recalculateMcqMarksTotal()" class="w-16 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-white font-mono font-bold text-center outline-none">
-                </div>
-            </div>
-        </div>`;
-    }
-    grid.innerHTML = html;
-    recalculateMcqMarksTotal();
-}
-
-function runAiMcqQuestionScan(examId) {
-    const fileInput = document.getElementById('mcqScanFileInput');
-    closeMcqModal();
-    openScanQuestionModal();
-
-    if (fileInput && fileInput.files && fileInput.files.length > 0) {
-        addQPFilesToList(Array.from(fileInput.files));
-        setTimeout(() => {
-            runAIQuestionScanFromModal();
-        }, 300);
-    }
-}
-
-function recalculateMcqMarksTotal() {
-    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
-    const maxExamLimit = parseFloat("{{ selected_exam.total_marks|default:100.0 }}") || 100.0;
-    let sum = 0.0;
-
-    for (let i = 1; i <= numQ; i++) {
-        const markInput = document.getElementById(`mcq_mark_q${i}`);
-        if (markInput) {
-            sum += parseFloat(markInput.value) || 0.0;
-        }
-    }
-
-    const calcDisp = document.getElementById('calcTotalMarks');
-    if (calcDisp) calcDisp.innerText = sum.toFixed(1);
-
-    const warnBadge = document.getElementById('marksWarningBadge');
-
-    if (sum > maxExamLimit + 0.01) {
-        if (warnBadge) warnBadge.classList.remove('hidden');
-    } else {
-        if (warnBadge) warnBadge.classList.add('hidden');
-    }
-    validateSaveMcqKeyButton();
-}
-
-function validateSaveMcqKeyButton() {
-    const saveBtn = document.getElementById('saveMcqKeyBtn');
-    if (!saveBtn) return;
-
-    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 0;
-    let hasValidContent = false;
-
-    for (let i = 1; i <= numQ; i++) {
-        const promptInput = document.getElementById(`mcq_prompt_q${i}`);
-        const checkedOpt = document.querySelector(`input[name="mcq_opt_q${i}"]:checked`);
-        if (checkedOpt || (promptInput && promptInput.value.trim() !== '')) {
-            hasValidContent = true;
-            break;
-        }
-    }
-
-    const calcSum = parseFloat(document.getElementById('calcTotalMarks') ? document.getElementById('calcTotalMarks').innerText : 0) || 0;
-    const maxExamLimit = parseFloat("{{ selected_exam.total_marks|default:100.0 }}") || 100.0;
-
-    if (!hasValidContent) {
-        saveBtn.disabled = true;
-        saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        saveBtn.title = "Please scan an MCQ Question Paper or enter questions manually before saving.";
-    } else if (calcSum > maxExamLimit + 0.01) {
-        saveBtn.disabled = true;
-        saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        saveBtn.title = "Total allocated marks exceed exam limit.";
-    } else {
-        saveBtn.disabled = false;
-        saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        saveBtn.title = "Save MCQ Questions & Unlock Student Evaluation";
-    }
-}
-
-function saveMcqAnswerKey(examId) {
-    const numQ = parseInt(document.getElementById('mcqNumQSelect').value) || 10;
-    const scheme = document.getElementById('mcqSchemeSelect').value;
-    const defaultMark = parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0;
-
-    const question_details = {};
-    for (let i = 1; i <= numQ; i++) {
-        const checked = document.querySelector(`input[name="mcq_opt_q${i}"]:checked`);
-        const markInput = document.getElementById(`mcq_mark_q${i}`);
-        question_details[`Q${i}`] = {
-            key: checked ? checked.value : 'B',
-            marks: markInput ? parseFloat(markInput.value) || defaultMark : defaultMark
-        };
-    }
-
-    const btn = document.getElementById('saveMcqKeyBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Saving Key & Questions...`;
-        if (window.lucide) lucide.createIcons();
-    }
-
-    fetch(`/api/exam/${examId}/save-mcq-key/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({
-            question_details: question_details,
-            scheme: scheme,
-            marks_per_question: defaultMark
-        })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            alert(`✅ ${data.message}\nStudent ID Evaluation Mode is now active for this exam!`);
-            document.getElementById('mcqStep2Container').classList.remove('hidden');
-            document.getElementById('mcqStep1Container').classList.add('hidden');
-        } else {
-            alert(`❌ Error saving key: ${data.error || 'Failed'}`);
-        }
-    })
-    .catch(err => alert(`❌ Network error: ${err.message}`))
-    .finally(() => {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i> 💾 Save MCQ Questions & Unlock Student Evaluation`;
-            if (window.lucide) lucide.createIcons();
-        }
-    });
-}
-
-function runMcqStudentEvaluation(examId) {
-    const roll = document.getElementById('mcqStudentRoll').value.trim();
-    const name = document.getElementById('mcqStudentName').value.trim();
-    
-    const btn = document.getElementById('runMcqEvalBtn');
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Grading Student Script...`;
-        if (window.lucide) lucide.createIcons();
-    }
-
-    fetch(`/api/exam/${examId}/evaluate-quiz/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({
-            student_roll: roll,
-            student_name: name,
-            scheme: document.getElementById('mcqSchemeSelect').value,
-            marks_per_question: parseFloat(document.getElementById('mcqMarksPerQ').value) || 1.0
-        })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') {
-            alert(`✅ Student Evaluation Completed!\nStudent Roll: ${roll || 'Auto-Detected'}\nTotal Score: ${data.summary.total_score} / ${data.summary.max_score} (${data.summary.percentage}%)\nCorrect: ${data.summary.total_correct}, Incorrect: ${data.summary.total_incorrect}`);
-            window.location.href = `/teacher/exam/${examId}/evaluate-scripts/`;
-        } else {
-            alert(`❌ Evaluation Error: ${data.error || 'Failed'}`);
-        }
-    })
-    .catch(err => alert(`❌ Network Error: ${err.message}`))
-    .finally(() => {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = `<i data-lucide="zap" class="w-4 h-4"></i> ⚡ Run MCQ Evaluation & Grade Student`;
-            if (window.lucide) lucide.createIcons();
-        }
-    });
-}
-
-function toggleSavedMcqViewer() {
-    const panel = document.getElementById('savedMcqViewerPanel');
-    if (panel) {
-        panel.classList.toggle('hidden');
-        if (window.lucide) lucide.createIcons();
-    }
-}
-</script>
 {% endblock %}

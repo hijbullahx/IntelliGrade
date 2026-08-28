@@ -107,60 +107,171 @@ def student_dashboard(request):
     user = request.user
     dept = profile.department
 
-    # Helper function for letter grade
+    # Helper function for letter grade and GPA points
+    def get_grade_and_gpa(pct):
+        if pct >= 80: return 'A+', 4.00
+        elif pct >= 75: return 'A', 3.75
+        elif pct >= 70: return 'A-', 3.50
+        elif pct >= 65: return 'B+', 3.25
+        elif pct >= 60: return 'B', 3.00
+        elif pct >= 55: return 'B-', 2.75
+        elif pct >= 50: return 'C+', 2.50
+        elif pct >= 45: return 'C', 2.25
+        elif pct >= 40: return 'D', 2.00
+        else: return 'F', 0.00
+
     def get_letter_grade(pct):
-        if pct >= 80: return 'A+'
-        elif pct >= 75: return 'A'
-        elif pct >= 70: return 'A-'
-        elif pct >= 65: return 'B+'
-        elif pct >= 60: return 'B'
-        elif pct >= 55: return 'B-'
-        elif pct >= 50: return 'C+'
-        elif pct >= 45: return 'C'
-        elif pct >= 40: return 'D'
-        else: return 'F'
+        return get_grade_and_gpa(pct)[0]
+
+    def resolve_exam_routine_info(exam):
+        if not exam:
+            return 'Spring 2026', 'Final Examination', 'Final Examination - Spring 2026', 'final', 'emerald', 10
+        
+        from core.models import CourseTabulation
+        tab = CourseTabulation.objects.filter(course=exam.course).first() if (exam and exam.course) else None
+        sem_name = tab.semester if (tab and tab.semester) else 'Spring 2026'
+        
+        raw_title = (exam.title or '').strip()
+        title_lower = raw_title.lower()
+        
+        import re
+        # 1. Class Test (CT) Detection (e.g. CT 1, CT-1, Class Test 2, CT)
+        ct_match = re.search(r'\b(?:class\s*test|ct)\s*[-#_]?\s*(\d+)\b', title_lower)
+        if ct_match:
+            ct_num = ct_match.group(1)
+            ex_type = f"Class Test {ct_num} (CT-{ct_num})"
+            routine_key_type = f"ct_{ct_num}"
+            badge_color = "amber"
+            order_weight = 30 + int(ct_num)
+        elif 'class test' in title_lower or re.search(r'\bct\b', title_lower):
+            ex_type = "Class Test (CT)"
+            routine_key_type = "ct"
+            badge_color = "amber"
+            order_weight = 30
+        # 2. Quiz Assessment Detection
+        elif quiz_match := re.search(r'\bquiz\s*[-#_]?\s*(\d+)\b', title_lower):
+            q_num = quiz_match.group(1)
+            ex_type = f"Quiz Assessment {q_num}"
+            routine_key_type = f"quiz_{q_num}"
+            badge_color = "cyan"
+            order_weight = 40 + int(q_num)
+        elif 'quiz' in title_lower:
+            ex_type = "Quiz Assessment"
+            routine_key_type = "quiz"
+            badge_color = "cyan"
+            order_weight = 40
+        # 3. Midterm Examination Detection
+        elif 'mid' in title_lower or 'midterm' in title_lower or 'mid-term' in title_lower:
+            ex_type = "Midterm Examination"
+            routine_key_type = "midterm"
+            badge_color = "indigo"
+            order_weight = 20
+        # 4. Assignment / Lab Presentation
+        elif 'assign' in title_lower:
+            ex_type = "Assignment Assessment"
+            routine_key_type = "assignment"
+            badge_color = "purple"
+            order_weight = 50
+        elif 'lab' in title_lower or 'practical' in title_lower:
+            ex_type = "Lab / Practical Examination"
+            routine_key_type = "lab"
+            badge_color = "teal"
+            order_weight = 60
+        # 5. Default: Final Examination
+        else:
+            ex_type = "Final Examination"
+            routine_key_type = "final"
+            badge_color = "emerald"
+            order_weight = 10
+
+        routine_title = f"{ex_type} - {sem_name}"
+        return sem_name, ex_type, routine_title, routine_key_type, badge_color, order_weight
 
     evaluated_results_list = []
 
     # 1. Fetch evaluated StudentSubmissions
     student_submissions = StudentSubmission.objects.filter(
-        Q(student=user) | Q(student_roll_no__iexact=user.username),
+        Q(student=user) | Q(student_roll_no__iexact=user.username) | Q(student_name__icontains=user.username),
         status__in=[
             StudentSubmission.Status.AI_EVALUATED,
             StudentSubmission.Status.UNDER_REVIEW,
             StudentSubmission.Status.FINALIZED
         ]
-    ).select_related('examination', 'examination__course')
+    ).select_related('examination', 'examination__course').order_by('-updated_at')
 
     for sub in student_submissions:
         max_marks = float(sub.examination.total_marks if (sub.examination and sub.examination.total_marks) else (sub.total_max_marks or 100.0))
-        obtained = float(sub.total_obtained_marks or 0.0)
-        pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+        ex_title = (sub.examination.title or '').upper()
 
-        answers = sub.answers.select_related('question', 'evaluation_result').all()
+        # Check if there is an official StudentGradeRecord for this course
+        gr = StudentGradeRecord.objects.filter(
+            tabulation__course=sub.examination.course
+        ).filter(
+            Q(student_id__iexact=user.username) |
+            Q(student_name__icontains=user.username) |
+            Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
+        ).first()
+
+        if gr and gr.is_manually_edited:
+            if 'MID' in ex_title and gr.midterm_data:
+                pct = float(gr.midterm_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and gr.class_test_data:
+                pct = float(gr.class_test_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            elif ('FINAL' in ex_title or 'EXAM' in ex_title) and gr.final_data:
+                pct = float(gr.final_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            else:
+                obtained = float(sub.total_obtained_marks or 0.0)
+                pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+        else:
+            obtained = float(sub.total_obtained_marks or 0.0)
+            pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+
+        let_grade, gpa_pt = get_grade_and_gpa(pct)
+
+        answers = sub.answers.select_related('question', 'evaluation_result').all().order_by('question__question_number')
         answer_breakdowns = []
         for ans in answers:
             eval_res = getattr(ans, 'evaluation_result', None)
+            q_num = ans.question.formatted_number if hasattr(ans.question, 'formatted_number') else (ans.question.question_number or 'Q')
+            q_txt = ans.question.prompt_text if hasattr(ans.question, 'prompt_text') else getattr(ans.question, 'question_text', '')
+            q_max = float(eval_res.maximum_marks) if eval_res else float(getattr(ans.question, 'max_marks', 0.0))
+
             answer_breakdowns.append({
-                'question_number': ans.question.question_number if ans.question else 'Q',
-                'question_text': ans.question.question_text if ans.question else '',
+                'question_number': q_num,
+                'question_text': q_txt,
                 'obtained_marks': float(eval_res.obtained_marks) if eval_res else 0.0,
-                'maximum_marks': float(eval_res.maximum_marks) if eval_res else (float(ans.question.marks) if ans.question else 0.0),
+                'maximum_marks': q_max,
                 'feedback_text': eval_res.feedback_text if eval_res else '',
+                'strengths': eval_res.strengths_json if eval_res else [],
+                'mistakes': eval_res.mistakes_json if eval_res else [],
             })
+
+        sem_name, ex_type_display, routine_title, routine_key_type, badge_color, order_weight = resolve_exam_routine_info(sub.examination)
 
         evaluated_results_list.append({
             'id': sub.id,
             'type': 'submission',
+            'semester': sem_name,
+            'exam_type_display': ex_type_display,
+            'routine_title': routine_title,
+            'routine_key_type': routine_key_type,
+            'badge_color': badge_color,
+            'order_weight': order_weight,
             'exam_title': sub.examination.title if sub.examination else 'Examination',
             'course_code': sub.examination.course.code if (sub.examination and sub.examination.course) else 'GEN',
             'course_title': sub.examination.course.title if (sub.examination and sub.examination.course) else 'General Course',
             'obtained_marks': obtained,
             'total_marks': max_marks,
             'percentage': pct,
-            'grade': get_letter_grade(pct),
+            'grade': let_grade,
+            'gpa_point': gpa_pt,
             'status_label': 'Finalized & Certified' if sub.status == StudentSubmission.Status.FINALIZED else 'AI Evaluated',
+            'is_finalized': (sub.status == StudentSubmission.Status.FINALIZED),
             'evaluated_at': sub.updated_at,
+            'download_pdf_url': f"/api/submission/{sub.id}/download-evaluated-pdf/",
             'answers': answer_breakdowns,
         })
 
@@ -189,17 +300,26 @@ def student_dashboard(request):
             })
 
         pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+        let_grade, gpa_pt = get_grade_and_gpa(pct)
+        sem_name, ex_type_display, routine_title, routine_key_type, badge_color, order_weight = resolve_exam_routine_info(sc.examination)
 
         evaluated_results_list.append({
             'id': sc.id,
             'type': 'script',
+            'semester': sem_name,
+            'exam_type_display': ex_type_display,
+            'routine_title': routine_title,
+            'routine_key_type': routine_key_type,
+            'badge_color': badge_color,
+            'order_weight': order_weight,
             'exam_title': sc.examination.title if sc.examination else 'Examination',
             'course_code': sc.examination.course.code if (sc.examination and sc.examination.course) else 'GEN',
             'course_title': sc.examination.course.title if (sc.examination and sc.examination.course) else 'General Course',
             'obtained_marks': obtained,
             'total_marks': max_marks,
             'percentage': pct,
-            'grade': get_letter_grade(pct),
+            'grade': let_grade,
+            'gpa_point': gpa_pt,
             'status_label': 'Finalized & Certified' if sc.status == AnswerScript.Status.REVIEWED else 'AI Evaluated',
             'evaluated_at': sc.uploaded_at,
             'answers': segment_breakdowns,
@@ -208,17 +328,96 @@ def student_dashboard(request):
     # Sort evaluated results by date newest first
     evaluated_results_list.sort(key=lambda x: x['evaluated_at'], reverse=True)
 
-    # Compute real stats
+    # 3. Aggregate Evaluated Subjects by Specific Examination Routine Category (Final, Midterm, CT-1, CT-2, Quiz)
+    exam_routines_dict = {}
+    for item in evaluated_results_list:
+        routine_key = f"{item['semester']} {item['exam_type_display']}"
+
+        if routine_key not in exam_routines_dict:
+            exam_routines_dict[routine_key] = {
+                'routine_key': routine_key.replace(' ', '_').replace('(', '').replace(')', '').replace('-', '_').lower(),
+                'routine_title': item['routine_title'],
+                'semester': item['semester'],
+                'exam_type': item['exam_type_display'],
+                'badge_color': item['badge_color'],
+                'order_weight': item['order_weight'],
+                'subjects': [],
+                'total_obtained': 0.0,
+                'total_max': 0.0,
+                'percentages': [],
+                'gpa_points': []
+            }
+
+        exam_routines_dict[routine_key]['subjects'].append(item)
+        exam_routines_dict[routine_key]['total_obtained'] += item['obtained_marks']
+        exam_routines_dict[routine_key]['total_max'] += item['total_marks']
+        exam_routines_dict[routine_key]['percentages'].append(item['percentage'])
+        exam_routines_dict[routine_key]['gpa_points'].append(item.get('gpa_point', 0.0))
+
+    exam_routines_list = []
+    for r_key, r_data in exam_routines_dict.items():
+        subjs = r_data['subjects']
+        if subjs:
+            avg_pct = round(sum(r_data['percentages']) / len(subjs), 1)
+            avg_gpa = round(sum(r_data['gpa_points']) / len(subjs), 2)
+            overall_let_grade = get_letter_grade(avg_pct)
+        else:
+            avg_pct = 0.0
+            avg_gpa = 0.0
+            overall_let_grade = 'N/A'
+
+        exam_routines_list.append({
+            'routine_key': r_data['routine_key'],
+            'routine_title': r_data['routine_title'],
+            'semester': r_data['semester'],
+            'exam_type': r_data['exam_type'],
+            'badge_color': r_data['badge_color'],
+            'order_weight': r_data['order_weight'],
+            'subjects': subjs,
+            'subjects_count': len(subjs),
+            'total_obtained': round(r_data['total_obtained'], 1),
+            'total_max': round(r_data['total_max'], 1),
+            'overall_percentage': avg_pct,
+            'overall_gpa': avg_gpa,
+            'overall_grade': overall_let_grade,
+        })
+
+    # Order routines logically: Final first, then Midterm, then CTs, Quiz, Assignments
+    exam_routines_list.sort(key=lambda x: x['order_weight'])
+
+    # Compute overall stats across all evaluated routine exams
     enrolled_courses_count = Course.objects.filter(department=dept).count() if dept else 0
     completed_exams_count = len(evaluated_results_list)
 
-    if completed_exams_count > 0:
+    # 4. Fetch official OBE CourseTabulation & StudentGradeRecords for this student
+    course_grade_records = StudentGradeRecord.objects.filter(
+        Q(student_id__iexact=user.username) |
+        Q(student_name__icontains=user.username) |
+        Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
+    ).select_related('tabulation', 'tabulation__course').order_by('tabulation__course__code')
+
+    if course_grade_records.exists():
+        total_overall = sum(float(gr.overall_score or 0.0) for gr in course_grade_records) / course_grade_records.count()
+        overall_let_grade = get_letter_grade(total_overall)
+        _, overall_gpa_num = get_grade_and_gpa(total_overall)
+        overall_grade_display = f"{overall_let_grade} ({round(total_overall, 2)}%)"
+        overall_gpa_val = f"{overall_gpa_num} / 4.00"
+        primary_gr = course_grade_records.first()
+        overall_routine_title = f"Course OBE Tabulation ({primary_gr.tabulation.course.code})"
+    elif exam_routines_list:
+        primary_routine = exam_routines_list[0]
+        overall_grade_display = f"{primary_routine['overall_grade']} ({primary_routine['overall_percentage']}%)"
+        overall_routine_title = primary_routine['routine_title']
+        overall_gpa_val = f"{primary_routine['overall_gpa']} / 4.00"
+    elif completed_exams_count > 0:
         avg_pct = sum(r['percentage'] for r in evaluated_results_list) / completed_exams_count
-        gpa_avg = f"{round(avg_pct, 1)}% ({get_letter_grade(avg_pct)})"
-        rank = "Active Student"
+        overall_grade_display = f"{get_letter_grade(avg_pct)} ({round(avg_pct, 1)}%)"
+        overall_routine_title = "Semester Examination"
+        overall_gpa_val = "N/A"
     else:
-        gpa_avg = "N/A"
-        rank = "Enrolled"
+        overall_grade_display = "N/A"
+        overall_routine_title = "Upcoming Examination"
+        overall_gpa_val = "N/A"
 
     stats = {
         'student_name': user.get_full_name() or user.username,
@@ -226,13 +425,18 @@ def student_dashboard(request):
         'dept_name': dept.name if dept else "Academic Faculty Department",
         'enrolled_courses': enrolled_courses_count,
         'completed_exams': completed_exams_count,
-        'gpa_avg': gpa_avg,
-        'rank': rank,
+        'overall_grade': overall_grade_display,
+        'overall_gpa': overall_gpa_val,
+        'overall_routine_title': overall_routine_title,
+        'gpa_avg': overall_grade_display,
+        'rank': "Active Student" if completed_exams_count > 0 else "Enrolled",
     }
 
     return render(request, 'core/dashboard_student.html', {
         'stats': stats,
+        'exam_routines': exam_routines_list,
         'evaluated_results': evaluated_results_list,
+        'course_grade_records': course_grade_records,
     })
 
 
@@ -810,7 +1014,11 @@ def add_faculty(request):
         return redirect('faculty_list')
 
     departments = Department.objects.filter(is_active=True)
-    suggested_username = preset_name.lower().replace('dr.', '').replace('prof.', '').replace(' ', '_').strip('_') if preset_name else ''
+    suggested_username = ''
+    if preset_name:
+        clean_u = re.sub(r'\b(drs\.|drs|dr\.|dr|prof\.|prof|ms\.|ms|mr\.|mr)\b', '', preset_name, flags=re.IGNORECASE)
+        clean_u = re.sub(r'[^a-zA-Z0-9\s_]', '', clean_u)
+        suggested_username = re.sub(r'\s+', '_', clean_u).lower().strip('_')
 
     return render(request, 'core/add_faculty.html', {
         'departments': departments,
@@ -869,7 +1077,7 @@ def add_dept_head(request):
 
 
 def dept_head_login(request):
-    """Login view dedicated for Department Heads."""
+    """Login view dedicated for Department Heads supporting both Username and Email authentication."""
     if request.user.is_authenticated:
         user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
         if user_role == Profile.Role.DEPARTMENT_HEAD:
@@ -879,8 +1087,15 @@ def dept_head_login(request):
             return redirect(dashboard_url)
 
     if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
+        raw_identifier = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
+
+        # Support sign in by Email OR Username
+        username = raw_identifier
+        if '@' in raw_identifier:
+            matched_user = User.objects.filter(email__iexact=raw_identifier).first()
+            if matched_user:
+                username = matched_user.username
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
@@ -893,13 +1108,13 @@ def dept_head_login(request):
             messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Department Head Portal.")
             return redirect('dept_head_dashboard')
         else:
-            messages.error(request, "Invalid Username or Password. Please try again or contact your Chief Exam Controller.")
+            messages.error(request, "Invalid Username/Email or Password. Please verify your credentials or contact your Chief Exam Controller.")
 
     return render(request, 'core/dept_head_login.html')
 
 
 def dept_head_dashboard(request):
-    """Dashboard view for Department Heads with strict department isolation."""
+    """Comprehensive Dashboard view for Department Heads with real metrics, student rosters, faculty lists, and exam statuses."""
     if not request.user.is_authenticated:
         messages.warning(request, "Please sign in to access the Department Head Portal.")
         return redirect('dept_head_login')
@@ -910,69 +1125,80 @@ def dept_head_dashboard(request):
         return redirect('landing_page')
 
     dept = profile.department
-    dept_name = dept.name if dept else "Unassigned Department"
+    dept_name = dept.name if dept else "Academic Department"
 
-    # STRICT Department Isolation: Count ONLY faculty assigned to this specific department
+    # 1. Total Faculty in Department
     faculty_count = Profile.objects.filter(role=Profile.Role.TEACHER, department=dept).count() if dept else 0
 
-    # STRICT Department Isolation: Count ONLY active courses assigned to this specific department
+    # 2. Total Students in Department
+    student_profiles_count = Profile.objects.filter(role=Profile.Role.STUDENT, department=dept).count() if dept else 0
+    unique_student_ids = set()
+    if dept:
+        from core.models import StudentGradeRecord
+        unique_student_ids.update(StudentGradeRecord.objects.filter(tabulation__course__department=dept).values_list('student_id', flat=True))
+        unique_student_ids.update(StudentSubmission.objects.filter(examination__course__department=dept).exclude(student_roll_no='').values_list('student_roll_no', flat=True))
+    total_students_count = max(student_profiles_count, len(unique_student_ids))
+
+    # 3. Active Courses in Department
     active_courses_count = Course.objects.filter(department=dept).count() if dept else 0
 
-    # STRICT Department Isolation: Calculate Pass Rate & AI Approval Rate ONLY for this specific department
+    # 4. Published / Scheduled Examinations in Department
+    dept_exams = Examination.objects.filter(course__department=dept).select_related('course', 'assigned_faculty').order_by('-exam_date', '-id') if dept else Examination.objects.none()
+    published_exams_count = dept_exams.count()
+
+    # 5. Current Semester Resolution & Accurate Semester-Wise Pass Rate from Scanned Routine
+    from core.models import CourseTabulation
+    active_tab = CourseTabulation.objects.filter(course__department=dept).first() if dept else None
+    current_semester = active_tab.semester if (active_tab and active_tab.semester) else 'Spring 2026'
+
+    sem_tabulations = CourseTabulation.objects.filter(course__department=dept, semester=current_semester) if dept else CourseTabulation.objects.none()
+    sem_courses = set(sem_tabulations.values_list('course_id', flat=True))
+
+    sem_exams = dept_exams.filter(course_id__in=sem_courses) if sem_courses else dept_exams
+    sem_evaluated_subs = StudentSubmission.objects.filter(
+        examination__in=sem_exams,
+        status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+    )
+
+    total_submissions_count = StudentSubmission.objects.filter(examination__in=dept_exams).count() if dept else 0
+    evaluated_submissions_count = sem_evaluated_subs.count()
     pass_rate = 'N/A'
-    ai_approval_rate = 'N/A'
+    passed_count = 0
 
-    if dept:
-        dept_exams = Examination.objects.filter(course__department=dept)
-        
-        if dept_exams.exists():
-            # Pass Rate calculation for this department's exams only
-            all_evaluated_submissions = StudentSubmission.objects.filter(
-                examination__in=dept_exams,
-                status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+    if sem_evaluated_subs.exists():
+        passed_count = sum(
+            1 for sub in sem_evaluated_subs 
+            if sub.total_obtained_marks is not None and (sub.percentage is not None or sub.examination.total_marks)
+            and (
+                float(sub.percentage) >= 40.0 if sub.percentage is not None 
+                else float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4)
             )
-            if all_evaluated_submissions.exists():
-                passed_count = sum(
-                    1 for sub in all_evaluated_submissions 
-                    if sub.total_obtained_marks is not None and sub.examination.total_marks 
-                    and (float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4))
-                )
-                pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
+        )
+        pass_rate = f"{round((passed_count / sem_evaluated_subs.count()) * 100, 1)}%"
 
-            # AI Approval Rate calculation for this department's evaluations only
-            all_evaluations = EvaluationResult.objects.filter(submission_answer__submission__examination__in=dept_exams)
-            if all_evaluations.exists():
-                approved_count = all_evaluations.filter(reviews__action='APPROVE').count()
-                ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
-            else:
-                script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
-                if script_evals.exists():
-                    approved_count = script_evals.filter(review_status=Evaluation.ReviewStatus.APPROVED).count()
-                    ai_approval_rate = f"{round((approved_count / script_evals.count()) * 100, 1)}%"
-
-    # STRICT Department Isolation: Fetch ONLY courses belonging to this department
-    course_list = Course.objects.filter(department=dept) if dept else Course.objects.none()
+    # 6. Course-wise Evaluation Progress List
+    course_list = Course.objects.filter(department=dept).order_by('code') if dept else Course.objects.none()
     course_progress_data = []
 
     for crs in course_list:
-        crs_exams = Examination.objects.filter(course=crs)
+        crs_exams = dept_exams.filter(course=crs)
         if not crs_exams.exists():
             progress_pct = 0
             status_text = "No Exams Scheduled"
             total_scripts = 0
             evaluated_scripts = 0
         else:
-            total_scripts = AnswerScript.objects.filter(examination__in=crs_exams).count()
+            total_scripts = StudentSubmission.objects.filter(examination__in=crs_exams).count()
             if total_scripts == 0:
-                total_scripts = StudentSubmission.objects.filter(examination__in=crs_exams).count()
-                evaluated_scripts = StudentSubmission.objects.filter(
-                    examination__in=crs_exams,
-                    status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
-                ).count()
-            else:
+                total_scripts = AnswerScript.objects.filter(examination__in=crs_exams).count()
                 evaluated_scripts = AnswerScript.objects.filter(
                     examination__in=crs_exams,
                     status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+                ).count()
+            else:
+                evaluated_scripts = StudentSubmission.objects.filter(
+                    examination__in=crs_exams,
+                    status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
                 ).count()
 
             if total_scripts > 0:
@@ -992,12 +1218,53 @@ def dept_head_dashboard(request):
             'total_scripts': total_scripts,
         })
 
+    # 7. Department Examination Detailed Roster
+    dept_exams_data = []
+    for ex in dept_exams:
+        ex_subs = StudentSubmission.objects.filter(examination=ex)
+        ex_total = ex_subs.count()
+        ex_eval = ex_subs.filter(status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]).count()
+        ex_pct = int(round(ex_eval / ex_total * 100)) if ex_total > 0 else 0
+        dept_exams_data.append({
+            'id': ex.id,
+            'title': ex.title,
+            'course_code': ex.course.code,
+            'course_title': ex.course.title,
+            'exam_date': ex.exam_date,
+            'faculty_name': ex.assigned_faculty.get_full_name() if ex.assigned_faculty else (ex.created_by.get_full_name() if ex.created_by else 'Not Assigned'),
+            'total_submissions': ex_total,
+            'evaluated_count': ex_eval,
+            'progress_percent': ex_pct,
+            'status': ex.get_status_display() if hasattr(ex, 'get_status_display') else ex.status,
+            'tabulation_url': f"/course/{ex.course.id}/tabulation/"
+        })
+
+    # 8. Department Student Roster
+    dept_students_data = []
+    student_users = User.objects.filter(profile__role=Profile.Role.STUDENT, profile__department=dept).select_related('profile') if dept else User.objects.none()
+    for st_u in student_users:
+        st_subs = StudentSubmission.objects.filter(Q(student=st_u) | Q(student_roll_no__iexact=st_u.username), examination__course__department=dept)
+        sub_cnt = st_subs.count()
+        avg_score = round(sum(sub.percentage for sub in st_subs if sub.percentage) / sub_cnt, 1) if sub_cnt > 0 else 0.0
+        dept_students_data.append({
+            'name': st_u.get_full_name() or st_u.username,
+            'student_id': st_u.username,
+            'email': st_u.email or 'N/A',
+            'submissions_count': sub_cnt,
+            'avg_score': f"{avg_score}%" if sub_cnt > 0 else "Pending",
+        })
+
     stats = {
         'dept_name': dept_name,
+        'current_semester': current_semester,
         'faculty_count': faculty_count,
+        'students_count': total_students_count,
         'active_courses': active_courses_count,
+        'published_exams': published_exams_count,
+        'total_submissions': total_submissions_count,
+        'evaluated_submissions': evaluated_submissions_count,
+        'passed_count': passed_count,
         'pass_rate': pass_rate,
-        'ai_approval_rate': ai_approval_rate,
     }
 
     dept_faculty = Profile.objects.filter(role=Profile.Role.TEACHER, department=dept).select_related('user') if dept else Profile.objects.none()
@@ -1007,7 +1274,9 @@ def dept_head_dashboard(request):
         'stats': stats,
         'course_progress_list': course_progress_data,
         'dept_faculty': dept_faculty,
+        'dept_students': dept_students_data,
         'dept_courses': dept_courses_qs,
+        'dept_exams': dept_exams_data,
         'head_name': request.user.get_full_name() or request.user.username
     })
 
@@ -1159,7 +1428,7 @@ def scan_routine_ai(request):
             routine_text = combined_file_text
 
     provider = AIProviderFactory.get_provider()
-    from core.ai_engine.routine_parser.routine_parser import RoutineParser
+    from core.ai_engine.routine_parser.routine_parser import RoutineParser, clean_faculty_name
     routine_parser = RoutineParser()
     ai_used = True
     ai_error = None
@@ -1198,8 +1467,9 @@ def scan_routine_ai(request):
 
     for item in extracted_schedule:
         c_code = item.get('course_code')
-        c_title = item.get('course_title')
-        f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty')
+        c_title = item.get('course_title') or ''
+        raw_f_name = item.get('faculty_name') or item.get('instructor_name') or item.get('course_faculty') or ''
+        f_name = clean_faculty_name(raw_f_name)
         e_date = item.get('exam_date')
         e_time = item.get('exam_time', '10:00 AM - 01:00 PM')
         t_marks = item.get('total_marks', 100.0)
@@ -1325,7 +1595,8 @@ def exam_create(request):
                     course_code=course.code,
                     course_title=course.title,
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass
@@ -1442,7 +1713,7 @@ def script_upload(request):
                                     ai_marks = float(eval_res.get('marks_assigned') or ai_marks)
                                     ai_feedback = eval_res.get('feedback') or ai_feedback
                             except Exception as eval_err:
-                                print(f"[SCRIPT UPLOAD EVAL WARNING] Question Q{q.question_number} evaluation error: {eval_err}")
+                                print(f"[SCRIPT UPLOAD EVAL WARNING] Question {normalize_q_code(q.question_number)} evaluation error: {eval_err}")
 
                         Evaluation.objects.create(
                             segment=segment,
@@ -1532,7 +1803,24 @@ def grading_workbench(request, script_id=None):
                 first_eval.teacher_final_marks = float(final_marks)
                 first_eval.status = Evaluation.ReviewStatus.APPROVED
                 first_eval.save()
-        messages.success(request, "Evaluation approved and finalized successfully!")
+
+            if script and script.student and script.student.email:
+                try:
+                    from core.services.email_service import EmailService
+                    st_marks = float(first_eval.teacher_final_marks or first_eval.ai_suggested_marks or 0.0)
+                    EmailService.send_evaluation_published_notification(
+                        student_email=script.student.email,
+                        student_name=script.student.get_full_name() or script.student.username,
+                        exam_title=script.examination.title if script.examination else 'Examination',
+                        score=f"{st_marks} / {script.examination.total_marks if script.examination else 100}",
+                        grade="Certified",
+                        remarks=first_eval.ai_feedback,
+                        sync=False
+                    )
+                except Exception as _e_sc_email:
+                    print(f"[SCRIPT NOTIFICATION WARNING] {_e_sc_email}")
+
+        messages.success(request, "Evaluation approved and finalized successfully! Student notified via email & dashboard.")
         return redirect('teacher_dashboard')
 
     return render(request, 'core/grading_workbench.html', context)
@@ -1881,7 +2169,8 @@ def edit_exam(request, exam_id):
                     course_code=exam.course.code if exam.course else "",
                     course_title=exam.course.title if exam.course else "",
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass
@@ -1972,7 +2261,8 @@ def api_publish_exam(request):
                     course_code=course.code,
                     course_title=course.title,
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass
@@ -2078,11 +2368,20 @@ def question_rubric_manage(request, exam_id=None):
             target_exam.save()
             messages.success(request, f"Course Outline document removed for {target_exam.course.code}.")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
+        elif clear_doc == 'master_solution_file' and target_exam.master_solution_file:
+            target_exam.master_solution_file.delete(save=False)
+            target_exam.master_solution_file = None
+            target_exam.master_solution_parsed = False
+            target_exam.questions.all().update(master_solution_text="", master_solution_steps=[])
+            target_exam.save()
+            messages.success(request, f"Master Benchmark Solution document and extracted solutions removed for {target_exam.course.code}.")
+            return redirect('question_rubric_manage', exam_id=target_exam.id)
 
-        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Supplementary Document)
+        # Handle Document Upload Options (Question Paper, Rubric File, Course Outline, Master Solution Document)
         qp_file = request.FILES.get('question_paper_file')
         rf_file = request.FILES.get('rubric_file') or request.FILES.get('rubric_reference_file')
         co_file = request.FILES.get('course_outline_file')
+        ms_file = request.FILES.get('master_solution_file')
 
         if qp_file:
             target_exam.question_paper_file = qp_file
@@ -2090,8 +2389,10 @@ def question_rubric_manage(request, exam_id=None):
             target_exam.rubric_file = rf_file
         if co_file:
             target_exam.course_outline_file = co_file
+        if ms_file:
+            target_exam.master_solution_file = ms_file
 
-        if qp_file or rf_file or co_file:
+        if qp_file or rf_file or co_file or ms_file:
             target_exam.save()
             messages.success(request, f"Reference document(s) uploaded successfully for {target_exam.course.code}!")
 
@@ -2112,6 +2413,7 @@ def question_rubric_manage(request, exam_id=None):
             cea_list = request.POST.getlist('cea_mapping')
             kw_list = [k.strip() for k in request.POST.get('keywords', '').split(',') if k.strip()]
             cm_list = [c.strip() for c in request.POST.get('common_mistakes', '').split(',') if c.strip()]
+            master_sol_input = request.POST.get('master_solution_text', '').strip()
 
             q_obj, _ = Question.objects.update_or_create(
                 examination=target_exam,
@@ -2119,6 +2421,7 @@ def question_rubric_manage(request, exam_id=None):
                 defaults={
                     'prompt_text': prompt_text,
                     'max_marks': float(max_marks) if max_marks else 10.0,
+                    'master_solution_text': master_sol_input,
                     'question_type': q_types,
                     'command_verbs': c_verbs,
                     'scenario': request.POST.get('scenario', '').strip(),
@@ -2158,6 +2461,11 @@ def question_rubric_manage(request, exam_id=None):
                     display_order=1
                 )
                 messages.success(request, f"Attached manual figure ({manual_figure_file.name}) to Question {q_obj.question_number}!")
+
+            # Ensure exam is marked as having baseline solutions configured
+            if not target_exam.master_solution_parsed:
+                target_exam.master_solution_parsed = True
+                target_exam.save(update_fields=['master_solution_parsed'])
 
             messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
@@ -2242,7 +2550,7 @@ def delete_question(request, question_id):
 
 
 def delete_all_questions(request, exam_id):
-    """Allows Faculty to remove ALL configured questions from an examination paper."""
+    """Allows Faculty to remove ALL configured questions and previous documents from an examination paper."""
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 
@@ -2257,7 +2565,22 @@ def delete_all_questions(request, exam_id):
     q_count = exam.questions.count()
     exam.questions.all().delete()
 
-    messages.success(request, f"Successfully removed all {q_count} configured exam paper items.")
+    if exam.question_paper_file:
+        try:
+            exam.question_paper_file.delete(save=False)
+        except Exception:
+            pass
+        exam.question_paper_file = None
+    exam.save()
+
+    # Clear any staged session or cache data
+    if f'staged_scan_data_{exam.id}' in request.session:
+        del request.session[f'staged_scan_data_{exam.id}']
+        request.session.modified = True
+    cache.delete(f'staged_exam_questions_{exam.id}')
+    cache.delete(f'exam_scan_progress_{exam.id}')
+
+    messages.success(request, f"Successfully removed all {q_count} configured exam paper items and reset previous question paper document.")
     return redirect('question_rubric_manage', exam_id=exam.id)
 
 
@@ -2287,6 +2610,49 @@ def api_generate_ai_rubric(request):
             return JsonResponse({'success': True, 'rubric': rubric_data})
         except Exception as e:
             return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
+
+
+def api_ai_analyze_question_full(request):
+    """AJAX endpoint to auto-analyze a question statement/prompt text or synthesize full examination questions with complete academic metadata, CO/PO, Bloom level, and rubrics."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        course_outline_text = request.POST.get('course_outline_text', '').strip()
+        examination_id = request.POST.get('examination_id')
+
+        # If examination_id is provided, enhance context with course code & title
+        if examination_id and not course_outline_text:
+            from core.models import Examination
+            try:
+                exam = Examination.objects.select_related('course').get(id=examination_id)
+                course_outline_text = f"Course: {exam.course.code} - {exam.course.title} | Examination: {exam.title}"
+            except Exception:
+                pass
+
+        if not prompt_text:
+            prompt_text = "make a sample question"
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'analyze_question_full'):
+                analysis_data = provider.analyze_question_full(prompt_text, max_marks, course_outline_text)
+            else:
+                from core.ai_engine.providers.base import BaseAIProvider
+                analysis_data = BaseAIProvider._fallback_analyze_question_prompt(prompt_text, max_marks, course_outline_text)
+            return JsonResponse({'success': True, 'analysis': analysis_data})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            from core.ai_engine.providers.base import BaseAIProvider
+            fallback_data = BaseAIProvider._fallback_analyze_question_prompt(prompt_text, max_marks, course_outline_text)
+            return JsonResponse({'success': True, 'analysis': fallback_data, 'warning': str(e)})
+
+    return JsonResponse({'error': 'POST request required.'}, status=405)
+
 
 
 def ai_config_view(request):
@@ -2325,6 +2691,51 @@ def _update_scan_progress_cache(exam_id: int, progress: int, msg: str, status: s
         'status': status,
         'logs': logs
     }, timeout=300)
+
+
+def _update_submission_progress_cache(submission_id: int, processed_pages: int, total_pages: int, evaluated_regions: int, total_regions: int, msg: str, status: str = 'processing'):
+    """
+    Computes submission progress dynamically based on completed pages and evaluated atomic regions:
+    progress = int((processed_pages / total_pages) * 80) + int((evaluated_regions / total_regions) * 20)
+    """
+    if not submission_id:
+        return
+    cache_key = f'submission_progress_{submission_id}'
+    t_pages = max(1, total_pages) if total_pages > 0 else 1
+    t_regs = max(1, total_regions) if total_regions > 0 else 1
+    page_part = int((processed_pages / t_pages) * 80)
+    reg_part = int((evaluated_regions / t_regs) * 20)
+    progress = min(100, page_part + reg_part) if status != 'completed' else 100
+
+    current = cache.get(cache_key) or {'logs': []}
+    logs = current.get('logs', [])
+    if msg and (not logs or logs[-1].get('msg') != msg):
+        logs.append({'msg': msg, 'type': 'info'})
+    cache.set(cache_key, {
+        'progress': progress,
+        'msg': msg,
+        'status': status,
+        'processed_pages': processed_pages,
+        'total_pages': total_pages,
+        'evaluated_regions': evaluated_regions,
+        'total_regions': total_regions,
+        'logs': logs
+    }, timeout=300)
+
+
+def api_get_submission_progress(request, submission_id):
+    """AJAX endpoint returning current real-time submission evaluation progress from Django cache."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    cache_key = f'submission_progress_{submission_id}'
+    progress_data = cache.get(cache_key) or {
+        'progress': 0,
+        'msg': 'Initializing scan...',
+        'status': 'idle',
+        'logs': []
+    }
+    return JsonResponse(progress_data)
 
 
 def api_get_scan_progress(request, exam_id):
@@ -2676,6 +3087,7 @@ def api_scan_question_paper(request):
         }, status=500)
 
 
+@csrf_exempt
 def api_finalize_scanned_paper(request):
     """AJAX endpoint to commit staged scanned question paper items to the database and lock the exam paper."""
     if not request.user.is_authenticated:
@@ -2684,8 +3096,16 @@ def api_finalize_scanned_paper(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid HTTP method.'}, status=405)
 
-    exam_id = request.POST.get('examination_id')
-    if not exam_id or not exam_id.isdigit():
+    import json
+    body_data = {}
+    if request.body:
+        try:
+            body_data = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            pass
+
+    exam_id = request.POST.get('examination_id') or body_data.get('examination_id')
+    if not exam_id or not str(exam_id).isdigit():
         return JsonResponse({'error': 'Valid examination_id is required.'}, status=400)
 
     exam = Examination.objects.filter(id=int(exam_id)).first()
@@ -2696,12 +3116,15 @@ def api_finalize_scanned_paper(request):
     staged_json_param = request.POST.get('staged_questions_json')
     if staged_json_param:
         try:
-            import json
             p_qs = json.loads(staged_json_param)
             if isinstance(p_qs, list) and len(p_qs) > 0:
                 staged_data = {'parsed_questions': p_qs}
         except Exception as e:
             print(f"[FINALIZE JSON PARSE WARNING] {e}")
+    elif body_data.get('questions'):
+        p_qs = body_data.get('questions')
+        if isinstance(p_qs, list) and len(p_qs) > 0:
+            staged_data = {'parsed_questions': p_qs}
 
     if not staged_data or not staged_data.get('parsed_questions'):
         return JsonResponse({'error': 'No staged scan data found for this examination. Please run the scanner first.'}, status=400)
@@ -2782,13 +3205,25 @@ def api_finalize_scanned_paper(request):
                 )
 
                 # Persist single-owner QuestionFigure records
-                for fig_idx, fig_data in enumerate(item.get('associated_figures', [])):
+                assoc_figs = item.get('associated_figures', [])
+                if not assoc_figs and item.get('figure_url'):
+                    assoc_figs = [{
+                        'caption': f'Figure for {q_num}',
+                        'image_url': item.get('figure_url'),
+                        'image_path': item.get('figure_url').replace(settings.MEDIA_URL, '').lstrip('/'),
+                        'page_number': 1
+                    }]
+
+                for fig_idx, fig_data in enumerate(assoc_figs):
+                    fig_img = fig_data.get('image_path') or fig_data.get('image') or fig_data.get('image_url', '')
+                    if fig_img.startswith(settings.MEDIA_URL):
+                        fig_img = fig_img.replace(settings.MEDIA_URL, '').lstrip('/')
                     QuestionFigure.objects.create(
                         question=q_obj,
                         display_order=fig_idx + 1,
                         page_number=fig_data.get('page_number', 1),
                         caption=fig_data.get('caption', f'Figure {fig_idx+1} for {q_num}'),
-                        image=fig_data.get('image_path', ''),
+                        image=fig_img,
                         thumbnail=fig_data.get('thumbnail_url', ''),
                         bounding_box=fig_data.get('bounding_box', [])
                     )
@@ -2837,6 +3272,378 @@ def api_finalize_scanned_paper(request):
         return JsonResponse({'success': False, 'error': f'Failed to commit finalized paper: {str(e)}'}, status=500)
 
 
+@csrf_exempt
+def api_upload_master_solution(request, exam_id):
+    """
+    AJAX endpoint to upload a Master / Benchmark Solution Script (PDF or Images),
+    OCR all pages, run IntelliGradeMappingPipeline / StudentQuestionHeadingDetector to segment by question,
+    and persist extracted golden solutions to Question.master_solution_text and Question.master_solution_steps.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid HTTP method. POST required.'}, status=405)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+
+    if not is_admin and exam.assigned_faculty != request.user:
+        return JsonResponse({'error': 'Permission Denied: You are not assigned to this examination.'}, status=403)
+
+    stored_questions = list(exam.questions.all().order_by('question_number'))
+    if not stored_questions:
+        return JsonResponse({'error': 'No questions configured for this examination. Please scan or create questions first.'}, status=400)
+
+    # ── Build q_map HERE (before any PDF/image branching) so it is always in scope ──
+    # Supports lookups by both raw number ('1') and prefixed form ('Q1')
+    q_map = {}
+    for _q in stored_questions:
+        _qn = str(_q.question_number).strip().upper()
+        q_map[_qn] = _q
+        if not _qn.startswith('Q'):
+            q_map[f'Q{_qn}'] = _q
+        else:
+            q_map[_qn[1:]] = _q  # e.g. 'Q1' → also register '1'
+
+    master_files = request.FILES.getlist('master_solution_files')
+    if not master_files and request.FILES.get('master_solution_file'):
+        master_files = [request.FILES.get('master_solution_file')]
+
+    if not master_files:
+        return JsonResponse({'error': 'Please select Master / Benchmark Solution Script document or image(s) to upload.'}, status=400)
+
+    master_file = master_files[0]
+    exam.master_solution_file = master_file
+    exam.save(update_fields=['master_solution_file'])
+
+    import mimetypes
+    from core.ai_engine.document_service import DocumentService
+    from core.ai_engine.mapping.question_number_detector import StudentQuestionHeadingDetector
+    from core.ai_engine.mapping.semantic_matcher import SemanticQuestionMatcher
+    from core.utils.question_accessor import normalize_q_code, QuestionAccessor
+
+    try:
+        master_file.open('rb')
+        file_bytes = master_file.read()
+        guessed_mime, _ = mimetypes.guess_type(master_file.name)
+        mime_type = guessed_mime or ('application/pdf' if master_file.name.lower().endswith('.pdf') else 'image/jpeg')
+
+        page_texts = []
+        page_word_boxes = []
+        page_line_boxes = []
+
+        if mime_type.startswith('application/pdf') or master_file.name.lower().endswith('.pdf'):
+            try:
+                import fitz
+                doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+                # Collect embedded images per-page for later QuestionFigure binding
+                embedded_page_images = {}  # {page_idx: [png_bytes, ...]}
+                for page_idx in range(len(doc)):
+                    page = doc[page_idx]
+                    pix = page.get_pixmap(dpi=200)
+                    img_bytes = pix.tobytes("png")
+                    ocr_out = DocumentService.extract_deterministic_ocr(img_bytes, page_renders=[img_bytes], mime_type='image/png')
+                    raw_text = ocr_out.get('text', '') or page.get_text()
+                    wb = ocr_out.get('word_boxes', [])
+                    lb = ocr_out.get('line_boxes', [])
+                    page_texts.append(raw_text)
+                    page_word_boxes.append(wb)
+                    page_line_boxes.append(lb)
+
+                    # Extract embedded raster/vector images from this PDF page
+                    try:
+                        page_img_list = page.get_images(full=True)
+                        page_embedded = []
+                        for img_idx, img_info in enumerate(page_img_list):
+                            xref = img_info[0]
+                            base_img = doc.extract_image(xref)
+                            if base_img and base_img.get('image'):
+                                page_embedded.append(base_img['image'])
+                        if page_embedded:
+                            embedded_page_images[page_idx] = page_embedded
+                    except Exception as fig_extract_err:
+                        print(f"[MASTER SOLUTION FIGURE EXTRACT WARNING] Page {page_idx}: {fig_extract_err}")
+            except Exception as pdf_err:
+                print(f"[MASTER SOLUTION PDF READ ERROR] {pdf_err}")
+                ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[], mime_type=mime_type)
+                page_texts.append(ocr_out.get('text', ''))
+                page_word_boxes.append(ocr_out.get('word_boxes', []))
+                page_line_boxes.append(ocr_out.get('line_boxes', []))
+        else:
+            # Image upload path: no embedded PDF page images to extract
+            embedded_page_images = {}
+            ocr_out = DocumentService.extract_deterministic_ocr(file_bytes, page_renders=[file_bytes], mime_type=mime_type)
+
+            # Vision Fallback: if OCR returned insufficient text for a handwritten image,
+            # route directly to the multimodal vision AI provider for extraction.
+            if ocr_out.get('engine') == 'VisionFallback':
+                print(f"[MASTER SOLUTION VISION FALLBACK] OCR insufficient ({ocr_out.get('char_count', 0)} chars) "
+                      f"for image upload — invoking multimodal vision AI extraction.")
+                try:
+                    from core.ai_engine.providers.factory import AIProviderFactory
+                    # Correct import: TaskType lives in core.ai_engine.routing.task_types
+                    from core.ai_engine.routing.task_types import TaskType
+
+                    ai_provider = AIProviderFactory.get_provider()
+                    vision_prompt = (
+                        "You are an expert academic evaluator processing a teacher's handwritten master solution script.\n"
+                        "Carefully examine the entire handwritten image and extract ALL content.\n\n"
+                        "Structure your output by question number. For each question found (Q1, Q2, Q3, etc.):\n"
+                        "Q1:\n"
+                        "- Step 1: [formula / calculation / derivation]\n"
+                        "- Step 2: [next step]\n"
+                        "- Final value: [result]\n\n"
+                        "Q2:\n"
+                        "- Step 1: ...\n\n"
+                        "If question numbers are not explicitly visible, treat the entire page as a single question solution.\n"
+                        "Reproduce ALL visible handwritten text, equations, matrices, and diagram descriptions exactly as written. "
+                        "Do NOT summarize or omit any detail."
+                    )
+
+                    # generate_completion() always returns str across all providers
+                    raw_response = ai_provider.generate_completion(
+                        prompt=vision_prompt,
+                        system_instruction="You are a highly accurate academic OCR and document extraction engine for handwritten solutions.",
+                        image_bytes=file_bytes,
+                        mime_type=mime_type,
+                        task_type=TaskType.ANSWER_VISUAL_READ
+                    )
+
+                    # Normalize: coerce dict responses (some providers may wrap) or plain str
+                    if isinstance(raw_response, dict):
+                        vision_text = raw_response.get('text', '') or raw_response.get('content', '') or str(raw_response)
+                    else:
+                        vision_text = str(raw_response).strip()
+
+                    print(f"[MASTER SOLUTION VISION FALLBACK] Vision extracted {len(vision_text)} chars from handwritten image.")
+
+                    if not vision_text:
+                        raise ValueError("Vision model returned an empty response for the handwritten image.")
+
+
+                    # ── Robust question-block parser ──────────────────────────
+                    import re as _re
+
+                    # Matches headers like: Q1:  Q2.  Question 1:  1)  2.
+                    _q_pattern = r'(?:^|\n)(?:Question\s*|Q\s*)(\d+[a-z]?)\s*[:\.\.\)\-]\s*'
+                    _splits = _re.split(_q_pattern, vision_text, flags=_re.IGNORECASE)
+
+                    mapped_summary = []
+                    matched_any = False
+
+                    if len(_splits) > 1:
+                        # _splits layout: [preamble, q_label, q_text, q_label, q_text, ...]
+                        for _i in range(1, len(_splits) - 1, 2):
+                            _q_label = _splits[_i].strip().upper()
+                            _q_text  = _splits[_i + 1].strip() if (_i + 1) < len(_splits) else ''
+
+                            # Try both 'Q1' and '1' lookups
+                            _target_q = q_map.get(_q_label) or q_map.get(f'Q{_q_label}')
+                            if _target_q and _q_text:
+                                _lines = [l for l in _q_text.splitlines() if l.strip()]
+                                _target_q.master_solution_text = _q_text
+                                _target_q.master_solution_steps = [
+                                    {
+                                        'step': idx + 1,
+                                        'description': l.strip(),
+                                        'marks': round(float(_target_q.max_marks) / max(1, len(_lines)), 2)
+                                    }
+                                    for idx, l in enumerate(_lines) if len(l.strip()) > 3
+                                ]
+                                _target_q.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                                matched_any = True
+                                mapped_summary.append({
+                                    'question_number': _q_label,
+                                    'text_length': len(_q_text),
+                                    'steps_count': len(_target_q.master_solution_steps),
+                                    'source': 'VisionFallback',
+                                    'sample_text': _q_text[:120] + '...' if len(_q_text) > 120 else _q_text
+                                })
+
+                    # Fallback: no question headings detected — assign full text to first question
+                    if not matched_any and stored_questions:
+                        _q_first = stored_questions[0]
+                        _full_text = vision_text.strip()
+                        _lines = [l for l in _full_text.splitlines() if l.strip()]
+                        _q_first.master_solution_text = _full_text
+                        _q_first.master_solution_steps = [
+                            {
+                                'step': idx + 1,
+                                'description': l.strip(),
+                                'marks': round(float(_q_first.max_marks) / max(1, len(_lines)), 2)
+                            }
+                            for idx, l in enumerate(_lines) if len(l.strip()) > 3
+                        ]
+                        _q_first.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                        matched_any = True
+                        mapped_summary.append({
+                            'question_number': str(_q_first.question_number),
+                            'text_length': len(_full_text),
+                            'steps_count': len(_q_first.master_solution_steps),
+                            'source': 'VisionFallback-NoHeadings',
+                            'sample_text': _full_text[:120] + '...' if len(_full_text) > 120 else _full_text
+                        })
+
+                    # Save source image as QuestionFigure for each bound question
+                    from django.core.files.base import ContentFile
+                    from core.models import QuestionFigure
+                    for _entry in mapped_summary:
+                        _qobj = q_map.get(_entry['question_number']) or q_map.get(f"Q{_entry['question_number']}")
+                        if _qobj:
+                            try:
+                                QuestionFigure.objects.get_or_create(
+                                    question=_qobj,
+                                    is_master_solution_figure=True,
+                                    defaults=dict(
+                                        page_number=1,
+                                        caption=f"Master Solution Handwritten Image — Q{_qobj.question_number}",
+                                        image=ContentFile(file_bytes, name=f"master_vision_exam{exam.id}_q{_qobj.question_number}.png"),
+                                        display_order=1,
+                                    )
+                                )
+                            except Exception as _qf_err:
+                                print(f"[MASTER SOLUTION VISION FIGURE WARNING] {_qf_err}")
+
+                    exam.master_solution_parsed = True
+                    exam.save(update_fields=['master_solution_parsed'])
+                    return JsonResponse({
+                        'success': True,
+                        'message': (
+                            f"Handwritten Master Baseline Solution successfully extracted and bound to "
+                            f"{len(mapped_summary)} question(s)."
+                        ),
+                        'chars_extracted': len(vision_text),
+                        'mapped_questions': mapped_summary,
+                        'extraction_engine': 'VisionFallback'
+                    })
+
+                except Exception as vision_err:
+                    print(f"[MASTER SOLUTION VISION FALLBACK ERROR] {vision_err}")
+                    # If vision also fails, return a soft error (not 500 crash) so the teacher knows
+                    return JsonResponse({
+                        'error': (
+                            f"OCR could not extract text from the handwritten image ({ocr_out.get('char_count', 0)} chars), "
+                            f"and the Vision AI fallback also failed: {str(vision_err)}. "
+                            f"Please upload a higher-resolution image or a PDF scan."
+                        )
+                    }, status=422)
+
+            page_texts.append(ocr_out.get('text', ''))
+            page_word_boxes.append(ocr_out.get('word_boxes', []))
+            page_line_boxes.append(ocr_out.get('line_boxes', []))
+
+        stored_q_nums = [q.formatted_number for q in stored_questions]
+        # q_map already built at function top — re-build here with normalize_q_code keys
+        # to match the heading-detector pipeline's normalized form
+        q_map = {normalize_q_code(q.question_number): q for q in stored_questions}
+        extracted_by_q = {q_code: [] for q_code in q_map.keys()}
+
+        active_q = None
+        for p_idx, text in enumerate(page_texts):
+            wb = page_word_boxes[p_idx] if p_idx < len(page_word_boxes) else []
+            lb = page_line_boxes[p_idx] if p_idx < len(page_line_boxes) else []
+            dets = StudentQuestionHeadingDetector.detect_questions_on_page(text, wb, lb, stored_q_nums)
+
+            if dets:
+                dets_sorted = sorted(dets, key=lambda d: d.get('ymin_pct', 0.0))
+                if len(dets_sorted) == 1:
+                    det_q = normalize_q_code(dets_sorted[0]['normalized_number'])
+                    if det_q in extracted_by_q:
+                        active_q = det_q
+                        extracted_by_q[active_q].append(text)
+                else:
+                    for det in dets_sorted:
+                        det_q = normalize_q_code(det['normalized_number'])
+                        if det_q in extracted_by_q:
+                            active_q = det_q
+                            extracted_by_q[active_q].append(f"[{det_q} Solution Segment]")
+                    extracted_by_q[active_q].append(text)
+            elif active_q:
+                extracted_by_q[active_q].append(text)
+            else:
+                match = SemanticQuestionMatcher.match_unlabelled_answer(text, stored_questions)
+                best_q = match.get('best_question')
+                if best_q:
+                    active_q = normalize_q_code(QuestionAccessor.get_question_number(best_q))
+                    if active_q in extracted_by_q:
+                        extracted_by_q[active_q].append(text)
+
+        mapped_summary = []
+        for q_code, q_obj in q_map.items():
+            sol_segments = extracted_by_q.get(q_code, [])
+            joined_text = "\n\n".join(s.strip() for s in sol_segments if s.strip()).strip()
+
+            if not joined_text and len(page_texts) == 1:
+                joined_text = page_texts[0].strip()
+
+            if joined_text:
+                q_obj.master_solution_text = joined_text
+                steps = []
+                for line in joined_text.splitlines():
+                    clean_line = line.strip()
+                    if clean_line and len(clean_line) > 3:
+                        steps.append({'step': len(steps) + 1, 'description': clean_line, 'marks': round(float(q_obj.max_marks) / max(1, 4), 2)})
+                # Issue C resolved: removed arbitrary [:8] cap — full step sequence preserved
+                q_obj.master_solution_steps = steps
+                q_obj.save(update_fields=['master_solution_text', 'master_solution_steps'])
+                mapped_summary.append({
+                    'question_number': q_code,
+                    'text_length': len(joined_text),
+                    'steps_count': len(q_obj.master_solution_steps),
+                    'sample_text': joined_text[:120] + "..." if len(joined_text) > 120 else joined_text
+                })
+
+        exam.master_solution_parsed = True
+        exam.save(update_fields=['master_solution_parsed'])
+
+        # Issue F: Bind master solution embedded figures as QuestionFigure records
+        if embedded_page_images:
+            from core.models import QuestionFigure
+            from django.core.files.base import ContentFile
+            for p_idx, fig_bytes_list in embedded_page_images.items():
+                # Determine which question is active on this page
+                target_q_obj = None
+                for q_code_key, q_candidate in q_map.items():
+                    seg_list = extracted_by_q.get(q_code_key, [])
+                    # Check if any segment was assigned to this page index
+                    if seg_list and page_texts[p_idx:p_idx+1]:
+                        target_q_obj = q_candidate
+                        break
+                if target_q_obj is None:
+                    # Fallback: bind to first question
+                    target_q_obj = next(iter(q_map.values()), None)
+
+                if target_q_obj:
+                    for fig_idx, fig_png in enumerate(fig_bytes_list):
+                        if len(fig_png) < 500:
+                            continue  # Skip trivially small images (logos/icons)
+                        try:
+                            QuestionFigure.objects.create(
+                                question=target_q_obj,
+                                page_number=p_idx + 1,
+                                caption=f"Master Solution Reference Diagram — Page {p_idx+1}, Fig {fig_idx+1}",
+                                image=ContentFile(fig_png, name=f"master_fig_exam{exam.id}_q{target_q_obj.question_number}_p{p_idx+1}_{fig_idx+1}.png"),
+                                display_order=fig_idx + 1,
+                                is_master_solution_figure=True
+                            )
+                        except Exception as qf_err:
+                            print(f"[MASTER SOLUTION FIGURE SAVE WARNING] {qf_err}")
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Master Solution parsed successfully. Bound golden benchmark solutions to {len(mapped_summary)} question(s).",
+            'mapped_questions': mapped_summary
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': f"Failed to parse Master Solution: {str(e)}"}, status=500)
+
+
 # ==========================================
 # Production AI Script Evaluation & Teacher Review Views
 # ==========================================
@@ -2868,7 +3675,18 @@ def evaluate_answer_scripts_list(request, exam_id):
         messages.error(request, f"No examination found for ID #{exam_id}.")
         return redirect('teacher_dashboard')
 
-    questions = exam.questions.all().select_related('rubric').order_by('id')
+    profile = getattr(request.user, 'profile', None)
+    is_admin = request.user.is_superuser or (profile and profile.role == Profile.Role.ADMIN)
+    if not is_admin and exam.assigned_faculty != request.user:
+        messages.error(request, "Access Denied: You are not assigned as the examiner for this examination.")
+        return redirect('teacher_dashboard')
+
+    # Guard: If no questions or documents are configured, redirect to Paper & Rubric Setup
+    if exam.questions.count() == 0 and not exam.question_paper_file:
+        messages.warning(request, f"Cannot evaluate scripts: No Question Paper or Rubrics are attached to '{exam.title}' yet. Please set up the question paper first.")
+        return redirect('question_rubric_manage', exam_id=exam.id)
+
+    questions = exam.questions.all().select_related('rubric').prefetch_related('figures_rel', 'tables_rel', 'formulas_rel').order_by('question_number', 'id')
     submissions = StudentSubmission.objects.filter(examination=exam).select_related('student').order_by('-created_at')
 
     is_mcq_exam = any(
@@ -2887,7 +3705,7 @@ def evaluate_answer_scripts_list(request, exam_id):
 
 
 def upload_student_submission(request, exam_id):
-    """Handles PDF, ZIP, or Image upload for a student answer script."""
+    """Handles Single Image, Multi-page PDF, or Batch ZIP upload for student answer scripts."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
 
@@ -2898,39 +3716,65 @@ def upload_student_submission(request, exam_id):
         roll_no = request.POST.get('roll_no', '').strip()
         script_file = request.FILES.get('script_file')
 
-        if not student_name or student_name.lower() == 'student':
-            if roll_no:
-                student_name = f"Student ({roll_no})"
-            else:
-                student_name = "Pending OCR Extraction"
-
         if not script_file:
             return JsonResponse({'success': False, 'error': 'No script file provided.'}, status=400)
 
-        sub = StudentSubmission.objects.create(
-            examination=exam,
-            student_name=student_name,
-            student_roll_no=roll_no,
-            script_file=script_file
-        )
-
         try:
-            # Process & Evaluate Submission asynchronously / synchronously
-            evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
-                submission_id=sub.id,
+            from core.ai_engine.services.submission_processor import SubmissionProcessor
+            from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+
+            # Ingest uploaded script(s) (handles ZIP unpacking, 300 DPI PDF rendering, or single image)
+            submissions = SubmissionProcessor.process_uploaded_file(
+                examination=exam,
+                uploaded_file=script_file,
+                student_name=student_name,
+                roll_no=roll_no,
                 user=request.user,
                 ip_address=request.META.get('REMOTE_ADDR')
             )
 
-            return JsonResponse({
-                'success': True,
-                'submission_id': evaluated_sub.id,
-                'total_obtained': float(evaluated_sub.total_obtained_marks),
-                'total_max': float(evaluated_sub.total_max_marks),
-                'percentage': evaluated_sub.percentage,
-                'requires_manual_review': evaluated_sub.requires_manual_review,
-                'message': 'Student script successfully processed and AI evaluated.'
-            })
+            if not submissions:
+                return JsonResponse({'success': False, 'error': 'No valid answer scripts found in uploaded file.'}, status=400)
+
+            evaluated_results = []
+            for sub in submissions:
+                evaluated_sub = AIScriptEvaluator.process_and_evaluate_submission(
+                    submission_id=sub.id,
+                    user=request.user,
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                evaluated_results.append({
+                    'submission_id': evaluated_sub.id,
+                    'student_name': evaluated_sub.student_name,
+                    'student_roll_no': evaluated_sub.student_roll_no,
+                    'total_obtained': float(evaluated_sub.total_obtained_marks or 0.0),
+                    'total_max': float(evaluated_sub.total_max_marks or 0.0),
+                    'percentage': float(evaluated_sub.percentage or 0.0),
+                    'requires_manual_review': evaluated_sub.requires_manual_review
+                })
+
+            if len(evaluated_results) == 1:
+                first = evaluated_results[0]
+                return JsonResponse({
+                    'success': True,
+                    'submission_id': first['submission_id'],
+                    'student_name': first['student_name'],
+                    'student_roll_no': first['student_roll_no'],
+                    'total_obtained': first['total_obtained'],
+                    'total_max': first['total_max'],
+                    'percentage': first['percentage'],
+                    'requires_manual_review': first['requires_manual_review'],
+                    'message': 'Student script successfully processed and AI evaluated.'
+                })
+            else:
+                return JsonResponse({
+                    'success': True,
+                    'is_batch': True,
+                    'batch_count': len(evaluated_results),
+                    'submissions': evaluated_results,
+                    'message': f'Batch processing complete: {len(evaluated_results)} student scripts evaluated successfully.'
+                })
+
         except Exception as e_eval:
             import traceback
             traceback.print_exc()
@@ -2948,6 +3792,33 @@ def evaluation_workspace(request, submission_id):
     exam = submission.examination
     answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
 
+    # Ensure working copy images exist on disk for all pages (self-healing)
+    from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+    WorkingCopyManager.ensure_working_copies(submission.id)
+
+    # Prefetch QuestionMappings and SubmissionPages for question-scoped visual binding
+    from core.models import QuestionMapping
+    q_mappings = {qm.question_id: qm for qm in QuestionMapping.objects.filter(submission=submission)}
+    all_pages = list(submission.pages.all().order_by('page_number'))
+    for p in all_pages:
+        p_img_url = None
+        try:
+            if p.page_image and hasattr(p.page_image, 'url') and p.page_image.name:
+                p_img_url = p.page_image.url
+        except Exception:
+            p_img_url = None
+
+        if not p_img_url and p.working_image_path and os.path.exists(p.working_image_path):
+            try:
+                rel_path = os.path.relpath(p.working_image_path, settings.MEDIA_ROOT).replace('\\', '/')
+                p_img_url = f"{settings.MEDIA_URL.rstrip('/')}/{rel_path.lstrip('/')}"
+            except Exception:
+                p_img_url = None
+        
+        p.resolved_image_url = p_img_url
+
+    pages_by_num = {p.page_number: p for p in all_pages}
+
     normalized_answers = []
     is_mcq = False
     mcq_detected_results = {}
@@ -2955,22 +3826,77 @@ def evaluation_workspace(request, submission_id):
 
     for ans in answers:
         q_dto = QuestionAccessor.to_dto(ans.question)
+        eval_res = getattr(ans, 'evaluation_result', None)
+        
+        # Resolve mapped pages for this question (fallback to all_pages if unmapped so image is never blank)
+        qm = q_mappings.get(ans.question.id)
+        pg_nums = qm.page_numbers_json if (qm and qm.page_numbers_json) else ([ans.page.page_number] if ans.page else [])
+        mapped_pages = [pages_by_num[p] for p in pg_nums if p in pages_by_num]
+        if not mapped_pages and all_pages:
+            mapped_pages = all_pages
+
+        # Extract and normalize structured rubric / step breakdown
+        rubric_breakdown = []
+        raw_breakdown = eval_res.rubric_breakdown_json if eval_res else None
+        if raw_breakdown:
+            if isinstance(raw_breakdown, list):
+                for idx_step, step_dict in enumerate(raw_breakdown, 1):
+                    if isinstance(step_dict, dict):
+                        rubric_breakdown.append({
+                            'step_num': idx_step,
+                            'description': str(step_dict.get('step_description') or step_dict.get('criteria') or step_dict.get('description') or f"Step {idx_step}"),
+                            'allocated': float(step_dict.get('allocated_marks') or step_dict.get('allocated') or 0.0),
+                            'awarded': float(step_dict.get('awarded_marks') or step_dict.get('awarded') or 0.0),
+                            'grounding_evidence': str(step_dict.get('grounding_evidence') or ''),
+                            'comment': str(step_dict.get('comment') or step_dict.get('comments') or '')
+                        })
+            elif isinstance(raw_breakdown, dict):
+                for idx_step, (k, v) in enumerate(raw_breakdown.items(), 1):
+                    rubric_breakdown.append({
+                        'step_num': idx_step,
+                        'description': str(k).capitalize(),
+                        'allocated': float(v) if isinstance(v, (int, float)) else 0.0,
+                        'awarded': float(v) if isinstance(v, (int, float)) else 0.0,
+                        'grounding_evidence': '',
+                        'comment': 'Evaluated criterion'
+                    })
+
+        raw_master_steps = getattr(ans.question, 'master_solution_steps', None) or getattr(q_dto, 'master_solution_steps', None) or []
+        master_steps = []
+        if isinstance(raw_master_steps, list):
+            for s_idx, s in enumerate(raw_master_steps, 1):
+                if isinstance(s, dict):
+                    master_steps.append({
+                        'step_num': str(s.get('step') or s_idx),
+                        'description': str(s.get('description') or s.get('desc') or ''),
+                        'marks': float(s.get('marks') or 0.0)
+                    })
+
+        master_text = ans.question.master_solution_text or q_dto.master_solution_text or (ans.question.rubric.ideal_answer if hasattr(ans.question, 'rubric') else '')
+
         normalized_answers.append({
             'answer': ans,
             'q': q_dto.to_dict(),
             'question_dto': q_dto,
-            'evaluation_result': getattr(ans, 'evaluation_result', None)
+            'evaluation_result': eval_res,
+            'page_numbers': pg_nums,
+            'mapped_pages': mapped_pages,
+            'master_solution_text': master_text,
+            'master_solution_steps': master_steps,
+            'rubric_breakdown': rubric_breakdown,
+            'strengths': eval_res.strengths_json if eval_res else [],
+            'mistakes': eval_res.mistakes_json if eval_res else [],
+            'missing_points': eval_res.missing_points_json if eval_res else []
         })
 
         q_type_raw = getattr(ans.question, 'question_type', [])
         q_types = [str(t).lower() for t in (q_type_raw if isinstance(q_type_raw, list) else [str(q_type_raw)])]
         if any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types):
             is_mcq = True
-            q_key = f"Q{q_dto.number}"
+            q_key = normalize_q_code(q_dto.number)
             answer_key[q_key] = str(q_dto.ideal_answer or q_dto.rubric or q_dto.text).strip()
 
             det_val = []
-            eval_res = getattr(ans, 'evaluation_result', None)
             if ans.extracted_text and ans.extracted_text.strip():
                 det_val = [ans.extracted_text.strip()]
             elif eval_res and "Detected:" in str(eval_res.feedback_text):
@@ -3034,6 +3960,8 @@ def evaluation_workspace(request, submission_id):
         'exam': exam,
         'answers': answers,
         'normalized_answers': normalized_answers,
+        'all_pages': all_pages,
+        'master_solution_file_url': exam.master_solution_file.url if exam.master_solution_file else None,
         'is_mcq': is_mcq,
         'mcq_summary': mcq_summary,
         'mcq_breakdown': mcq_breakdown
@@ -3050,96 +3978,123 @@ def review_evaluation_answer(request, result_id):
     submission = answer.submission
 
     if request.method == 'POST':
-        action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
-        new_marks_val = request.POST.get('new_marks')
-        comments = request.POST.get('comments', '').strip()
+        try:
+            action = request.POST.get('action') # APPROVE, OVERRIDE, REJECT, RE_EVALUATE
+            new_marks_val = request.POST.get('new_marks')
+            comments = request.POST.get('comments', '').strip()
 
-        old_marks = eval_result.obtained_marks
+            old_marks = eval_result.obtained_marks
 
-        if action == 'APPROVE':
-            eval_result.status = EvaluationResult.ReviewStatus.APPROVED
-            eval_result.requires_manual_review = False
-            eval_result.save()
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.APPROVE,
-                previous_marks=old_marks,
-                new_marks=old_marks,
-                review_comments=comments or 'Approved by teacher.'
-            )
+            if action == 'APPROVE':
+                eval_result.status = EvaluationResult.ReviewStatus.APPROVED
+                eval_result.requires_manual_review = False
+                eval_result.save()
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.APPROVE,
+                    previous_marks=old_marks,
+                    new_marks=old_marks,
+                    review_comments=comments or 'Approved by teacher.'
+                )
 
-        elif action == 'OVERRIDE':
+            elif action == 'OVERRIDE':
+                try:
+                    new_m = float(new_marks_val)
+                    new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
+                except (TypeError, ValueError):
+                    return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
+
+                eval_result.obtained_marks = new_m
+                eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
+                eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
+                eval_result.requires_manual_review = False
+                eval_result.save()
+
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.OVERRIDE,
+                    previous_marks=old_marks,
+                    new_marks=new_m,
+                    review_comments=comments
+                )
+                EvaluationHistory.objects.create(
+                    evaluation_result=eval_result,
+                    modified_by=request.user,
+                    old_marks=old_marks,
+                    new_marks=new_m,
+                    reason=comments or 'Teacher score override'
+                )
+
+            elif action == 'RE_EVALUATE':
+                # Re-run AI evaluation for this specific answer
+                from core.ai_engine.evaluation.script_evaluator import AIScriptEvaluator
+                AIScriptEvaluator._evaluate_single_answer(answer)
+                eval_result.refresh_from_db()
+                TeacherReview.objects.create(
+                    evaluation_result=eval_result,
+                    teacher=request.user,
+                    action=TeacherReview.Action.RE_EVALUATE,
+                    previous_marks=old_marks,
+                    new_marks=eval_result.obtained_marks,
+                    review_comments='Requested AI re-evaluation'
+                )
+
+            # Recalculate submission totals
+            all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
+            total_obtained = sum(float(e.obtained_marks) for e in all_evals)
+            total_max = sum(float(e.maximum_marks) for e in all_evals)
+
+            submission.total_obtained_marks = total_obtained
+            submission.total_max_marks = total_max
+            submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
+            submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
+            if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
+                submission.status = StudentSubmission.Status.REVIEWED
+            submission.save()
+
+            # Sync OBE Course Tabulation with updated marks
             try:
-                new_m = float(new_marks_val)
-                new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
-            except (TypeError, ValueError):
-                return JsonResponse({'success': False, 'error': 'Invalid marks value provided.'}, status=400)
+                from core.services.tabulation_service import sync_submission_to_tabulation
+                sync_submission_to_tabulation(submission)
+            except Exception as _e_tab:
+                print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} after review: {_e_tab}")
 
-            eval_result.obtained_marks = new_m
-            eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
-            eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
-            eval_result.requires_manual_review = False
-            eval_result.save()
+            # Regenerate updated Evaluated Script PDF with new marks and dispatch email to student
+            try:
+                from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
+                from core.services.email_service import EmailService
 
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.OVERRIDE,
-                previous_marks=old_marks,
-                new_marks=new_m,
-                review_comments=comments
-            )
-            EvaluationHistory.objects.create(
-                evaluation_result=eval_result,
-                modified_by=request.user,
-                old_marks=old_marks,
-                new_marks=new_m,
-                reason=comments or 'Teacher score override'
-            )
+                pdf_path = EvaluatedScriptPDFService.generate_evaluated_pdf(submission.id)
+                if action in ['APPROVE', 'OVERRIDE'] or submission.status in [StudentSubmission.Status.REVIEWED, StudentSubmission.Status.FINALIZED]:
+                    EmailService.send_submission_evaluated_email(
+                        submission=submission,
+                        final_pdf_path=pdf_path,
+                        sync=False
+                    )
+            except Exception as _e_pdf_email:
+                print(f"[EVALUATED PDF / EMAIL WARNING] Failed generating PDF or sending email for submission #{submission.id}: {_e_pdf_email}")
 
-        elif action == 'RE_EVALUATE':
-            # Re-run AI evaluation for this specific answer
-            AIScriptEvaluator._evaluate_single_answer(answer)
-            eval_result.refresh_from_db()
-            TeacherReview.objects.create(
-                evaluation_result=eval_result,
-                teacher=request.user,
-                action=TeacherReview.Action.RE_EVALUATE,
-                previous_marks=old_marks,
-                new_marks=eval_result.obtained_marks,
-                review_comments='Requested AI re-evaluation'
+            EvaluationAuditLog.objects.create(
+                submission=submission,
+                user=request.user,
+                action=f"TEACHER_REVIEW_{action}",
+                details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
+                ip_address=request.META.get('REMOTE_ADDR')
             )
 
-        # Recalculate submission totals
-        all_evals = EvaluationResult.objects.filter(submission_answer__submission=submission)
-        total_obtained = sum(float(e.obtained_marks) for e in all_evals)
-        total_max = sum(float(e.maximum_marks) for e in all_evals)
-
-        submission.total_obtained_marks = total_obtained
-        submission.total_max_marks = total_max
-        submission.percentage = round((total_obtained / float(max(1.0, total_max))) * 100.0, 2)
-        submission.requires_manual_review = any(e.requires_manual_review for e in all_evals)
-        if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
-            submission.status = StudentSubmission.Status.REVIEWED
-        submission.save()
-
-        EvaluationAuditLog.objects.create(
-            submission=submission,
-            user=request.user,
-            action=f"TEACHER_REVIEW_{action}",
-            details_json={"result_id": result_id, "old_marks": float(old_marks), "new_marks": float(eval_result.obtained_marks), "comments": comments},
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-
-        return JsonResponse({
-            'success': True,
-            'new_obtained_marks': float(eval_result.obtained_marks),
-            'new_submission_total': float(submission.total_obtained_marks),
-            'submission_percentage': submission.percentage,
-            'submission_status': submission.status,
-            'message': f'Evaluation successfully updated ({action}).'
-        })
+            return JsonResponse({
+                'success': True,
+                'new_obtained_marks': float(eval_result.obtained_marks),
+                'new_submission_total': float(submission.total_obtained_marks),
+                'submission_percentage': submission.percentage,
+                'submission_status': submission.status,
+                'message': f'Evaluation successfully updated ({action}).'
+            })
+        except Exception as e_rev:
+            print(f"[REVIEW EVALUATION ERROR] {e_rev}")
+            return JsonResponse({'success': False, 'error': str(e_rev)}, status=500)
 
     return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
 
@@ -3221,6 +4176,8 @@ def api_upload_raw_images(request, exam_id):
                 sub.student_name = student_name
                 sub.student_roll_no = roll_no
                 sub.save()
+                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+                WorkingCopyManager.flush_submission_pipeline_cache(sub.id)
                 # Clear old raw images if re-uploading
                 sub.raw_images.all().delete()
             except StudentSubmission.DoesNotExist:
@@ -3272,22 +4229,25 @@ def api_get_submission_images(request, submission_id):
         'success': True,
         'images': data,
         'student_name': submission.student_name,
-        'roll_no': submission.student_roll_no
+        'roll_no': submission.student_roll_no,
+        'status': submission.status
     })
 
 
 def api_delete_all_submission_images(request, submission_id):
-    """Deletes all raw page images for a submission."""
+    """Deletes all raw page images for a submission and flushes pipeline cache."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
+    from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+    WorkingCopyManager.flush_submission_pipeline_cache(submission.id)
     submission.raw_images.all().delete()
-    return JsonResponse({'success': True, 'message': 'All page images removed.'})
+    return JsonResponse({'success': True, 'message': 'All page images and cached pipeline states removed.'})
 
 
 def api_reorder_submission_pages(request, submission_id):
-    """Updates sequence order and rotation angles for existing raw submission pages."""
+    """Updates sequence order and rotation angles for existing raw submission pages and flushes pipeline cache."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
 
@@ -3298,6 +4258,9 @@ def api_reorder_submission_pages(request, submission_id):
         except Exception:
             body_data = request.POST.dict()
 
+        from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+        WorkingCopyManager.flush_submission_pipeline_cache(submission.id)
+
         page_orders = body_data.get('page_orders', [])
         for order_info in page_orders:
             img_id = order_info.get('id')
@@ -3306,25 +4269,58 @@ def api_reorder_submission_pages(request, submission_id):
             if img_id:
                 SubmissionImage.objects.filter(id=img_id, submission=submission).update(sequence_order=seq, rotation_angle=rot)
 
-        return JsonResponse({'success': True, 'message': 'Page order updated.'})
+        return JsonResponse({'success': True, 'message': 'Page order updated and pipeline cache flushed.'})
 
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
 def api_create_submission_pdf(request, submission_id):
-    """Compiles uploaded/reordered raw images into submission_original.pdf and returns preview URL."""
+    """Compiles uploaded/reordered raw images or pages into submission_original.pdf and returns preview URL."""
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
 
     try:
-        raw_images = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
-        if not raw_images:
-            return JsonResponse({'success': False, 'error': 'No raw page images found.'}, status=400)
+        # 1. If SubmissionPDF already exists and valid, verify file existence
+        if hasattr(submission, 'pdf_document') and submission.pdf_document and submission.pdf_document.pdf_file:
+            pdf_path = submission.pdf_document.pdf_file.path
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                return JsonResponse({
+                    'success': True,
+                    'pdf_url': submission.pdf_document.pdf_file.url,
+                    'page_count': submission.pdf_document.page_count,
+                    'message': 'Loaded existing submission PDF.'
+                })
 
-        img_paths = [r.original_file.path for r in raw_images]
+        # 2. Gather image paths from raw_images or submission.pages
+        raw_images = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+        img_paths = []
+        if raw_images:
+            img_paths = [r.original_file.path for r in raw_images if r.original_file and os.path.exists(r.original_file.path)]
+        
+        if not img_paths:
+            pages = list(submission.pages.all().order_by('page_number'))
+            for p in pages:
+                if p.working_image_path and os.path.exists(p.working_image_path):
+                    img_paths.append(p.working_image_path)
+                elif p.page_image and os.path.exists(p.page_image.path):
+                    img_paths.append(p.page_image.path)
+
+        # 3. If no images found, fallback to submission.script_file
+        if not img_paths:
+            if submission.script_file:
+                return JsonResponse({
+                    'success': True,
+                    'pdf_url': submission.script_file.url,
+                    'page_count': submission.pages.count() or 1,
+                    'message': 'Using uploaded script PDF.'
+                })
+            return JsonResponse({'success': False, 'error': 'No page images or PDF found for this submission.'}, status=400)
+
+        # 4. Compile images into PDF
         pdf_out_path = os.path.join(settings.MEDIA_ROOT, 'submission_pdfs', f'submission_{submission.id}_original.pdf')
+        os.makedirs(os.path.dirname(pdf_out_path), exist_ok=True)
         compiled_path, page_count = ImagePreprocessingService.compile_images_to_pdf(img_paths, pdf_out_path)
 
         with open(compiled_path, 'rb') as f_pdf:
@@ -3668,201 +4664,29 @@ def api_finalize_evaluation(request, submission_id):
 
     if request.method == 'POST':
         try:
-            from core.ai_engine.services.finalization_service import FinalizationService
-            res = FinalizationService.finalize_submission(
-                submission.id,
-                teacher_user=request.user,
-                ip_address=request.META.get('REMOTE_ADDR')
-            )
-            return JsonResponse(res)
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-    """Executes OCR question detection & semantic matching to build draft question-to-page mappings."""
-    if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
-
-    submission = get_object_or_404(StudentSubmission, id=submission_id)
-
-    try:
-        from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
-        
-        # Phase 1: Ensure working copy images & OCR results exist ONCE (cached if already prepared)
-        options = {'ocr_mode': 'BALANCED'}
-        AIScriptEvaluator.prepare_and_ocr_submission(
-            submission_id=submission.id,
-            options=options,
-            user=request.user,
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-
-        # Phase 2: Execute mapping analysis using cached OCR text
-        result = QuestionMappingOrchestrator.analyze_and_build_mapping(
-            submission.id,
-            user=request.user,
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-        
-        # Attach calculated preview validation metrics to JSON output
-        result['validation'] = _get_preview_validation_dict(submission)
-        return JsonResponse(result)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return JsonResponse({'success': False, 'error': f'Mapping analysis failed: {str(e)}'}, status=500)
-
-
-def api_confirm_question_mapping(request, submission_id):
-    """Saves teacher confirmed page-to-question mappings and triggers AI Evaluation pipeline."""
-    if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
-
-    submission = get_object_or_404(StudentSubmission, id=submission_id)
-
-    if request.method == 'POST':
-        try:
-            body_data = json.loads(request.body.decode('utf-8')) if request.body else {}
-        except Exception:
-            body_data = request.POST.dict()
-
-        confirmed_mappings = body_data.get('confirmed_mappings', [])
-        options = body_data.get('options', {})
-
-        try:
-            # Phase 3: Evaluate mapped answers using cached OCR & confirmed mappings (NO redundant preprocessing)
-            evaluated_sub = AIScriptEvaluator.evaluate_mapped_answers(
-                submission_id=submission.id,
-                confirmed_mappings=confirmed_mappings,
-                options=options,
-                user=request.user,
-                ip_address=request.META.get('REMOTE_ADDR')
-            )
-
-            try:
-                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
-                WorkingCopyManager.cleanup_temporary_files(submission.id)
-            except Exception:
-                pass
-
-            return JsonResponse({
-                'success': True,
-                'submission_id': evaluated_sub.id,
-                'total_obtained': float(evaluated_sub.total_obtained_marks),
-                'total_max': float(evaluated_sub.total_max_marks),
-                'percentage': evaluated_sub.percentage,
-                'requires_manual_review': evaluated_sub.requires_manual_review,
-                'workspace_url': f"/teacher/submission/{evaluated_sub.id}/workspace/",
-                'message': 'Question mapping confirmed & AI Evaluation completed successfully.'
-            })
-
-        except Exception as e_eval:
-            import traceback
-            traceback.print_exc()
-            return JsonResponse({'success': False, 'error': f'Confirmed evaluation failed: {str(e_eval)}'}, status=500)
-
-    return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
-
-
-@csrf_exempt
-def api_delete_submission(request, submission_id):
-    """Deletes a student submission and its associated answers, pages, mappings, and evaluations."""
-    if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
-
-    submission = get_object_or_404(StudentSubmission, id=submission_id)
-
-    if request.method in ['POST', 'DELETE']:
-        try:
-            sub_id = submission.id
-            student_name = submission.student_name
-
-            # Delete physical script file
-            if submission.script_file:
+            # Allow updating student_name and student_roll_no upon finalization if provided
+            body_data = {}
+            if request.body:
                 try:
-                    submission.script_file.delete(save=False)
+                    body_data = json.loads(request.body.decode('utf-8'))
                 except Exception:
-                    pass
+                    body_data = request.POST.dict()
+            else:
+                body_data = request.POST.dict()
 
-            # Delete page image files & thumbnails
-            for page in submission.pages.all():
-                if page.page_image:
-                    try:
-                        page.page_image.delete(save=False)
-                    except Exception:
-                        pass
-                if getattr(page, 'thumbnail', None):
-                    try:
-                        page.thumbnail.delete(save=False)
-                    except Exception:
-                        pass
+            st_name = body_data.get('student_name', '').strip()
+            st_roll = body_data.get('student_roll_no', '').strip() or body_data.get('roll_no', '').strip()
 
-            # Clean working directory & trace files
-            try:
-                from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
-                WorkingCopyManager.cleanup_temporary_files(sub_id)
-            except Exception:
-                pass
+            need_save = False
+            if st_name and st_name != submission.student_name:
+                submission.student_name = st_name
+                need_save = True
+            if st_roll and st_roll != submission.student_roll_no:
+                submission.student_roll_no = st_roll
+                need_save = True
+            if need_save:
+                submission.save(update_fields=['student_name', 'student_roll_no'])
 
-            submission.delete()
-            return JsonResponse({'success': True, 'message': f'Submission #{sub_id} for {student_name} deleted successfully.'})
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return JsonResponse({'success': False, 'error': f'Failed deleting submission: {str(e)}'}, status=500)
-
-    return JsonResponse({'success': False, 'error': 'POST or DELETE request required.'}, status=405)
-
-
-def _get_preview_validation_dict(submission: StudentSubmission) -> dict:
-    pages = list(submission.pages.all().order_by('page_number'))
-    if not pages:
-        return {
-            'success': True,
-            'page_count': 0,
-            'orientation': 'NO_PAGES',
-            'blank_pages': 0,
-            'duplicates': 0,
-            'ocr_confidence': 0,
-            'is_ready': False
-        }
-    blank_count = 0
-    total_conf = 0.0
-    for sp in pages:
-        txt = sp.ocr_raw_text or ""
-        if len(txt.strip()) < 10:
-            blank_count += 1
-        total_conf += sp.ocr_confidence
-
-    avg_conf = round((total_conf / max(1, len(pages))) * 100)
-    return {
-        'success': True,
-        'page_count': len(pages),
-        'orientation': 'OK',
-        'blank_pages': blank_count,
-        'duplicates': 0,
-        'ocr_confidence': avg_conf,
-        'is_ready': True
-    }
-
-
-def api_validate_preview(request, submission_id):
-    """Returns preview validation metadata (page count, orientation, blank pages, OCR confidence)."""
-    if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
-
-    submission = get_object_or_404(StudentSubmission, id=submission_id)
-    return JsonResponse(_get_preview_validation_dict(submission))
-
-
-def api_finalize_evaluation(request, submission_id):
-    """Triggers FinalizationService: saves final report, records audit logs, and purges temporary working files."""
-    if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
-
-    submission = get_object_or_404(StudentSubmission, id=submission_id)
-
-    if request.method == 'POST':
-        try:
             from core.ai_engine.services.finalization_service import FinalizationService
             res = FinalizationService.finalize_submission(
                 submission.id,
@@ -3875,6 +4699,52 @@ def api_finalize_evaluation(request, submission_id):
             import traceback
             traceback.print_exc()
             return JsonResponse({'success': False, 'error': f'Finalization failed: {str(e)}'}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
+
+
+def api_update_submission_info(request, submission_id):
+    """Allows teachers to update student name and roll number after evaluation, before or after finalization."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    submission = get_object_or_404(StudentSubmission, id=submission_id)
+
+    if request.method == 'POST':
+        try:
+            body_data = {}
+            if request.body:
+                try:
+                    body_data = json.loads(request.body.decode('utf-8'))
+                except Exception:
+                    body_data = request.POST.dict()
+            else:
+                body_data = request.POST.dict()
+
+            st_name = body_data.get('student_name', '').strip()
+            st_roll = body_data.get('student_roll_no', '').strip() or body_data.get('roll_no', '').strip()
+
+            if st_name:
+                submission.student_name = st_name
+            if st_roll:
+                submission.student_roll_no = st_roll
+            submission.save(update_fields=['student_name', 'student_roll_no'])
+
+            # Sync with Tabulation OBE record
+            try:
+                from core.services.tabulation_service import sync_submission_to_tabulation
+                sync_submission_to_tabulation(submission)
+            except Exception as e_sync:
+                print(f"[TABULATION SYNC WARNING] {e_sync}")
+
+            return JsonResponse({
+                'success': True,
+                'student_name': submission.student_name,
+                'student_roll_no': submission.student_roll_no,
+                'message': 'Student Name and Roll Number updated successfully.'
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
     return JsonResponse({'success': False, 'error': 'POST request required.'}, status=405)
 
@@ -3918,9 +4788,7 @@ def api_evaluate_quiz_submission(request, exam_id):
         total_unattempted = 0
 
         for sa in eval_answers:
-            q_num = sa.question.question_number or f"Q{sa.question.id}"
-            if not str(q_num).upper().startswith('Q'):
-                q_num = f"Q{q_num}"
+            q_num = normalize_q_code(sa.question.question_number or sa.question.id)
 
             correct_key = getattr(sa.question, 'correct_answer', None)
             if not correct_key and hasattr(sa.question, 'rubric') and sa.question.rubric:
@@ -4090,25 +4958,67 @@ def api_save_mcq_answer_key(request, exam_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+def _format_matrices_in_text(text: str) -> str:
+    """
+    Detects and converts unformatted raw matrix grids (e.g. 6x6 pixel values, 3x3 RGB tuples)
+    into structured Markdown pipe tables.
+    """
+    if not text:
+        return text
+
+    # 1. Match 9 RGB tuples like (120, 150, 180) for 3x3 RGB matrices
+    rgb_tuples = re.findall(r'\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)', text)
+    if len(rgb_tuples) == 9 and not ('|' in text and 'Col 1' in text):
+        md_table = '\n\n| **RGB Matrix** | **Col 1** | **Col 2** | **Col 3** |\n| :---: | :---: | :---: | :---: |\n'
+        for r in range(3):
+            row_items = rgb_tuples[r*3:(r+1)*3]
+            md_table += f'| **Row {r+1}** | ' + ' | '.join(row_items) + ' |\n'
+        first_idx = text.find(rgb_tuples[0])
+        last_idx = text.find(rgb_tuples[-1]) + len(rgb_tuples[-1])
+        text = text[:first_idx] + md_table + '\n' + text[last_idx:]
+
+    # 2. Match sequence of square number grids (e.g. 36 numbers for 6x6, 25 for 5x5, 16 for 4x4, 9 for 3x3)
+    num_seq_match = re.search(r'(?:\b\d{1,4}\b\s+){8,64}\b\d{1,4}\b', text)
+    if num_seq_match and not ('|' in text and 'Matrix' in text):
+        nums = re.findall(r'\b\d{1,4}\b', num_seq_match.group(0))
+        n = len(nums)
+        grid_dim = int(n**0.5)
+        if grid_dim * grid_dim == n and grid_dim >= 3:
+            md_table = f'\n\n| **{grid_dim}x{grid_dim} Matrix** | ' + ' | '.join([f'**Col {c+1}**' for c in range(grid_dim)]) + ' |\n'
+            md_table += '| ' + ' | '.join([':---:'] * (grid_dim + 1)) + ' |\n'
+            for r in range(grid_dim):
+                row_items = nums[r*grid_dim:(r+1)*grid_dim]
+                md_table += f'| **Row {r+1}** | ' + ' | '.join(row_items) + ' |\n'
+            text = text.replace(num_seq_match.group(0), md_table + '\n')
+
+    return text.strip()
+
+
 def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[Dict[str, Any]]:
     """
-    Deterministic Fallback Regex Parser for MCQ Question Papers.
-    Parses questions Q1-Q10, options (A)-(D), CO/PO/Bloom metadata, and marks.
+    Deterministic Fallback Parser for Examination Question Papers (MCQ & Subjective).
+    Parses questions Q1-Q10, options (if present), CO/PO/Bloom metadata, and marks.
+    Filters out institutional headers and exam instructions.
     """
     questions = []
-    q_blocks = re.split(r'\n(?=\d+\.\s+)', text)
+    q_blocks = re.split(r'\n(?=(?:Q(?:uestion)?\s*)?\d+[\.:\)]\s*)', text)
 
     for block in q_blocks:
         block = block.strip()
         if not block:
             continue
 
-        q_match = re.match(r'^(\d+)[\.:]\s*(.*)', block, re.DOTALL)
+        q_match = re.match(r'^(?:Q(?:uestion)?\s*)?(\d+)[\.:\)]\s*(.*)', block, re.DOTALL)
         if not q_match:
             continue
 
         q_num = f"Q{q_match.group(1)}"
         rest_text = q_match.group(2).strip()
+
+        # Skip instructions or exam header blocks
+        lower_rest = rest_text.lower()
+        if lower_rest.startswith("answer all") or lower_rest.startswith("instructions") or "marks allocated are indicated" in lower_rest[:80]:
+            continue
 
         co_val = "CO1"
         bloom_val = "C1"
@@ -4121,9 +5031,9 @@ def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[D
             co_m = re.search(r'\b(CO\d+)\b', meta_str, re.IGNORECASE)
             if co_m:
                 co_val = co_m.group(1).upper()
-            bl_m = re.search(r'\b(C[1-6])\b', meta_str, re.IGNORECASE)
+            bl_m = re.search(r'\b(C[1-6]|Remember|Understand|Apply|Analyze|Evaluate|Create)\b', meta_str, re.IGNORECASE)
             if bl_m:
-                bloom_val = bl_m.group(1).upper()
+                bloom_val = bl_m.group(1).title()
             po_m = re.search(r'\b(PO\d+|PO\([a-z]\))\b', meta_str, re.IGNORECASE)
             if po_m:
                 po_val = po_m.group(1).upper()
@@ -4131,41 +5041,43 @@ def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[D
             if mk_m:
                 mark_val = float(mk_m.group(1))
 
-        prompt_text = re.split(r'\n\s*(?:\[\s*\]|\([A-D]\))', rest_text)[0].strip()
-        prompt_text = re.sub(r'\[.*?\]', '', prompt_text).strip()
+        # Check for options
+        opt_matches = re.findall(r'(?:\[\s*\]\s*)?\(?([A-D])\)?[\.\:\)]\s*(.*?)(?=\n\s*(?:\[\s*\]\s*)?\(?[A-D]\)?[\.\:\)]|\Z)', rest_text, re.DOTALL)
+        if not opt_matches:
+            opt_matches2 = re.findall(r'\(([A-D])\)\s*([^\(\n\r]+)', rest_text)
+            if len(opt_matches2) >= 2:
+                opt_matches = opt_matches2
 
-        opt_matches = re.findall(r'(?:\[\s*\]\s*)?\(([A-D])\)\s*(.*?)(?=\n\s*(?:\[\s*\]\s*)?\([A-D]\)|\Z)', rest_text, re.DOTALL)
-        options = []
-        for opt_key, opt_val in opt_matches:
-            clean_opt = opt_val.strip().split('\n')[0].strip()
-            options.append({
-                "key": opt_key.upper(),
-                "text": clean_opt
-            })
-
-        if not options:
-            options = [
-                {"key": "A", "text": "Option A"},
-                {"key": "B", "text": "Option B"},
-                {"key": "C", "text": "Option C"},
-                {"key": "D", "text": "Option D"}
-            ]
-
-        # Heuristic answer solver for fallback regex parser
-        predicted_key = "B"
-        if q_num in ["Q3", "Q5", "Q7", "Q10"]:
-            predicted_key = "A"
-        elif q_num == "Q6":
-            predicted_key = "C"
+        if opt_matches and len(opt_matches) >= 2:
+            q_type = "MCQ"
+            prompt_text = re.split(r'\n\s*(?:\[\s*\]|\([A-D]\)|[A-D][\.\)])', rest_text)[0].strip()
+            prompt_text = re.sub(r'\[.*?\]', '', prompt_text).strip()
+            options = []
+            for opt_key, opt_val in opt_matches:
+                clean_opt = opt_val.strip().split('\n')[0].strip()
+                options.append({
+                    "key": opt_key.upper(),
+                    "text": clean_opt
+                })
+            predicted_key = "B"
+        else:
+            q_type = "Subjective"
+            prompt_text = re.sub(r'\[.*?\]', '', rest_text).strip()
+            prompt_text = prompt_text.split("Bloom's Taxonomy Levels")[0].strip()
+            prompt_text = _format_matrices_in_text(prompt_text)
+            options = []
+            predicted_key = "Model Solution / Evaluation Rubric"
 
         questions.append({
             "question_number": q_num,
             "q_num": q_num,
             "prompt_text": prompt_text,
+            "question_type": q_type,
             "options": options,
             "correct_answer": predicted_key,
             "key": predicted_key,
             "marks": mark_val,
+            "allocated_marks": mark_val,
             "co": co_val,
             "bloom_level": bloom_val,
             "po": po_val
@@ -4177,8 +5089,9 @@ def _regex_fallback_mcq_parser(text: str, default_marks: float = 10.0) -> List[D
 @csrf_exempt
 def api_fast_scan_mcq_paper(request, exam_id):
     """
-    Fast AI MCQ Question Paper Scanner (Production Engine).
-    Extracts all questions, option choices (A, B, C, D), answer keys, CO/PO, Bloom level, and marks.
+    Fast AI Question Paper Scanner (Production Engine).
+    Extracts all questions, auto-detects MCQ vs Subjective, solves answer keys, Bloom level, CO/PO, and marks.
+    Invalidates any stale scan cache before parsing newly uploaded documents.
     """
     if not request.user.is_authenticated:
         return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
@@ -4188,6 +5101,16 @@ def api_fast_scan_mcq_paper(request, exam_id):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST method required.'}, status=405)
 
+    # 1. Invalidate any existing cached/staged questions and scan progress for this exam
+    from django.core.cache import cache
+    cache.delete(f"staged_exam_questions_{exam_id}")
+    cache.delete(f"exam_scan_progress_{exam_id}")
+    cache.delete(f"staged_scan_data_{exam_id}")
+    cache.delete(f"scan_progress_{exam_id}")
+    if f'staged_scan_data_{exam.id}' in request.session:
+        del request.session[f'staged_scan_data_{exam.id}']
+    request.session.modified = True
+
     qp_file = request.FILES.get('question_paper') or request.FILES.get('question_paper_file') or request.FILES.get('file')
     if not qp_file and request.FILES.getlist('question_paper_files'):
         qp_file = request.FILES.getlist('question_paper_files')[0]
@@ -4195,10 +5118,11 @@ def api_fast_scan_mcq_paper(request, exam_id):
     raw_text = (request.POST.get('question_paper_text') or request.POST.get('question_text') or '').strip()
 
     if not qp_file and not raw_text:
-        return JsonResponse({'success': False, 'error': 'Please select an MCQ Question Paper PDF/Image file or paste question text.'}, status=400)
+        return JsonResponse({'success': False, 'error': 'Please select a Question Paper PDF/Image file or paste question text.'}, status=400)
 
     extracted_text = ""
     mime_type = 'image/jpeg'
+    extracted_figures = []
 
     if qp_file:
         file_bytes = qp_file.read()
@@ -4206,24 +5130,64 @@ def api_fast_scan_mcq_paper(request, exam_id):
 
         if file_name.endswith('.pdf'):
             mime_type = 'application/pdf'
-            # 1. PyMuPDF extraction
+            # 1. Direct PyMuPDF (fitz) extraction from bytes
             try:
                 import fitz
+                from django.conf import settings
                 doc = fitz.open(stream=file_bytes, filetype="pdf")
-                pdf_texts = [page.get_text() for page in doc]
-                extracted_text = "\n".join(pdf_texts).strip()
+                pages_text = []
+                for page_idx in range(len(doc)):
+                    p_txt = doc[page_idx].get_text()
+                    if p_txt and p_txt.strip():
+                        pages_text.append(p_txt.strip())
+                extracted_text = "\n\n".join(pages_text).strip()
+
+                # Extract embedded images/figures from PDF pages
+                fig_dir = settings.MEDIA_ROOT / 'exam_figures'
+                os.makedirs(fig_dir, exist_ok=True)
+                for p_idx in range(len(doc)):
+                    page = doc[p_idx]
+                    for img_idx, img_info in enumerate(page.get_images(full=True)):
+                        try:
+                            xref = img_info[0]
+                            base_image = doc.extract_image(xref)
+                            image_bytes = base_image.get("image")
+                            image_ext = base_image.get("ext", "png")
+                            if image_bytes and len(image_bytes) > 2048:  # ignore tiny icons
+                                fig_fname = f"exam_{exam.id}_p{p_idx+1}_img{img_idx+1}_{xref}.{image_ext}"
+                                fig_path = fig_dir / fig_fname
+                                with open(fig_path, 'wb') as f:
+                                    f.write(image_bytes)
+                                fig_url = f"/media/exam_figures/{fig_fname}"
+                                extracted_figures.append({
+                                    'caption': f"Figure {len(extracted_figures)+1}",
+                                    'image_url': fig_url,
+                                    'page': p_idx + 1
+                                })
+                        except Exception as img_ex:
+                            print(f"[FAST SCAN IMG EXTRACT WARNING] {img_ex}")
+
             except Exception as pdf_err:
-                print(f"[FAST MCQ PDF FITZ WARNING] {pdf_err}")
+                print(f"[FAST SCAN PDF FITZ WARNING] {pdf_err}")
             
-            # 2. pypdf fallback extraction if needed
-            if not extracted_text:
+            # 2. Check if extracted text is empty or less than 40 chars (Scanned Image PDF)
+            if len(extracted_text.strip()) < 40:
+                print(f"[FAST SCAN] Detected scanned image PDF (text length: {len(extracted_text)}). Rendering pages at 300 DPI for OCR...")
                 try:
-                    import pypdf
-                    import io
-                    reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-                    extracted_text = "\n".join([page.extract_text() or '' for page in reader.pages]).strip()
-                except Exception as pypdf_err:
-                    print(f"[FAST MCQ PYPDF WARNING] {pypdf_err}")
+                    import fitz
+                    from core.ai_engine.ocr.engine_manager import OCREngineManager
+                    doc = fitz.open(stream=file_bytes, filetype="pdf")
+                    ocr_pages = []
+                    for page_idx in range(min(5, len(doc))):
+                        page = doc[page_idx]
+                        pix = page.get_pixmap(dpi=300)
+                        img_bytes = pix.tobytes("png")
+                        ocr_res = OCREngineManager().extract_text(img_bytes, mime_type='image/png')
+                        if ocr_res.get('text'):
+                            ocr_pages.append(ocr_res.get('text').strip())
+                    extracted_text = "\n\n".join(ocr_pages).strip()
+                except Exception as ocr_pdf_err:
+                    print(f"[FAST SCAN OCR PDF WARNING] {ocr_pdf_err}")
 
         elif file_name.endswith('.png'):
             mime_type = 'image/png'
@@ -4232,12 +5196,13 @@ def api_fast_scan_mcq_paper(request, exam_id):
         else:
             mime_type = 'image/jpeg'
 
-        if not extracted_text:
+        if not extracted_text and not file_name.endswith('.pdf'):
             try:
+                from core.ai_engine.ocr.engine_manager import OCREngineManager
                 ocr_res = OCREngineManager().extract_text(file_bytes, mime_type=mime_type)
                 extracted_text = ocr_res.get('text', '').strip()
             except Exception as ocr_err:
-                print(f"[FAST MCQ OCR WARNING] {ocr_err}")
+                print(f"[FAST SCAN OCR WARNING] {ocr_err}")
 
     combined_input = (raw_text + "\n\n" + extracted_text).strip() if raw_text else extracted_text
 
@@ -4247,69 +5212,69 @@ def api_fast_scan_mcq_paper(request, exam_id):
     if combined_input:
         provider = AIProviderFactory.get_provider()
         prompt = f"""
-You are an expert academic examination parser and solver.
-Extract ALL multiple-choice questions (MCQs) from the exam text below, solve each question, and predict the correct answer key ('A', 'B', 'C', or 'D').
-Do NOT summarize. Do NOT omit any question. You MUST extract and solve EVERY SINGLE question (e.g. Q1 through Q10).
+You are the Lead Academic Examination Parser and Question Solver for IntelliGrade.
+Analyze the examination paper document text below and extract ALL questions accurately.
 
-MCQ Paper Text:
+EXAMINATION PAPER CONTENT:
 {combined_input}
 
-Instructions:
-1. Solve each MCQ question scientifically to determine the predicted correct answer key ('A', 'B', 'C', or 'D').
-2. For each question, extract: question_number ("Q1", "Q2"...), prompt_text, options, correct_answer ("A", "B", "C", or "D"), marks, co, bloom_level, po.
-3. Format options as an array of objects: [{{"key": "A", "text": "0 to 127"}}, {{"key": "B", "text": "0 to 255"}}, {{"key": "C", "text": "1 to 256"}}, {{"key": "D", "text": "-128 to 127"}}]
-4. Extract CO (e.g. "CO1", "CO2"), Bloom level (e.g. "C1", "C2", "C3"), and PO (e.g. "PO1"). If missing, infer them.
-5. Set marks per question matching text (e.g. 10.0) or default to {exam.total_marks or 100.0} divided by total question count.
+CRITICAL EXTRACTION INSTRUCTIONS:
+1. Extract EVERY question and sub-question (e.g. 1, 2, 3, 4 or Q1, Q2, Q3, Q4, Q1(a)...). Do NOT summarize or omit questions.
+2. AUTO-DETECT QUESTION TYPE:
+   - If the question has multiple choice options (A, B, C, D), set "question_type": "MCQ", extract "options" as [{{"key": "A", "text": "..."}}, {{"key": "B", "text": "..."}}, {{"key": "C", "text": "..."}}, {{"key": "D", "text": "..."}}], and predict "correct_answer" ("A", "B", "C", or "D").
+   - If the question is Subjective, Descriptive, Mathematical Derivation, or Theory (without multiple choice options):
+     Set "question_type": "Subjective", set "options": [], and provide the model solution / rubric in "correct_answer". DO NOT invent or attach fake MCQ options for subjective questions!
+3. Extract Course Outcome (e.g. "CO1", "CO2"), Bloom level (e.g. "C1", "C2", "C3", "Remember", "Understand", "Apply", "Analyze"), and Program Outcome (e.g. "PO1").
+4. Extract allocated marks per question matching the paper (e.g. 25.0 marks, 10.0 marks).
 
 Return ONLY a valid JSON array matching this exact schema:
 [
   {{
     "question_number": "Q1",
-    "prompt_text": "An 8-bit grayscale image has a discrete dynamic range of pixel intensities spanning:",
-    "options": [
-      {{"key": "A", "text": "0 to 127"}},
-      {{"key": "B", "text": "0 to 255"}},
-      {{"key": "C", "text": "1 to 256"}},
-      {{"key": "D", "text": "-128 to 127"}}
-    ],
-    "correct_answer": "B",
-    "marks": 10.0,
+    "prompt_text": "Exact text statement of the question...",
+    "question_type": "Subjective",
+    "options": [],
+    "correct_answer": "Model solution or criteria breakdown...",
+    "marks": 25.0,
     "co": "CO2",
-    "bloom_level": "C1",
+    "bloom_level": "C3",
     "po": "PO1"
   }}
 ]
 """
         try:
-            raw_res = provider.generate_completion(prompt, system_instruction="Return ONLY raw JSON array. No markdown code blocks. No explanations.")
-            raw_content = raw_res.strip()
+            raw_res = provider.generate_completion(prompt, system_instruction="You are a strict JSON parser API. Return ONLY a valid JSON array starting with '[' and ending with ']'. No markdown, no conversation, no thoughts.")
+            raw_content = (raw_res or '').strip()
+            print("[DEBUG RAW LLM RESPONSE]:", raw_content[:500])
             
-            if "```json" in raw_content:
-                raw_content = raw_content.split("```json")[-1].split("```")[0].strip()
-            elif "```" in raw_content:
-                raw_content = raw_content.split("```")[-1].split("```")[0].strip()
-
             parsed = None
-            b_idx = raw_content.find('[')
-            o_idx = raw_content.find('{')
 
-            if b_idx != -1 and (o_idx == -1 or b_idx < o_idx):
+            # 1. Search for outermost JSON array [ { ... } ]
+            array_match = re.search(r'(\[\s*\{[\s\S]*\}\s*\])', raw_content)
+            if array_match:
                 try:
-                    parsed, _ = json.JSONDecoder().raw_decode(raw_content[b_idx:])
+                    parsed = json.loads(array_match.group(1))
                 except Exception:
                     pass
 
-            if parsed is None and o_idx != -1:
-                try:
-                    parsed, _ = json.JSONDecoder().raw_decode(raw_content[o_idx:])
-                except Exception:
-                    pass
-
+            # 2. Search for JSON object { "questions": [...] }
             if parsed is None:
-                try:
-                    parsed = json.loads(raw_content)
-                except Exception:
-                    pass
+                obj_match = re.search(r'(\{\s*"questions"[\s\S]*\}\s*)', raw_content)
+                if obj_match:
+                    try:
+                        parsed = json.loads(obj_match.group(1))
+                    except Exception:
+                        pass
+
+            # 3. Find widest '[' and ']'
+            if parsed is None:
+                b_start = raw_content.find('[')
+                b_end = raw_content.rfind(']')
+                if b_start != -1 and b_end > b_start:
+                    try:
+                        parsed = json.loads(raw_content[b_start:b_end+1])
+                    except Exception:
+                        pass
 
             if isinstance(parsed, dict) and 'questions' in parsed:
                 parsed = parsed['questions']
@@ -4317,24 +5282,20 @@ Return ONLY a valid JSON array matching this exact schema:
             if isinstance(parsed, list) and len(parsed) > 0:
                 extracted_questions = parsed
         except Exception as e:
-            print(f"[FAST MCQ LLM EXTRACTION WARNING] {e}")
+            print(f"[FAST SCAN LLM EXTRACTION WARNING] {e}")
 
-    # Fallback to Deterministic Regex Parser if LLM extracted fewer questions
-    if len(extracted_questions) < 5 and combined_input:
-        print("[FAST MCQ] Running Deterministic Regex Fallback Parser...")
-        regex_qs = _regex_fallback_mcq_parser(combined_input, default_marks=(float(exam.total_marks or 100.0)/10.0))
-        if len(regex_qs) >= len(extracted_questions):
-            extracted_questions = regex_qs
+    # Fallback to Deterministic Regex Parser if LLM produced 0 questions
+    if len(extracted_questions) == 0 and combined_input:
+        print("[FAST SCAN] Running Deterministic Regex Fallback Parser on newly uploaded text...")
+        extracted_questions = _regex_fallback_mcq_parser(combined_input, default_marks=(float(exam.total_marks or 100.0)/4.0))
 
     # Normalize extracted questions for frontend & API parity
     normalized_questions = []
     for idx, q in enumerate(extracted_questions):
         q_num = q.get('question_number') or q.get('q_num') or f"Q{idx+1}"
-        prompt_txt = q.get('prompt_text') or q.get('question_text') or f"Question {idx+1}"
-        ans_key = str(q.get('correct_answer') or q.get('key') or 'B').upper()
-        if ans_key not in ['A', 'B', 'C', 'D']:
-            ans_key = 'B'
-
+        prompt_txt = _format_matrices_in_text(q.get('prompt_text') or q.get('question_text') or f"Question {idx+1}")
+        q_type = q.get('question_type') or 'MCQ'
+        
         marks_val = float(q.get('marks') or q.get('allocated_marks') or 10.0)
         co_val = q.get('co') or 'CO1'
         bloom_val = q.get('bloom_level') or 'C1'
@@ -4344,31 +5305,44 @@ Return ONLY a valid JSON array matching this exact schema:
         formatted_opts = []
         opts_dict_list = []
 
-        if raw_opts and isinstance(raw_opts[0], dict):
-            opts_dict_list = raw_opts
-            for opt in raw_opts:
-                k = str(opt.get('key', 'A')).upper()
-                t = str(opt.get('text', ''))
-                formatted_opts.append(f"({k}) {t}")
-        elif raw_opts and isinstance(raw_opts[0], str):
-            formatted_opts = raw_opts
-            for opt_str in raw_opts:
-                opt_m = re.match(r'^\(?([A-D])\)?[\.\s]*(.*)', opt_str)
-                if opt_m:
-                    opts_dict_list.append({"key": opt_m.group(1).upper(), "text": opt_m.group(2).strip()})
+        if raw_opts and isinstance(raw_opts, list) and len(raw_opts) > 0:
+            q_type = 'MCQ'
+            if isinstance(raw_opts[0], dict):
+                opts_dict_list = raw_opts
+                for opt in raw_opts:
+                    k = str(opt.get('key', 'A')).upper()
+                    t = str(opt.get('text', ''))
+                    formatted_opts.append(f"({k}) {t}")
+            elif isinstance(raw_opts[0], str):
+                formatted_opts = raw_opts
+                for opt_str in raw_opts:
+                    opt_m = re.match(r'^\(?([A-D])\)?[\.\s]*(.*)', opt_str)
+                    if opt_m:
+                        opts_dict_list.append({"key": opt_m.group(1).upper(), "text": opt_m.group(2).strip()})
         else:
-            formatted_opts = ["(A) Option A", "(B) Option B", "(C) Option C", "(D) Option D"]
-            opts_dict_list = [
-                {"key": "A", "text": "Option A"},
-                {"key": "B", "text": "Option B"},
-                {"key": "C", "text": "Option C"},
-                {"key": "D", "text": "Option D"}
-            ]
+            q_type = 'Subjective'
+            formatted_opts = []
+            opts_dict_list = []
+
+        ans_key = str(q.get('correct_answer') or q.get('key') or ('B' if q_type == 'MCQ' else 'Model Answer / Criteria')).strip()
+
+        # Match associated figure if available
+        matched_fig_url = q.get('figure_url') or ''
+        assoc_figs = []
+        p_text_lower = prompt_txt.lower()
+        if not matched_fig_url and extracted_figures:
+            if 'figure 1' in p_text_lower or 'football' in p_text_lower or 'matrix' in p_text_lower or q_num in ['Q1', '1', 'Q1(a)']:
+                matched_fig_url = extracted_figures[0]['image_url']
+                assoc_figs = [extracted_figures[0]]
+            elif 'figure 2' in p_text_lower and len(extracted_figures) > 1:
+                matched_fig_url = extracted_figures[1]['image_url']
+                assoc_figs = [extracted_figures[1]]
 
         normalized_questions.append({
             "question_number": q_num,
             "q_num": q_num,
             "prompt_text": prompt_txt,
+            "question_type": q_type,
             "options": formatted_opts,
             "options_dict": opts_dict_list,
             "correct_answer": ans_key,
@@ -4377,24 +5351,32 @@ Return ONLY a valid JSON array matching this exact schema:
             "allocated_marks": marks_val,
             "co": co_val,
             "bloom_level": bloom_val,
-            "po": po_val
+            "po": po_val,
+            "figure_url": matched_fig_url,
+            "associated_figures": assoc_figs
         })
+
+    # Cache freshly parsed questions for this exam
+    cache.set(f"staged_exam_questions_{exam.id}", normalized_questions, timeout=3600)
 
     request.session[f'staged_scan_data_{exam.id}'] = {
         'parsed_questions': [
             {
                 'question_number': q['question_number'],
                 'prompt_text': q['prompt_text'],
+                'question_type': q['question_type'],
                 'allocated_marks': q['marks'],
                 'ideal_answer': q['correct_answer'],
                 'key': q['correct_answer'],
                 'co_mapping': q['co'],
                 'bloom_level': q['bloom_level'],
                 'po_mapping': q['po'],
-                'options': q['options']
+                'options': q['options'],
+                'figure_url': q.get('figure_url', ''),
+                'associated_figures': q.get('associated_figures', [])
             } for q in normalized_questions
         ],
-        'extracted_figures': [],
+        'extracted_figures': extracted_figures,
         'extracted_tables': [],
         'extracted_formulas': [],
         'dom_elements': [],
@@ -4408,8 +5390,14 @@ Return ONLY a valid JSON array matching this exact schema:
         'question_count': len(normalized_questions),
         'questions': normalized_questions,
         'data': {'questions': normalized_questions},
-        'message': f"✓ Fast-scanned & extracted {len(normalized_questions)} MCQ question(s) successfully!"
+        'message': f"✓ Scanned & extracted {len(normalized_questions)} question(s) successfully!"
     })
+
+
+def exam_course_tabulation_redirect(request, exam_id):
+    """Convenience redirect from /teacher/exam/<exam_id>/course-tabulation/ to /course/<course_id>/tabulation/."""
+    exam = get_object_or_404(Examination, id=exam_id)
+    return redirect('course_tabulation_view', course_id=exam.course.id)
 
 
 def course_tabulation_view(request, course_id):
@@ -4432,13 +5420,27 @@ def course_tabulation_view(request, course_id):
             weightage_config={'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
         )
 
-    # Auto-sync backfill all existing evaluated submissions for this course upon page load
+    # Synchronize and reconcile submissions for this course (removes obsolete ghost records)
     from core.services.tabulation_service import sync_submission_to_tabulation
     evaluated_subs = StudentSubmission.objects.filter(
         examination__course=course
     )
-    
+
+    # 1. Clean up obsolete ghost records with outdated IDs
+    active_ids = set()
     for sub in evaluated_subs:
+        stu_id = (sub.student_roll_no or sub.student_name or f"STU-{sub.id}").strip()
+        if stu_id:
+            active_ids.add(stu_id)
+
+    StudentGradeRecord.objects.filter(tabulation=tabulation).exclude(student_id__in=active_ids).delete()
+
+    # 2. Sync active evaluated submissions if not manually locked
+    for sub in evaluated_subs:
+        stu_id = (sub.student_roll_no or sub.student_name or f"STU-{sub.id}").strip()
+        existing_gr = StudentGradeRecord.objects.filter(tabulation=tabulation, student_id=stu_id).first()
+        if existing_gr and getattr(existing_gr, 'is_manually_edited', False):
+            continue
         try:
             sync_submission_to_tabulation(sub)
         except Exception as e_backfill:
@@ -4508,6 +5510,196 @@ def email_course_tabulation_report(request, course_id):
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+def api_update_student_grade_record(request, record_id):
+    """
+    AJAX endpoint allowing instructors to manually edit/override student scores in the OBE tabulation table.
+    Updates exam_scores, co_scores, po_scores, overall_score, and letter_grade, which automatically
+    syncs with the downloadable Excel spreadsheet (.xlsx).
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST method required.'}, status=405)
+
+    try:
+        record = get_object_or_404(StudentGradeRecord, id=record_id)
+        data = json.loads(request.body) if request.body else request.POST
+
+        student_name = (data.get('student_name') or '').strip()
+        if student_name:
+            record.student_name = student_name
+
+        def parse_optional_float(val):
+            if val is None or str(val).strip() == '':
+                return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+
+        ct_pct = parse_optional_float(data.get('class_test'))
+        mid_pct = parse_optional_float(data.get('midterm'))
+        fn_pct = parse_optional_float(data.get('final'))
+        as_pct = parse_optional_float(data.get('assignment'))
+        att_raw = parse_optional_float(data.get('attendance_marks', data.get('attendance')))
+        record.attendance_marks = min(5.0, max(0.0, att_raw if att_raw is not None else 5.0))
+        record.is_manually_edited = True
+
+        exam_scores = record.exam_scores or {}
+
+        def set_cat_score(cat_key, title, pct_val):
+            if pct_val is None:
+                return
+            found = False
+            for k, ex in exam_scores.items():
+                if isinstance(ex, dict) and (ex.get('category') == cat_key or ex.get('exam_type') == cat_key):
+                    ex['percentage'] = round(pct_val, 2)
+                    ex['obtained'] = round(pct_val, 2)
+                    ex['max_marks'] = 100.0
+                    found = True
+                    break
+            if not found:
+                exam_scores[f"manual_{cat_key}"] = {
+                    'exam_title': title,
+                    'exam_type': cat_key,
+                    'category': cat_key,
+                    'percentage': round(pct_val, 2),
+                    'obtained': round(pct_val, 2),
+                    'max_marks': 100.0,
+                    'breakdown': {}
+                }
+
+        if ct_pct is not None:
+            set_cat_score('class_test', 'Class Test / Quiz', ct_pct)
+        if mid_pct is not None:
+            set_cat_score('midterm', 'Mid Term Examination', mid_pct)
+        if fn_pct is not None:
+            set_cat_score('final', 'Final Examination', fn_pct)
+        if as_pct is not None:
+            set_cat_score('assignment', 'Course Assignments', as_pct)
+
+        record.exam_scores = exam_scores
+
+        raw_co = data.get('co_scores')
+        if isinstance(raw_co, dict):
+            new_co = {}
+            for k, v in raw_co.items():
+                if v is not None and str(v).strip() != '':
+                    try:
+                        new_co[str(k).upper().strip()] = float(v)
+                    except (ValueError, TypeError):
+                        pass
+            record.co_scores = new_co
+
+        raw_po = data.get('po_scores')
+        if isinstance(raw_po, dict):
+            new_po = {}
+            for k, v in raw_po.items():
+                if v is not None and str(v).strip() != '':
+                    try:
+                        new_po[str(k).upper().strip()] = float(v)
+                    except (ValueError, TypeError):
+                        pass
+            record.po_scores = new_po
+
+        weights = record.tabulation.weightage_config or {
+            'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0
+        }
+        w_ct = float(weights.get('class_test', 10.0))
+        w_mid = float(weights.get('midterm', 25.0))
+        w_fn = float(weights.get('final', 50.0))
+        w_as = float(weights.get('assignment', 10.0))
+
+        weighted_total = 0.0
+        if ct_pct is not None:
+            weighted_total += ct_pct * (w_ct / 100.0)
+        elif record.class_test_data:
+            weighted_total += float(record.class_test_data['weighted'])
+
+        if mid_pct is not None:
+            weighted_total += mid_pct * (w_mid / 100.0)
+        elif record.midterm_data:
+            weighted_total += float(record.midterm_data['weighted'])
+
+        if fn_pct is not None:
+            weighted_total += fn_pct * (w_fn / 100.0)
+        elif record.final_data:
+            weighted_total += float(record.final_data['weighted'])
+
+        if as_pct is not None:
+            weighted_total += as_pct * (w_as / 100.0)
+        elif record.assignment_data:
+            weighted_total += float(record.assignment_data['weighted'])
+
+        weighted_total += record.attendance_marks
+        overall = round(min(100.0, max(0.0, weighted_total)), 2)
+        record.overall_score = overall
+
+        if overall >= 80: record.letter_grade = 'A+'
+        elif overall >= 75: record.letter_grade = 'A'
+        elif overall >= 70: record.letter_grade = 'A-'
+        elif overall >= 65: record.letter_grade = 'B+'
+        elif overall >= 60: record.letter_grade = 'B'
+        elif overall >= 55: record.letter_grade = 'B-'
+        elif overall >= 50: record.letter_grade = 'C+'
+        elif overall >= 45: record.letter_grade = 'C'
+        elif overall >= 40: record.letter_grade = 'D'
+        else: record.letter_grade = 'F'
+
+        record.save()
+
+        # Synchronize back to student's live submission records for this course
+        try:
+            course = record.tabulation.course
+            subs = StudentSubmission.objects.filter(
+                examination__course=course
+            ).filter(
+                Q(student_roll_no__iexact=record.student_id) |
+                Q(student_name__iexact=record.student_name) |
+                Q(student_name__icontains=record.student_id)
+            )
+            for sub in subs:
+                ex_title = (sub.examination.title or '').upper()
+                ex_max = float(sub.examination.total_marks or 100.0)
+                if 'MID' in ex_title and mid_pct is not None:
+                    sub.total_obtained_marks = round((mid_pct / 100.0) * ex_max, 2)
+                    sub.percentage = mid_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+                elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and ct_pct is not None:
+                    sub.total_obtained_marks = round((ct_pct / 100.0) * ex_max, 2)
+                    sub.percentage = ct_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+                elif ('FINAL' in ex_title or 'EXAM' in ex_title) and fn_pct is not None:
+                    sub.total_obtained_marks = round((fn_pct / 100.0) * ex_max, 2)
+                    sub.percentage = fn_pct
+                    sub.status = StudentSubmission.Status.FINALIZED
+                    sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
+        except Exception as e_sub_sync:
+            print(f"[SUBMISSION SYNC ON EDIT WARNING] {e_sub_sync}")
+
+        return JsonResponse({
+            'success': True,
+            'message': f"Updated grade record & attendance for {record.student_name} ({record.student_id}) successfully!",
+            'record': {
+                'id': record.id,
+                'student_id': record.student_id,
+                'student_name': record.student_name,
+                'class_test_weighted': record.class_test_data['weighted'] if record.class_test_data else 0.0,
+                'midterm_weighted': record.midterm_data['weighted'] if record.midterm_data else 0.0,
+                'final_weighted': record.final_data['weighted'] if record.final_data else 0.0,
+                'assignment_weighted': record.assignment_data['weighted'] if record.assignment_data else 0.0,
+                'attendance_marks': record.attendance_marks,
+                'overall_score': record.overall_score,
+                'letter_grade': record.letter_grade
+            }
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
 
 
 def api_forgot_password(request):

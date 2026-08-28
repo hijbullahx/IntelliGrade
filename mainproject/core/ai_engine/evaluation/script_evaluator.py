@@ -143,19 +143,71 @@ class AIScriptEvaluator:
         if confirmed_mappings:
             from core.ai_engine.mapping.orchestrator import QuestionMappingOrchestrator
             QuestionMappingOrchestrator.confirm_mapping_and_evaluate(submission.id, confirmed_mappings, user=user, ip_address=ip_address)
+        else:
+            pages = list(submission.pages.all().order_by('page_number'))
+            # Issue D resolved: select_related + prefetch_related eliminate N+1 queries across rubric / figure / table / formula FKs
+            stored_questions = list(
+                submission.examination.questions
+                .select_related('rubric')
+                .prefetch_related('figures_rel', 'tables_rel', 'formulas_rel')
+                .order_by('question_number')
+            )
+            cls._segment_answers_v3(submission, pages, stored_questions)
 
-        answers = list(submission.answers.all().order_by('question__question_number'))
+        # Issue D: preload all answer-level relations in a single batch query
+        answers = list(
+            submission.answers
+            .select_related('question', 'question__rubric', 'page')
+            .prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel')
+            .order_by('question__question_number')
+        )
+        total_answers_count = len(answers)
+        total_pages_count = submission.pages.count() or 1
 
         total_obtained = 0.0
         total_max = 0.0
         has_manual_review = False
 
-        for ans in answers:
-            eval_res = cls._evaluate_answer_v3(ans, options, user, trace_dir)
-            total_obtained += float(eval_res.obtained_marks)
-            total_max += float(eval_res.maximum_marks)
-            if eval_res.requires_manual_review:
-                has_manual_review = True
+        # Rate-Safe Sequential Evaluation (Guarantees zero concurrency collisions on Groq/Cloud APIs)
+        evaluated_results = []
+        for a_idx, ans_obj in enumerate(answers, 1):
+            close_old_connections()
+            if a_idx > 1:
+                time.sleep(0.5)
+            try:
+                # Progress update per question evaluation
+                try:
+                    from core.views import _update_submission_progress_cache
+                    _update_submission_progress_cache(
+                        submission_id=submission.id,
+                        processed_pages=total_pages_count,
+                        total_pages=total_pages_count,
+                        evaluated_regions=a_idx,
+                        total_regions=total_answers_count,
+                        msg=f"Evaluating Question {ans_obj.question.question_number} with Master Benchmark...",
+                        status='processing'
+                    )
+                except Exception:
+                    pass
+
+                eval_res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir)
+                if eval_res:
+                    evaluated_results.append((a_idx, ans_obj, eval_res, None))
+            except Exception as e_w:
+                print(f"[EVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                cls._write_pipeline_log(submission.id, f"[EVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                evaluated_results.append((a_idx, ans_obj, None, e_w))
+            finally:
+                close_old_connections()
+
+        for a_idx, ans_obj, eval_res, err in evaluated_results:
+            if eval_res is not None:
+                total_obtained += float(eval_res.obtained_marks)
+                total_max += float(eval_res.maximum_marks)
+                if eval_res.requires_manual_review:
+                    has_manual_review = True
+            elif err:
+                print(f"[EVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -166,6 +218,27 @@ class AIScriptEvaluator:
         from core.ai_engine.services.workflow import SubmissionWorkflow
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.AI_EVALUATED, force=True)
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.UNDER_REVIEW, force=True)
+
+        # Sync Real-time Course Tabulation & OBE Grade Record
+        try:
+            from core.services.tabulation_service import TabulationService
+            TabulationService.sync_submission_to_tabulation(submission.id)
+        except Exception as e_sync:
+            print(f"[TABULATION SYNC WARNING] {e_sync}")
+
+        try:
+            from core.views import _update_submission_progress_cache
+            _update_submission_progress_cache(
+                submission_id=submission.id,
+                processed_pages=total_pages_count,
+                total_pages=total_pages_count,
+                evaluated_regions=total_answers_count,
+                total_regions=total_answers_count,
+                msg="Evaluation Complete & Saved to Database",
+                status='completed'
+            )
+        except Exception:
+            pass
 
         cls._log_audit(submission, user, "EVALUATION_V3_COMPLETED", {
             "obtained_marks": total_obtained,
@@ -346,21 +419,18 @@ Return strict JSON ONLY:
             if name_match:
                 detected_name = name_match.group(1).strip()
 
-        if not detected_name or detected_name in ['N/A', 'Pending OCR Extraction']:
-            detected_name = "Rahim Ahmed"
-        if not detected_roll or detected_roll in ['N/A', 'Pending OCR Extraction']:
-            detected_roll = "CSE-2026-045"
+        if detected_name and detected_name not in ['N/A', 'Pending OCR Extraction']:
+            submission.student_name = detected_name
+        elif not submission.student_name or submission.student_name in ['N/A', 'Pending OCR Extraction', 'Student']:
+            submission.student_name = f"Student ({detected_roll})" if detected_roll else f"Student #{submission.id}"
 
-        submission.student_name = detected_name
-        submission.student_roll_no = detected_roll
+        if detected_roll and detected_roll not in ['N/A', 'Pending OCR Extraction']:
+            submission.student_roll_no = detected_roll
 
         # 4. Build Ground-Truth Answer Key from Examination Questions (100% Dynamic DB Resolution)
         answer_key = {}
         for q in exam.questions.all().order_by('id'):
-            q_num = str(q.question_number).upper().replace('QQ', 'Q')
-            if not q_num.startswith('Q'):
-                q_num = f"Q{q_num}"
-            
+            q_num = normalize_q_code(q.question_number)
             target_ans = get_authoritative_answer_key(q)
             answer_key[q_num] = target_ans
 
@@ -480,12 +550,32 @@ Return strict JSON ONLY:
         total_max = 0.0
         has_manual_review = False
 
-        for ans in answers:
-            eval_res = cls._evaluate_answer_v3(ans, options, user, trace_dir, is_reevaluation=True)
-            total_obtained += float(eval_res.obtained_marks)
-            total_max += float(eval_res.maximum_marks)
-            if eval_res.requires_manual_review:
-                has_manual_review = True
+        from django.db import close_old_connections
+
+        # Rate-Safe Sequential Re-evaluation (Guarantees zero concurrency collisions on Groq/Cloud APIs)
+        completed_evals = []
+        for a_idx, ans_obj in enumerate(answers, 1):
+            close_old_connections()
+            if a_idx > 1:
+                time.sleep(1.2)  # 1.2s delay to respect rate limit thresholds
+            try:
+                res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir, is_reevaluation=True)
+                completed_evals.append((ans_obj, res, None))
+            except Exception as e_w:
+                print(f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                cls._write_pipeline_log(submission.id, f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {e_w}")
+                completed_evals.append((ans_obj, None, e_w))
+            finally:
+                close_old_connections()
+
+        for ans_obj, eval_res, err in completed_evals:
+            if eval_res is not None:
+                total_obtained += float(eval_res.obtained_marks)
+                total_max += float(eval_res.maximum_marks)
+                if eval_res.requires_manual_review:
+                    has_manual_review = True
+            elif err:
+                print(f"[REEVAL ERROR] Q{ans_obj.question.question_number}: {err}")
 
         submission.total_obtained_marks = total_obtained
         submission.total_max_marks = total_max
@@ -581,14 +671,22 @@ Return strict JSON ONLY:
             if need_save:
                 submission.save()
 
+        # Store complete OCR page text cache map into StudentSubmission for fast zero-vision evaluation
+        try:
+            ocr_cache = {f"page_{sp.page_number}": sp.ocr_raw_text or "" for sp in extracted_pages}
+            submission.extracted_ocr_data = ocr_cache
+            submission.save(update_fields=['extracted_ocr_data'])
+        except Exception as cache_err:
+            print(f"[OCR CACHE SAVE WARNING] {cache_err}")
+
         from core.ai_engine.services.workflow import SubmissionWorkflow
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE)
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE, force=True)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED, force=True)
         return extracted_pages
 
     @classmethod
     def _run_ocr_on_bgr(cls, bgr_img: np.ndarray) -> Tuple[str, float]:
-        # 1. Try PyTesseract first (fast, CPU safe)
+        # 1. Try PyTesseract first (fast, native CPU safe)
         try:
             import pytesseract
             from PIL import Image as PILImg
@@ -596,28 +694,49 @@ Return strict JSON ONLY:
             rgb = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
             pil_img = PILImg.fromarray(rgb)
             text = pytesseract.image_to_string(pil_img).strip()
-            if text:
-                return text, 0.80
+            if text and len(text) > 5:
+                return text, 0.85
         except Exception:
             pass
 
-        # 2. Try EasyOCR if explicitly enabled
+        # 2. Try EasyOCR for handwritten script page indexing
         try:
             from config.ocr_config import get_ocr_reader, is_easyocr_enabled
-            if not is_easyocr_enabled():
-                return "", 0.0
-            reader = get_ocr_reader()
-            if not reader:
-                return "", 0.0
-            results = reader.readtext(bgr_img)
-            texts = [r[1].strip() for r in results if r[1].strip()]
-            confs = [float(r[2]) for r in results if r[1].strip()]
-            joined_text = "\n".join(texts)
-            avg_conf = float(np.mean(confs)) if confs else 0.0
-            return joined_text, round(avg_conf, 2)
+            if is_easyocr_enabled():
+                reader = get_ocr_reader()
+                if reader:
+                    results = reader.readtext(bgr_img)
+                    texts = [r[1].strip() for r in results if r[1].strip()]
+                    confs = [float(r[2]) for r in results if r[1].strip()]
+                    joined_text = "\n".join(texts).strip()
+                    if joined_text:
+                        avg_conf = float(np.mean(confs)) if confs else 0.80
+                        return joined_text, round(avg_conf, 2)
         except Exception as e:
-            print(f"[OCR V3 WARNING] {e}")
-            return "", 0.0
+            print(f"[OCR V3 EASYOCR WARNING] {e}")
+
+        # 3. Only query Vision LLM if text length is strictly 0 (with short 5.0s timeout max)
+        try:
+            import cv2
+            _, enc_buf = cv2.imencode('.jpg', bgr_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            img_bytes = enc_buf.tobytes()
+            from core.ai_engine.providers.factory import AIProviderFactory
+            from core.ai_engine.routing.task_types import TaskType
+            provider = AIProviderFactory.get_provider()
+            vis_text = provider.generate_completion(
+                prompt="Transcribe all visible handwritten or printed text on this student exam page verbatim line-by-line. Output text only.",
+                image_bytes=img_bytes,
+                mime_type="image/jpeg",
+                timeout=5.0,
+                task_type=TaskType.OCR_TEXT
+            )
+            if vis_text and len(vis_text.strip()) > 5:
+                cleaned = re.sub(r'```[a-zA-Z]*', '', vis_text).replace('```', '').strip()
+                return cleaned, 0.80
+        except Exception as e_vis:
+            print(f"[OCR V3 VISION FALLBACK WARNING] {e_vis}")
+
+        return "", 0.0
 
     @classmethod
     def _segment_answers_v3(
@@ -741,6 +860,25 @@ Return strict JSON ONLY:
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
         mistakes_str = ", ".join(q_dto.common_mistakes) if q_dto.common_mistakes else "None specified"
 
+        master_solution_section = ""
+        if q_dto.master_solution_text:
+            # Build structured steps block from teacher's mark allocation (Issue B)
+            steps_formatted = ""
+            if getattr(q_dto, 'master_solution_steps', None):
+                steps_formatted = "\n[STRUCTURED BENCHMARK STEPS & STEP-BY-STEP MARKS ALLOCATION]\n" + "\n".join(
+                    f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
+                    for idx, s in enumerate(q_dto.master_solution_steps)
+                )
+            master_solution_section += f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.master_solution_text}{steps_formatted}
+"""
+        if q_dto.ideal_answer and q_dto.ideal_answer.strip() != (q_dto.master_solution_text or '').strip():
+            master_solution_section += f"""
+[TEACHER EXPECTED MODEL ANSWER & IDEAL KEY]
+{q_dto.ideal_answer}
+"""
+
         return f"""You are an expert academic examiner and multimodal vision evaluator for IntelliGrade.
 Carefully inspect the attached {crops_count} handwritten student answer script image(s) and evaluate the work strictly against the stored question, ideal solution, and marking rubrics.
 
@@ -755,7 +893,7 @@ Grading Rubric / Criteria: {q_dto.rubric}
 Ideal Model Answer: {q_dto.ideal_answer or 'See prompt text and rubric criteria for solution standard.'}
 Alternative Valid Approaches: {q_dto.alternative_answers or 'Accept any mathematically or logically sound alternative approach.'}
 Common Pitfalls & Deductions: {mistakes_str}
-
+{master_solution_section}
 [STORED VISUAL ATTACHMENTS FOR QUESTION]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
 Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
@@ -769,46 +907,50 @@ Teacher Instructions: {custom_prompt or 'Grade based on technical accuracy, awar
 [OPTIONAL OCR TEXT (SECONDARY SUPPORTING CONTEXT)]
 {student_ocr_text or 'No OCR text available.'}
 
-[RUBRIC-GROUNDED SCORING & VISUAL EVALUATION PROTOCOL]
-1. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
-2. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
-3. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
-4. CRITERION-BY-CRITERION SCORING: Evaluate the answer strictly against each rubric criterion.
+[STEP-BY-STEP BENCHMARK SCORING & ZERO-SHOT GROUNDING PROTOCOL]
+1. STEP-BY-STEP BENCHMARK COMPARISON:
+   - Compare the student's handwritten calculations, matrices, equations, and diagrams directly against the MASTER BENCHMARK SOLUTION above.
+   - Award allocated partial marks for each matching step or equivalent mathematical derivation.
+   - Deduct marks only where the student's steps diverge or make errors compared to the master solution.
+2. PRIMARY EVIDENCE: Inspect the student's actual handwritten answer, equations, derivations, diagrams, and figures directly from the attached image(s). The image is the single authoritative source of truth.
+3. ZERO-SHOT GROUNDING & ANTI-HALLUCINATION:
+   - Do NOT assume, fabricate, or hallucinate steps or formulas not visibly present in the student's handwriting.
+   - For each criterion/step in `step_breakdown`, if the required formula, definition, or derivation is NOT present in the student's handwritten answer, allocate EXACTLY 0.0 marks for that step, and set `grounding_evidence`: "NOT_FOUND".
+   - For every mark awarded (> 0.0), `grounding_evidence` MUST quote the student's exact handwritten expression, equation, or text.
+   - If the student's answer region is completely blank, illegible, or irrelevant, strictly award 0.0 total marks with constructive feedback explaining what was expected.
+4. OCR IS SECONDARY ONLY: Do NOT penalize the student or deduct marks merely because OCR text is poor, incomplete, or missing. Judge strictly based on visual image content.
+5. HANDWRITING & FORMATTING: Do NOT penalize handwriting style, cursive variations, minor spelling/grammar errors, or notation choices unless technical or mathematical meaning is genuinely ambiguous.
+6. CRITERION-BY-CRITERION SCORING:
    - For each criterion, state max allocated marks and awarded marks.
    - Total obtained_marks MUST equal the EXACT sum of all awarded criterion marks.
-   - Award fair partial credit for correct intermediate steps, formulas, and reasoning even if final calculation is incomplete.
-   - Distinguish clearly between:
-     (a) missing: concept/step not presented
-     (b) incorrect: wrong formula/calculation
-     (c) correct but incomplete: partial steps
-     (d) correct alternative approach: valid alternative method
-5. CONFIDENCE CALIBRATION: Confidence must reflect visual evidence quality:
+   - Award fair partial credit for correct intermediate steps, formulas, and reasoning only if visually present.
+7. CONFIDENCE CALIBRATION & MANUAL REVIEW:
    - High confidence (0.85 - 1.0): Image clean, handwriting clear, complete mapped region.
-   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting, or missing section.
-6. MANUAL REVIEW FLAGGING: Set "requires_manual_review": true if image is unreadable, crop is incomplete, confidence < 0.70, or evidence is contradictory.
+   - Low confidence (< 0.70): Image blurry/unreadable, mapped region cut off, ambiguous handwriting. Set "requires_manual_review": true.
 
 Provide your evaluation strictly as a valid JSON object matching this schema:
 {{
   "question_id": "{q_dto.id}",
-  "obtained_marks": <float_sum_of_awarded_criterion_marks>,
+  "transcribed_text": "<exact_transcription_of_student_handwritten_solution_formulas_and_diagrams>",
+  "step_breakdown": [
+    {{
+      "step_description": "<Formula / Definition / Derivation / Calculation / Result>",
+      "allocated_marks": <max_step_marks>,
+      "awarded_marks": <awarded_step_marks>,
+      "grounding_evidence": "<quote_exact_handwriting_or_NOT_FOUND>",
+      "comment": "<evaluation_evidence_and_deduction_reason>"
+    }}
+  ],
+  "obtained_marks": <float_sum_of_awarded_marks>,
   "maximum_marks": {q_dto.marks},
   "percentage": <float_percentage>,
   "strengths": [<list_of_strings>],
   "mistakes": [<list_of_strings>],
   "missing_points": [<list_of_strings>],
   "expected_points": [<list_of_strings>],
-  "rubric_breakdown": [
-    {{
-      "criteria": "<criterion_name>",
-      "allocated": <max_criterion_marks>,
-      "awarded": <awarded_criterion_marks>,
-      "evidence_found": "<exact_visual_evidence_in_image>",
-      "missing_or_incorrect": "<omission_or_error_details_or_none>",
-      "comments": "<justification_text>"
-    }}
-  ],
-  "feedback": "<step_by_step_marking_justification>",
-  "confidence": <float_between_0.0_and_1.0>,
+  "co_attainment": {{"{q_dto.co or 'CO1'}": <percentage_attained_0_to_100>}},
+  "feedback": "<constructive_evaluation_summary>",
+  "confidence_score": <float_between_0.0_and_1.0>,
   "requires_manual_review": <true_or_false>
 }}
 Return ONLY raw JSON without markdown commentary.
@@ -826,9 +968,27 @@ Return ONLY raw JSON without markdown commentary.
         fig_summaries = [f"Figure: {safe_getattr(f, ['caption'], '')}" for f in q_dto.figures]
         tbl_summaries = [f"Table ({safe_getattr(t, ['rows'], 0)}x{safe_getattr(t, ['columns'], 0)})" for t in q_dto.tables]
         form_summaries = [f"Formula: {safe_getattr(fm, ['latex_expression'], '')}" for fm in q_dto.formulas]
+        master_solution_section = ""
+        if q_dto.master_solution_text:
+            # Build structured steps block from teacher's mark allocation (Issue B)
+            steps_formatted = ""
+            if getattr(q_dto, 'master_solution_steps', None):
+                steps_formatted = "\n[STRUCTURED BENCHMARK STEPS & STEP-BY-STEP MARKS ALLOCATION]\n" + "\n".join(
+                    f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
+                    for idx, s in enumerate(q_dto.master_solution_steps)
+                )
+            master_solution_section += f"""
+[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+{q_dto.master_solution_text}{steps_formatted}
+"""
+        if q_dto.ideal_answer and q_dto.ideal_answer.strip() != (q_dto.master_solution_text or '').strip():
+            master_solution_section += f"""
+[TEACHER EXPECTED MODEL ANSWER & IDEAL KEY]
+{q_dto.ideal_answer}
+"""
 
         return f"""You are an expert academic examiner for IntelliGrade.
-Evaluate the student's answer strictly against the stored question, figures, tables, formulas, and rubrics.
+Evaluate the student's answer strictly against the stored question, figures, tables, formulas, master solution, and rubrics.
 
 [EVALUATION SETTINGS]
 Mode: {eval_mode}
@@ -843,11 +1003,16 @@ Bloom Level: {q_dto.bloom}
 Course Outcome (CO): {q_dto.co}
 Program Outcome (PO): {q_dto.po}
 Rubrics: {q_dto.rubric}
-
+{master_solution_section}
 [STORED VISUAL ATTACHMENTS]
 Figures: {"; ".join(fig_summaries) if fig_summaries else "None"}
 Tables: {"; ".join(tbl_summaries) if tbl_summaries else "None"}
 Formulas: {"; ".join(form_summaries) if form_summaries else "None"}
+
+[STEP-BY-STEP BENCHMARK SCORING PROTOCOL]
+1. Compare the student's answer steps directly against the MASTER BENCHMARK SOLUTION above.
+2. Award allocated partial marks for each matching step or equivalent mathematical derivation.
+3. Deduct marks only where the student's steps diverge or make errors compared to the master solution.
 
 [STUDENT ANSWER (OCR EXTRACTED)]
 {student_ocr_text}
@@ -873,6 +1038,39 @@ Return ONLY JSON without markdown commentary.
 """
 
     @classmethod
+    def _prepare_crop_bytes_safely(cls, raw_bytes: Any, max_dim: int = 1000, quality: int = 85) -> bytes:
+        """
+        Safely unpacks, validates, and optimizes raw crop bytes to JPEG format.
+        Guarantees max dimension <= 1000px and quality 85, reducing memory footprint and avoiding HTTP 413.
+        """
+        if not raw_bytes:
+            return b""
+        if isinstance(raw_bytes, str):
+            import base64
+            try:
+                raw_bytes = base64.b64decode(raw_bytes)
+            except Exception:
+                raw_bytes = raw_bytes.encode('utf-8')
+        try:
+            import cv2
+            import numpy as np
+            nparr = np.frombuffer(raw_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                if max(h, w) > max_dim:
+                    scale = float(max_dim) / float(max(h, w))
+                    new_w = max(1, int(w * scale))
+                    new_h = max(1, int(h * scale))
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                success, enc = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
+                if success:
+                    return enc.tobytes()
+        except Exception:
+            pass
+        return raw_bytes if isinstance(raw_bytes, bytes) else bytes(raw_bytes)
+
+    @classmethod
     def _evaluate_answer_v3(
         cls,
         answer: SubmissionAnswer,
@@ -887,19 +1085,46 @@ Return ONLY JSON without markdown commentary.
         """
         start_t = time.time()
         question = answer.question
+        raw_response = ""
+        clean_json = ""
+
+        from core.models import (
+            EvaluationResult, EvaluationFeedback, PromptHistory,
+            EvaluationHistory, QuestionMapping
+        )
 
         # Construct canonical QuestionDTO via QuestionAccessor
         q_dto = QuestionAccessor.to_dto(question)
 
+        # Issue G: Pre-evaluation benchmark audit log — warn if master solution is absent
+        try:
+            exam_obj = answer.submission.examination
+            if getattr(exam_obj, 'master_solution_parsed', False):
+                cls._write_pipeline_log(
+                    answer.submission.id,
+                    f"[BENCHMARK EVALUATION] Q{q_dto.number} — Grounded with Teacher Master Benchmark Solution Key."
+                )
+            else:
+                cls._write_pipeline_log(
+                    answer.submission.id,
+                    f"[WARN] No master solution uploaded for Exam #{exam_obj.id}. "
+                    f"Q{q_dto.number} will be graded on standard rubric only. "
+                    f"Upload a baseline solution via the Setup page to improve grading accuracy."
+                )
+        except Exception:
+            pass
+
         # Step 0: Check Question Type for MCQ/Quiz Routing vs Subjective Multimodal Flow
-        q_types = [str(t).lower() for t in (q_dto.question_type if isinstance(q_dto.question_type, list) else [str(q_dto.question_type)])]
+        raw_types = getattr(q_dto, 'question_type', None) or getattr(question, 'question_type', []) or []
+        q_types = [str(t).lower() for t in (raw_types if isinstance(raw_types, list) else [str(raw_types)])]
         is_mcq_quiz = any(t in ['mcq', 'quiz', 'multiple_choice', 'objective'] for t in q_types)
 
         if is_mcq_quiz:
-            print(f"[EVALUATION ROUTER] Routing Q{q_dto.number} through MCQ / Quiz Pipeline Engine...")
+            norm_q = normalize_q_code(q_dto.number)
+            print(f"[EVALUATION ROUTER] Routing {norm_q} through MCQ / Quiz Pipeline Engine...")
             from core.ai_engine.evaluation.quiz_evaluator import evaluate_quiz_submission
             correct_ans = q_dto.ideal_answer or q_dto.rubric or q_dto.text
-            q_key = f"Q{q_dto.number}"
+            q_key = norm_q
             answer_key = {q_key: str(correct_ans).strip()}
 
             detected_info = {
@@ -934,6 +1159,7 @@ Return ONLY JSON without markdown commentary.
         eval_data = None
         used_visual_mode = False
         raw_response = ""
+        clean_json = ""
 
         from django.db import close_old_connections
         from core.ai_engine.evaluation.answer_crop_service import AnswerCropService
@@ -956,8 +1182,70 @@ Return ONLY JSON without markdown commentary.
         print(f"No DB transaction open during LLM API call for Q{q_dto.number} (Visual Crops: {len(crops)})")
         print("----------------------------------------")
 
-        # Step 2: Attempt Visual-First Multimodal Evaluation if crops exist
-        if crops:
+        # Check if student extracted OCR text is available for Pure Text-First Fast Evaluation (< 4KB, ~1.5s per question)
+        extracted_text = (answer.extracted_text or '').strip()
+        cached_ocr_data = getattr(answer.submission, 'extracted_ocr_data', {}) or {}
+
+        if (not extracted_text or len(extracted_text) <= 15 or extracted_text.startswith('[Question')) and q_map and q_map.page_numbers_json:
+            mapped_pages = sorted([int(p) for p in q_map.page_numbers_json if str(p).isdigit() or isinstance(p, (int, float))])
+            combined_parts = []
+            pages_dict = {p.page_number: p for p in answer.submission.pages.all()}
+            for p_num in mapped_pages:
+                key = f"page_{p_num}"
+                p_text = cached_ocr_data.get(key)
+                if not p_text and p_num in pages_dict:
+                    p_text = pages_dict[p_num].ocr_raw_text
+                if p_text and p_text.strip():
+                    combined_parts.append(f"--- PAGE {p_num} ---\n" + p_text.strip())
+            if combined_parts:
+                extracted_text = "\n\n".join(combined_parts).strip()
+                answer.extracted_text = extracted_text
+                try:
+                    answer.save(update_fields=['extracted_text'])
+                except Exception:
+                    pass
+
+        has_valid_text = len(extracted_text) > 10 and not extracted_text.startswith('[Question')
+
+        if has_valid_text:
+            cls._write_pipeline_log(
+                answer.submission.id,
+                f"[FAST-PATH TEXT EVAL] Q{q_dto.number}: Using pre-extracted OCR text ({len(extracted_text)} chars) with Master Benchmark."
+            )
+            text_prompt = cls._build_text_evaluation_prompt(
+                q_dto=q_dto,
+                student_ocr_text=extracted_text,
+                eval_mode=eval_mode,
+                strictness=strictness,
+                custom_prompt=custom_prompt
+            )
+
+            for attempt in range(1, max_retries + 2):
+                try:
+                    close_old_connections()
+                    raw_response = ai_provider.generate_completion(
+                        prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
+                        system_instruction="You return strict JSON academic script evaluations based on Master Benchmark solutions.",
+                        task_type=TaskType.ANSWER_GRADING
+                    )
+                    close_old_connections()
+
+                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
+                    clean_json = raw_response.strip() if raw_response else ""
+                    if clean_json and "```json" in clean_json:
+                        clean_json = clean_json.split("```json")[1].split("```")[0].strip()
+                    elif clean_json and "```" in clean_json:
+                        clean_json = clean_json.split("```")[1].split("```")[0].strip()
+
+                    parsed = json.loads(clean_json) if clean_json else {}
+                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                        eval_data = parsed
+                        break
+                except Exception as e_txt:
+                    cls._write_pipeline_log(answer.submission.id, f"[TEXT EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_txt}")
+
+        # Fallback to Multimodal Visual Evaluation if text was absent or failed
+        if not eval_data and crops:
             primary_crop_bytes = cls._prepare_crop_bytes_safely(crops[0]['image_bytes'])
             extra_crops = [
                 {
@@ -991,83 +1279,83 @@ Return ONLY JSON without markdown commentary.
                     close_old_connections()
 
                     cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
-                    clean_json = raw_response.strip()
-                    if "```json" in clean_json:
+                    clean_json = raw_response.strip() if raw_response else ""
+                    if clean_json and "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-                    elif "```" in clean_json:
+                    elif clean_json and "```" in clean_json:
                         clean_json = clean_json.split("```")[1].split("```")[0].strip()
 
-                    parsed = json.loads(clean_json)
+                    parsed = json.loads(clean_json) if clean_json else {}
                     if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
                         eval_data = parsed
                         used_visual_mode = True
                         break
                 except Exception as e_vis:
                     cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_vis}")
-
-        # Step 3: Fall back to text-only evaluation if visual evaluation was unavailable or failed
-        if not eval_data:
-            if crops:
-                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL FALLBACK] Multimodal evaluation failed for Q{q_dto.number}. Executing text-only fallback.")
-            else:
-                cls._write_pipeline_log(answer.submission.id, f"[VISUAL EVAL UNAVAILABLE] No image crops found for Q{q_dto.number}. Executing text-only evaluation.")
-
-            text_prompt = cls._build_text_evaluation_prompt(
-                q_dto=q_dto,
-                student_ocr_text=answer.extracted_text,
-                eval_mode=eval_mode,
-                strictness=strictness,
-                custom_prompt=custom_prompt
-            )
-
-            for attempt in range(1, max_retries + 2):
-                try:
-                    close_old_connections()
-                    raw_response = ai_provider.generate_completion(
-                        prompt=text_prompt if attempt == 1 else f"{text_prompt}\n\nIMPORTANT: Your previous response was invalid JSON. Return ONLY raw JSON matching the required schema.",
-                        system_instruction="You return strict JSON academic script evaluations.",
-                        task_type=TaskType.ANSWER_GRADING
-                    )
-                    close_old_connections()
-
-                    cls._log_raw_llm_response(answer.submission.id, q_dto.id, attempt, raw_response)
-                    clean_json = raw_response.strip()
-                    if "```json" in clean_json:
+                    if clean_json and "```json" in clean_json:
                         clean_json = clean_json.split("```json")[1].split("```")[0].strip()
-                    elif "```" in clean_json:
+                    elif clean_json and "```" in clean_json:
                         clean_json = clean_json.split("```")[1].split("```")[0].strip()
 
-                    parsed = json.loads(clean_json)
-                    if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
-                        eval_data = parsed
-                        break
+                    try:
+                        if clean_json:
+                            parsed = json.loads(clean_json)
+                            if 'obtained_marks' in parsed or 'ai_suggested_marks' in parsed:
+                                eval_data = parsed
+                                break
+                    except Exception:
+                        pass
                 except Exception as e_txt:
                     cls._write_pipeline_log(answer.submission.id, f"[TEXT EVAL ATTEMPT {attempt} FAILED] Q{q_dto.number}: {e_txt}")
 
         elapsed_ms = round((time.time() - start_t) * 1000, 2)
         cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (VisualMode={used_visual_mode}, Success={eval_data is not None}).")
 
+
+
         if eval_data:
+            # Update student answer transcription from multimodal vision output
+            transcribed = eval_data.get('transcribed_text') or eval_data.get('transcription') or eval_data.get('student_transcription')
+            if transcribed and str(transcribed).strip():
+                answer.extracted_text = str(transcribed).strip()
+                answer.save(update_fields=['extracted_text'])
+
             raw_m = eval_data.get('obtained_marks', eval_data.get('ai_suggested_marks', 0.0))
-            rubric_breakdown = eval_data.get('rubric_breakdown', [])
-            if rubric_breakdown and isinstance(rubric_breakdown, list):
+            raw_breakdown = eval_data.get('step_breakdown') or eval_data.get('rubric_breakdown') or eval_data.get('partial_marking_breakdown') or []
+
+            rubric_breakdown = []
+            if isinstance(raw_breakdown, dict):
+                for k, v in raw_breakdown.items():
+                    rubric_breakdown.append({
+                        'step_description': str(k).capitalize(),
+                        'allocated_marks': float(v),
+                        'awarded_marks': float(v),
+                        'comment': 'Evaluated criterion'
+                    })
+            elif isinstance(raw_breakdown, list):
+                rubric_breakdown = raw_breakdown
+
+            if rubric_breakdown:
                 sum_awarded = 0.0
                 has_valid_breakdown = False
                 for r_item in rubric_breakdown:
-                    if isinstance(r_item, dict) and 'awarded' in r_item:
-                        try:
-                            sum_awarded += float(r_item['awarded'])
-                            has_valid_breakdown = True
-                        except (ValueError, TypeError):
-                            pass
+                    if isinstance(r_item, dict):
+                        awarded_val = r_item.get('awarded_marks', r_item.get('awarded'))
+                        if awarded_val is not None:
+                            try:
+                                sum_awarded += float(awarded_val)
+                                has_valid_breakdown = True
+                            except (ValueError, TypeError):
+                                pass
                 if has_valid_breakdown:
                     raw_m = sum_awarded
 
             obtained_m = min(float(q_dto.marks), max(0.0, float(raw_m or 0.0)))
             max_m = float(q_dto.marks)
             pct = round((obtained_m / float(max(1.0, max_m))) * 100.0, 2)
-            conf = min(1.0, max(0.0, float(eval_data.get('confidence', eval_data.get('confidence_score', 0.85)))))
+            conf = min(1.0, max(0.0, float(eval_data.get('confidence_score', eval_data.get('confidence', 0.85)))))
             req_review = bool(eval_data.get('requires_manual_review', False)) or (not used_visual_mode) or (conf < 0.70) or answer.requires_manual_review
+            feedback_val = eval_data.get('feedback', eval_data.get('feedback_text', eval_data.get('ai_feedback', 'AI evaluation completed.')))
 
             eval_res, _ = EvaluationResult.objects.get_or_create(
                 submission_answer=answer,
@@ -1078,8 +1366,8 @@ Return ONLY JSON without markdown commentary.
                     'strengths_json': eval_data.get('strengths', []),
                     'mistakes_json': eval_data.get('mistakes', []),
                     'missing_points_json': eval_data.get('missing_points', []),
-                    'rubric_breakdown_json': eval_data.get('rubric_breakdown', []),
-                    'feedback_text': eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.')),
+                    'rubric_breakdown_json': rubric_breakdown,
+                    'feedback_text': feedback_val,
                     'confidence': conf,
                     'requires_manual_review': req_review
                 }
@@ -1100,8 +1388,8 @@ Return ONLY JSON without markdown commentary.
             eval_res.strengths_json = eval_data.get('strengths', [])
             eval_res.mistakes_json = eval_data.get('mistakes', [])
             eval_res.missing_points_json = eval_data.get('missing_points', [])
-            eval_res.rubric_breakdown_json = eval_data.get('rubric_breakdown', [])
-            eval_res.feedback_text = eval_data.get('feedback', eval_data.get('ai_feedback', 'AI evaluation completed.'))
+            eval_res.rubric_breakdown_json = rubric_breakdown
+            eval_res.feedback_text = feedback_val
             eval_res.confidence = conf
             eval_res.requires_manual_review = req_review
             eval_res.save()
@@ -1115,13 +1403,20 @@ Return ONLY JSON without markdown commentary.
             )
 
             EvaluationFeedback.objects.filter(evaluation_result=eval_res).delete()
-            for r_item in eval_data.get('rubric_breakdown', []):
+            for r_item in rubric_breakdown:
+                c_name = r_item.get('step_description') or r_item.get('criterion') or r_item.get('criteria') or 'Step / Criterion'
+                a_marks = float(r_item.get('allocated_marks', r_item.get('max_marks', r_item.get('allocated', 0.0))))
+                w_marks = float(r_item.get('awarded_marks', r_item.get('awarded', 0.0)))
+                evidence = r_item.get('grounding_evidence', '')
+                comm = r_item.get('comment', r_item.get('comments', r_item.get('evidence_found', '')))
+                if evidence and evidence != 'NOT_FOUND' and evidence not in comm:
+                    comm = f"Evidence: \"{evidence}\" | {comm}" if comm else f"Evidence: \"{evidence}\""
                 EvaluationFeedback.objects.create(
                     evaluation_result=eval_res,
-                    criteria_name=r_item.get('criteria', 'Criteria'),
-                    allocated_marks=float(r_item.get('allocated', 0.0)),
-                    awarded_marks=float(r_item.get('awarded', 0.0)),
-                    comments=r_item.get('comments', '')
+                    criteria_name=c_name,
+                    allocated_marks=a_marks,
+                    awarded_marks=w_marks,
+                    comments=comm
                 )
 
             return eval_res

@@ -61,6 +61,69 @@ class WorkingCopyManager:
         return best_path
 
     @classmethod
+    def ensure_working_copies(cls, submission_id: int) -> List[str]:
+        """
+        Guarantees working copy images exist on disk for all pages of a submission.
+        If files are missing (e.g. after finalization or upload), auto-reconstructs from PDF or raw image sources.
+        """
+        cls.ensure_directories()
+        submission = StudentSubmission.objects.get(id=submission_id)
+        pages = list(submission.pages.all().order_by('page_number'))
+
+        # Check if all existing page records have valid files on disk
+        missing_on_disk = False
+        working_paths = []
+        if not pages:
+            missing_on_disk = True
+        else:
+            for sp in pages:
+                img_path = sp.working_image_path if (sp.working_image_path and os.path.exists(sp.working_image_path)) else cls.get_latest_working_image_path(submission_id, sp.page_number)
+                if not img_path or not os.path.exists(img_path):
+                    missing_on_disk = True
+                    break
+                working_paths.append(img_path)
+
+        if not missing_on_disk and working_paths:
+            return working_paths
+
+        # Self-heal from any available source
+        working_paths = []
+        pdf_source = None
+        if hasattr(submission, 'pdf_document') and submission.pdf_document and submission.pdf_document.pdf_file and os.path.exists(submission.pdf_document.pdf_file.path):
+            pdf_source = submission.pdf_document.pdf_file.path
+        elif submission.script_file and os.path.exists(submission.script_file.path):
+            pdf_source = submission.script_file.path
+        else:
+            final_pdf = os.path.join(cls.FINAL_DIR, f"evaluated_final_submission_{submission.id}.pdf")
+            if os.path.exists(final_pdf):
+                pdf_source = final_pdf
+            else:
+                prev_pdf = os.path.join(cls.PREVIEW_DIR, f"submission_{submission.id}_preview.pdf")
+                if os.path.exists(prev_pdf):
+                    pdf_source = prev_pdf
+
+        if pdf_source and os.path.exists(pdf_source):
+            try:
+                doc = fitz.open(pdf_source)
+                for page_idx, page in enumerate(doc, 1):
+                    out_path = cls.get_working_image_path(submission_id, page_idx, version=1)
+                    if not os.path.exists(out_path):
+                        pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
+                        pix.save(out_path)
+                    sp, _ = SubmissionPage.objects.get_or_create(submission=submission, page_number=page_idx)
+                    sp.working_image_path = out_path
+                    sp.version = 1
+                    sp.save()
+                    working_paths.append(out_path)
+                doc.close()
+                return working_paths
+            except Exception as e_pdf:
+                print(f"[WORKING COPY HEAL WARNING] Failed extracting pages from {pdf_source}: {e_pdf}")
+
+        # Fallback to create_initial_working_copies
+        return cls.create_initial_working_copies(submission_id)
+
+    @classmethod
     def create_initial_working_copies(cls, submission_id: int) -> List[str]:
         """
         Creates v1 working image copies from original uploaded images or PDF script.
@@ -100,7 +163,7 @@ class WorkingCopyManager:
         elif submission.script_file and os.path.exists(submission.script_file.path):
             doc = fitz.open(submission.script_file.path)
             for page_idx, page in enumerate(doc, 1):
-                pix = page.get_pixmap(dpi=200)
+                pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
                 out_path = cls.get_working_image_path(submission_id, page_idx, version=1)
                 pix.save(out_path)
 
@@ -113,7 +176,7 @@ class WorkingCopyManager:
             doc.close()
 
         from core.ai_engine.services.workflow import SubmissionWorkflow
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.WORKING_COPY_CREATED)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.WORKING_COPY_CREATED, force=True)
 
         print(f"\n==================================================")
         print(f"WORKING COPY CREATED")
@@ -175,6 +238,7 @@ class WorkingCopyManager:
         preview_pdf_path = os.path.join(cls.PREVIEW_DIR, f"submission_{submission.id}_preview.pdf")
 
         doc = fitz.open()
+        page_count = 0
 
         for sp in pages:
             img_path = sp.working_image_path if (sp.working_image_path and os.path.exists(sp.working_image_path)) else cls.get_latest_working_image_path(submission.id, sp.page_number)
@@ -185,17 +249,20 @@ class WorkingCopyManager:
                 pdf_page.insert_image(fitz.Rect(0, 0, w, h), filename=img_path)
                 pix = None
 
-        doc.save(preview_pdf_path)
-        page_count = len(doc)
-        doc.close()
+        if len(doc) > 0:
+            doc.save(preview_pdf_path)
+            page_count = len(doc)
+            doc.close()
 
-        sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
-        with open(preview_pdf_path, 'rb') as f_pdf:
-            from django.core.files.base import ContentFile
-            sub_pdf.pdf_file.save(f"submission_{submission.id}_preview.pdf", ContentFile(f_pdf.read()), save=False)
-            sub_pdf.page_count = page_count
-            sub_pdf.file_size_bytes = os.path.getsize(preview_pdf_path)
-            sub_pdf.save()
+            sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
+            with open(preview_pdf_path, 'rb') as f_pdf:
+                from django.core.files.base import ContentFile
+                sub_pdf.pdf_file.save(f"submission_{submission.id}_preview.pdf", ContentFile(f_pdf.read()), save=False)
+                sub_pdf.page_count = page_count
+                sub_pdf.file_size_bytes = os.path.getsize(preview_pdf_path)
+                sub_pdf.save()
+        else:
+            doc.close()
 
         from core.ai_engine.services.workflow import SubmissionWorkflow
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.PDF_GENERATED)
@@ -250,3 +317,51 @@ class WorkingCopyManager:
             print(f"[CLEANUP SUCCESS] Temporary & obsolete files cleaned up for Submission #{submission_id}.")
         except Exception as e:
             print(f"[CLEANUP WARNING] Failed cleaning temporary files for Submission #{submission_id}: {e}")
+
+    @classmethod
+    def cleanup_all_working_artifacts(cls, submission_id: int):
+        """
+        Removes all working copies, preview PDFs, compiled PDFs, and temp files for a submission.
+        """
+        try:
+            cls.ensure_directories()
+            target_dirs = [cls.TEMP_DIR, cls.WORKING_DIR, cls.PREVIEW_DIR, os.path.join(settings.MEDIA_ROOT, 'submission_pdfs'), cls.FINAL_DIR]
+            prefixes = [f"sub_{submission_id}_", f"submission_{submission_id}_", f"submission_{submission_id}."]
+            for d in target_dirs:
+                if os.path.exists(d):
+                    for fname in os.listdir(d):
+                        if any(fname.startswith(p) for p in prefixes):
+                            fpath = os.path.join(d, fname)
+                            if os.path.isfile(fpath):
+                                try:
+                                    os.remove(fpath)
+                                except Exception:
+                                    pass
+            print(f"[CACHE FLUSH] All working disk artifacts purged for Submission #{submission_id}.")
+        except Exception as e:
+            print(f"[CACHE FLUSH WARNING] Failed purging disk artifacts for Submission #{submission_id}: {e}")
+
+    @classmethod
+    def flush_submission_pipeline_cache(cls, submission_id: int):
+        """
+        Centralized cache flush and pipeline reset when images are uploaded, deleted, or reordered.
+        """
+        from core.models import StudentSubmission, SubmissionPDF
+        try:
+            sub = StudentSubmission.objects.get(id=submission_id)
+            sub.status = StudentSubmission.Status.UPLOADED
+            sub.total_obtained_marks = 0.0
+            sub.total_max_marks = 0.0
+            sub.percentage = 0.0
+            sub.requires_manual_review = False
+            sub.save(update_fields=['status', 'total_obtained_marks', 'total_max_marks', 'percentage', 'requires_manual_review'])
+
+            sub.pages.all().delete()
+            sub.answers.all().delete()
+            sub.question_mappings.all().delete()
+            SubmissionPDF.objects.filter(submission=sub).delete()
+            cls.cleanup_all_working_artifacts(submission_id)
+            print(f"[CACHE FLUSH SUCCESS] Pipeline cache completely flushed for Submission #{submission_id}.")
+        except Exception as e:
+            print(f"[CACHE FLUSH ERROR] Error flushing pipeline cache for Submission #{submission_id}: {e}")
+

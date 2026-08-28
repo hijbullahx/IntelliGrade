@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from django.conf import settings
 
 from core.models import StudentSubmission, SubmissionPage, SubmissionAnswer, EvaluationResult
-from core.utils.question_accessor import QuestionAccessor, safe_getattr, safe_normalize_collection
+from core.utils.question_accessor import QuestionAccessor, safe_getattr, safe_normalize_collection, normalize_q_code
 
 class EvaluatedScriptPDFService:
     """
@@ -37,7 +37,77 @@ class EvaluatedScriptPDFService:
         
         page_width, page_height = 595.0, 842.0
 
-        if not pages and submission.script_file and os.path.exists(submission.script_file.path):
+        # Self-healing: ensure working copy images exist on disk
+        try:
+            from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+            WorkingCopyManager.ensure_working_copies(submission.id)
+        except Exception as e_wc:
+            print(f"[PDF GENERATOR WARNING] Failed ensuring working copies: {e_wc}")
+
+        def _resolve_page_img(p_num: int, sp_obj: Optional[SubmissionPage] = None) -> Optional[str]:
+            """Resolves the best available high-res image path for a submission page."""
+            # 1. Check SubmissionPage working_image_path
+            if sp_obj and sp_obj.working_image_path and os.path.exists(sp_obj.working_image_path):
+                return sp_obj.working_image_path
+
+            # 2. Check WorkingCopyManager active working copy
+            from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+            wc_path = WorkingCopyManager.get_working_copy_path(submission.id, p_num)
+            if wc_path and os.path.exists(wc_path):
+                return wc_path
+
+            # 3. Check SubmissionPage page_image field
+            if sp_obj and sp_obj.page_image and os.path.exists(sp_obj.page_image.path):
+                return sp_obj.page_image.path
+
+            # 4. Check Raw Images (SubmissionImage)
+            raw_img = submission.raw_images.filter(sequence_order=p_num, is_deleted=False).first()
+            if not raw_img:
+                raw_imgs = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+                if p_num - 1 < len(raw_imgs):
+                    raw_img = raw_imgs[p_num - 1]
+            if raw_img and raw_img.original_file and os.path.exists(raw_img.original_file.path):
+                return raw_img.original_file.path
+
+            # 5. Search media/submission_working/ pattern
+            import glob
+            working_patterns = [
+                os.path.join(WorkingCopyManager.WORKING_DIR, f"sub_{submission.id}_p{p_num}*"),
+                os.path.join(WorkingCopyManager.WORKING_DIR, f"sub_{submission.id}_page_{p_num}*"),
+                os.path.join(WorkingCopyManager.WORKING_DIR, f"working_sub_{submission.id}_page_{p_num}*")
+            ]
+            for pat in working_patterns:
+                matched = glob.glob(pat)
+                if matched and os.path.exists(matched[0]):
+                    return matched[0]
+
+            # 6. Extract on-the-fly from script_file PDF if available
+            if submission.script_file and os.path.exists(submission.script_file.path):
+                try:
+                    s_doc = fitz.open(submission.script_file.path)
+                    if p_num - 1 < len(s_doc):
+                        p = s_doc[p_num - 1]
+                        pix = p.get_pixmap(dpi=150)
+                        temp_path = os.path.join(output_dir, f'temp_ext_{submission.id}_p{p_num}.png')
+                        pix.save(temp_path)
+                        s_doc.close()
+                        return temp_path
+                    s_doc.close()
+                except Exception:
+                    pass
+
+            return None
+
+        # Build Annotated Pages
+        if pages:
+            for sp in pages:
+                img_path = _resolve_page_img(sp.page_number, sp)
+                cls._append_annotated_page(doc, img_path, sp.page_number, answers, submission, examination, page_width, page_height)
+        elif submission.raw_images.filter(is_deleted=False).exists():
+            for r_idx, r_img in enumerate(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'), 1):
+                img_path = r_img.original_file.path if r_img.original_file and os.path.exists(r_img.original_file.path) else None
+                cls._append_annotated_page(doc, img_path, r_idx, answers, submission, examination, page_width, page_height)
+        elif submission.script_file and os.path.exists(submission.script_file.path):
             orig_doc = fitz.open(submission.script_file.path)
             for p_num in range(len(orig_doc)):
                 orig_page = orig_doc[p_num]
@@ -48,11 +118,6 @@ class EvaluatedScriptPDFService:
                 if os.path.exists(img_path):
                     os.remove(img_path)
             orig_doc.close()
-
-        elif pages:
-            for sp in pages:
-                img_path = sp.page_image.path if (sp.page_image and os.path.exists(sp.page_image.path)) else None
-                cls._append_annotated_page(doc, img_path, sp.page_number, answers, submission, examination, page_width, page_height)
         else:
             cls._append_annotated_page(doc, None, 1, answers, submission, examination, page_width, page_height)
 
@@ -149,7 +214,7 @@ class EvaluatedScriptPDFService:
             obtained = float(eval_res.obtained_marks) if eval_res else 0.0
             max_m = float(eval_res.maximum_marks) if eval_res else QuestionAccessor.get_marks(q)
 
-            q_line = f"Q{q_num}: {q_text}  -->  MARKS: {obtained} / {max_m}"
+            q_line = f"{normalize_q_code(q_num)}: {q_text}  -->  MARKS: {obtained} / {max_m}"
             pdf_page.insert_text(fitz.Point(25, y_offset), q_line, fontsize=8.5, color=(0.1, 0.1, 0.1), fontname="helv")
 
             if eval_res and eval_res.feedback_text:
@@ -229,7 +294,7 @@ class EvaluatedScriptPDFService:
             row_rect = fitz.Rect(20, y, w - 20, y + 22)
             summary_page.draw_rect(row_rect, color=(0.85, 0.85, 0.85), fill=bg_color, width=0.5)
 
-            summary_page.insert_text(fitz.Point(30, y + 15), f"Q{q_num}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
+            summary_page.insert_text(fitz.Point(30, y + 15), f"{normalize_q_code(q_num)}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
             summary_page.insert_text(fitz.Point(60, y + 15), q_text, fontsize=8, color=(0.2, 0.2, 0.2), fontname="helv")
             summary_page.insert_text(fitz.Point(340, y + 15), f"{max_m:.1f}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
             summary_page.insert_text(fitz.Point(410, y + 15), f"{obtained:.1f}", fontsize=8, color=(0.05, 0.45, 0.2), fontname="helv")
