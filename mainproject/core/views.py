@@ -201,8 +201,34 @@ def student_dashboard(request):
 
     for sub in student_submissions:
         max_marks = float(sub.examination.total_marks if (sub.examination and sub.examination.total_marks) else (sub.total_max_marks or 100.0))
-        obtained = float(sub.total_obtained_marks or 0.0)
-        pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+        ex_title = (sub.examination.title or '').upper()
+
+        # Check if there is an official StudentGradeRecord for this course
+        gr = StudentGradeRecord.objects.filter(
+            tabulation__course=sub.examination.course
+        ).filter(
+            Q(student_id__iexact=user.username) |
+            Q(student_name__icontains=user.username) |
+            Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
+        ).first()
+
+        if gr and gr.is_manually_edited:
+            if 'MID' in ex_title and gr.midterm_data:
+                pct = float(gr.midterm_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and gr.class_test_data:
+                pct = float(gr.class_test_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            elif ('FINAL' in ex_title or 'EXAM' in ex_title) and gr.final_data:
+                pct = float(gr.final_data.get('percentage', 0.0))
+                obtained = round((pct / 100.0) * max_marks, 1)
+            else:
+                obtained = float(sub.total_obtained_marks or 0.0)
+                pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+        else:
+            obtained = float(sub.total_obtained_marks or 0.0)
+            pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
+
         let_grade, gpa_pt = get_grade_and_gpa(pct)
 
         answers = sub.answers.select_related('question', 'evaluation_result').all().order_by('question__question_number')
@@ -363,7 +389,22 @@ def student_dashboard(request):
     enrolled_courses_count = Course.objects.filter(department=dept).count() if dept else 0
     completed_exams_count = len(evaluated_results_list)
 
-    if exam_routines_list:
+    # 4. Fetch official OBE CourseTabulation & StudentGradeRecords for this student
+    course_grade_records = StudentGradeRecord.objects.filter(
+        Q(student_id__iexact=user.username) |
+        Q(student_name__icontains=user.username) |
+        Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
+    ).select_related('tabulation', 'tabulation__course').order_by('tabulation__course__code')
+
+    if course_grade_records.exists():
+        total_overall = sum(float(gr.overall_score or 0.0) for gr in course_grade_records) / course_grade_records.count()
+        overall_let_grade = get_letter_grade(total_overall)
+        _, overall_gpa_num = get_grade_and_gpa(total_overall)
+        overall_grade_display = f"{overall_let_grade} ({round(total_overall, 2)}%)"
+        overall_gpa_val = f"{overall_gpa_num} / 4.00"
+        primary_gr = course_grade_records.first()
+        overall_routine_title = f"Course OBE Tabulation ({primary_gr.tabulation.course.code})"
+    elif exam_routines_list:
         primary_routine = exam_routines_list[0]
         overall_grade_display = f"{primary_routine['overall_grade']} ({primary_routine['overall_percentage']}%)"
         overall_routine_title = primary_routine['routine_title']
@@ -377,13 +418,6 @@ def student_dashboard(request):
         overall_grade_display = "N/A"
         overall_routine_title = "Upcoming Examination"
         overall_gpa_val = "N/A"
-
-    # 4. Fetch official OBE CourseTabulation & StudentGradeRecords for this student
-    course_grade_records = StudentGradeRecord.objects.filter(
-        Q(student_id__iexact=user.username) |
-        Q(student_name__icontains=user.username) |
-        Q(student_id__iexact=str(getattr(profile, 'student_id', '')))
-    ).select_related('tabulation', 'tabulation__course').order_by('tabulation__course__code')
 
     stats = {
         'student_name': user.get_full_name() or user.username,
