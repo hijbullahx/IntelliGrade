@@ -2188,6 +2188,11 @@ def question_rubric_manage(request, exam_id=None):
                 )
                 messages.success(request, f"Attached manual figure ({manual_figure_file.name}) to Question {q_obj.question_number}!")
 
+            # Ensure exam is marked as having baseline solutions configured
+            if not target_exam.master_solution_parsed:
+                target_exam.master_solution_parsed = True
+                target_exam.save(update_fields=['master_solution_parsed'])
+
             messages.success(request, f"Question {q_obj.question_number} and Academic Rubric saved successfully for {target_exam.course.code}!")
             return redirect('question_rubric_manage', exam_id=target_exam.id)
         except Exception as e:
@@ -2331,6 +2336,49 @@ def api_generate_ai_rubric(request):
             return JsonResponse({'success': True, 'rubric': rubric_data})
         except Exception as e:
             return JsonResponse({'error': f"AI Rubric Generation failed: {str(e)}"}, status=500)
+
+
+def api_ai_analyze_question_full(request):
+    """AJAX endpoint to auto-analyze a question statement/prompt text or synthesize full examination questions with complete academic metadata, CO/PO, Bloom level, and rubrics."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+    if request.method == 'POST':
+        prompt_text = request.POST.get('prompt_text', '').strip()
+        max_marks = float(request.POST.get('max_marks', 10.0))
+        course_outline_text = request.POST.get('course_outline_text', '').strip()
+        examination_id = request.POST.get('examination_id')
+
+        # If examination_id is provided, enhance context with course code & title
+        if examination_id and not course_outline_text:
+            from core.models import Examination
+            try:
+                exam = Examination.objects.select_related('course').get(id=examination_id)
+                course_outline_text = f"Course: {exam.course.code} - {exam.course.title} | Examination: {exam.title}"
+            except Exception:
+                pass
+
+        if not prompt_text:
+            prompt_text = "make a sample question"
+
+        from core.ai_engine.providers.factory import AIProviderFactory
+        provider = AIProviderFactory.get_provider()
+        try:
+            if hasattr(provider, 'analyze_question_full'):
+                analysis_data = provider.analyze_question_full(prompt_text, max_marks, course_outline_text)
+            else:
+                from core.ai_engine.providers.base import BaseAIProvider
+                analysis_data = BaseAIProvider._fallback_analyze_question_prompt(prompt_text, max_marks, course_outline_text)
+            return JsonResponse({'success': True, 'analysis': analysis_data})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            from core.ai_engine.providers.base import BaseAIProvider
+            fallback_data = BaseAIProvider._fallback_analyze_question_prompt(prompt_text, max_marks, course_outline_text)
+            return JsonResponse({'success': True, 'analysis': fallback_data, 'warning': str(e)})
+
+    return JsonResponse({'error': 'POST request required.'}, status=405)
+
 
 
 def ai_config_view(request):

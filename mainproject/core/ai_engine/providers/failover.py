@@ -121,12 +121,12 @@ class FailoverAIProvider(BaseAIProvider):
             return available
         else:
             order_priority = {
-                LocalOfflineVisionProvider: 1,
-                OllamaProvider: 2,
-                GroqProvider: 3,
-                OpenRouterProvider: 4,
-                GeminiProvider: 5,
-                OpenAIProvider: 6
+                GroqProvider: 1,
+                GeminiProvider: 2,
+                OpenAIProvider: 3,
+                OllamaProvider: 4,
+                OpenRouterProvider: 5,
+                LocalOfflineVisionProvider: 6
             }
             available = [p for p in self._chain if p.get_capabilities().get('supports_text', False) and not ProviderHealthTracker.is_on_cooldown(p.__class__)]
             available.sort(key=lambda p: order_priority.get(p.__class__, 99))

@@ -88,6 +88,15 @@ class Examination(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def has_master_solution(self) -> bool:
+        """Returns True if exam has uploaded master script, parsed solution, or manually defined questions with model answers."""
+        if self.master_solution_file or self.master_solution_parsed:
+            return True
+        if self.questions.exists():
+            return True
+        return False
+
     def __str__(self):
         return f"{self.course.code} - {self.title}"
 

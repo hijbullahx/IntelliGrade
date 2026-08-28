@@ -439,42 +439,40 @@ window.scrollToQuestionBuilder = function() {
         </div>
     </div>
 
-    <!-- Master / Benchmark Answer Script (Golden Solution) Card (Shows only after questions are configured) -->
+    <!-- Master / Benchmark Answer Script (Golden Solution) Card (Shows after questions are configured) -->
     {% if selected_exam and questions and questions.count > 0 %}
-    <div class="glass-card p-6 rounded-2xl border border-amber-500/30 bg-slate-900/90 shadow-xl space-y-4">
+    <div class="glass-card p-6 rounded-2xl border border-emerald-500/30 bg-slate-900/90 shadow-xl space-y-4">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="space-y-1.5 flex-1">
-                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs font-bold">
-                    <i data-lucide="award" class="w-3.5 h-3.5 text-amber-400"></i> Baseline Examiner Solution (Upload Once Per Exam)
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i> Model Answer Baseline Active
                 </div>
                 <h3 class="font-extrabold text-base text-white tracking-tight flex items-center gap-2">
-                    Master / Baseline Answer Script (Teacher Model Answer)
+                    Master / Baseline Model Answer ({% if selected_exam.master_solution_file %}Uploaded File{% else %}Configured in Questions{% endif %})
                 </h3>
                 <p class="text-slate-300 text-xs leading-relaxed max-w-xl">
-                    Before evaluating student scripts, upload your <strong>Teacher's Master Answer Script</strong> (PDF or Image). IntelliGrade AI will map questions, formulas, equations, and diagrams. All student submissions are benchmarked directly against this golden baseline.
+                    Student scripts will be evaluated against the model solutions and step-by-step marking criteria saved in this examination paper.
                 </p>
 
                 <div id="masterStatusBadge" class="pt-1">
-                    {% if selected_exam.master_solution_file or selected_exam.master_solution_parsed %}
+                    {% if selected_exam.master_solution_file %}
                     <form method="POST" enctype="multipart/form-data" class="inline-flex items-center gap-2 text-xs flex-wrap">
                         {% csrf_token %}
                         <input type="hidden" name="examination_id" value="{{ selected_exam.id }}">
                         <span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-[11px] border border-emerald-500/30">
-                            ✓ Baseline Model Answer Active ({% if selected_exam.master_solution_parsed %}Parsed & Bound to Questions{% else %}Uploaded{% endif %})
+                            ✓ Master Document Attached
                         </span>
-                        {% if selected_exam.master_solution_file %}
                         <a href="{{ selected_exam.master_solution_file.url }}" target="_blank" class="text-[11px] text-amber-400 font-bold hover:underline inline-flex items-center gap-1">
                             <i data-lucide="external-link" class="w-3 h-3"></i> View Baseline Document
                         </a>
-                        {% endif %}
-                        <button type="submit" name="clear_document" value="master_solution_file" onclick="return confirm('Remove saved Master Solution document and benchmark solutions from this exam?')" class="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline ml-2 cursor-pointer">
-                            🗑️ Reset Baseline Answer
+                        <button type="submit" name="clear_document" value="master_solution_file" onclick="return confirm('Remove saved Master Solution document from this exam? (Manual question rubrics will remain active)')" class="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline ml-2 cursor-pointer">
+                            🗑️ Reset Document
                         </button>
                     </form>
                     {% else %}
-                    <span class="text-[11px] text-amber-300/80 font-medium flex items-center gap-1.5">
-                        <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>
-                        <span>No baseline answer script uploaded yet. Upload baseline model answer below, or use default rubric texts.</span>
+                    <span class="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+                        <span>Model solutions & rubrics saved during question creation are active for grading.</span>
                     </span>
                     {% endif %}
                 </div>
@@ -482,19 +480,13 @@ window.scrollToQuestionBuilder = function() {
 
             <div class="flex flex-wrap items-center gap-3 shrink-0">
                 <input type="file" id="masterSolutionFileInput" accept=".pdf,image/*" class="hidden" onchange="uploadMasterSolutionFile(this)">
-                <button type="button" onclick="document.getElementById('masterSolutionFileInput').click()" id="btnUploadMasterSolution" class="px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-amber-600/25 transition-all flex items-center gap-2.5 cursor-pointer">
-                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> {% if selected_exam.master_solution_file or selected_exam.master_solution_parsed %}📁 Update / Replace Baseline Solution{% else %}📁 Upload Baseline Model Answer{% endif %}
+                <button type="button" onclick="document.getElementById('masterSolutionFileInput').click()" id="btnUploadMasterSolution" class="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> {% if selected_exam.master_solution_file %}📁 Replace Master Script PDF{% else %}📁 Attach Master Script PDF (Optional){% endif %}
                 </button>
                 
-                {% if selected_exam.master_solution_file or selected_exam.master_solution_parsed %}
-                <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer animate-pulse">
+                <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2 cursor-pointer animate-pulse">
                     <i data-lucide="sparkles" class="w-4 h-4"></i> 🚀 Launch Evaluation Wizard &rarr;
                 </a>
-                {% else %}
-                <button type="button" onclick="alert('Please upload your Teacher Master Answer / Baseline Solution first to unlock the Evaluation Wizard.'); document.getElementById('masterSolutionFileInput').click();" title="Please upload Baseline Model Answer above to unlock the Evaluation Wizard." class="px-5 py-3 bg-slate-800 hover:bg-slate-750 text-slate-400 border border-slate-700 font-extrabold text-xs rounded-xl flex items-center gap-2 cursor-pointer transition-all">
-                    <i data-lucide="lock" class="w-4 h-4 text-amber-400"></i> 🔒 Launch Evaluation Wizard &rarr;
-                </button>
-                {% endif %}
             </div>
         </div>
     </div>
@@ -557,15 +549,9 @@ window.scrollToQuestionBuilder = function() {
                                 <p class="text-[11px] text-slate-400">Questions and grading rubrics are locked to ensure grading integrity.</p>
                             </div>
                         </div>
-                        {% if selected_exam.master_solution_file or selected_exam.master_solution_parsed %}
                         <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5 shrink-0 animate-pulse">
                             <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 🚀 Launch Evaluation Wizard &rarr;
                         </a>
-                        {% else %}
-                        <button type="button" onclick="alert('Please upload your Teacher Master Answer / Baseline Solution first to unlock the Evaluation Wizard.'); document.getElementById('masterSolutionFileInput').click();" class="px-4 py-2 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer">
-                            <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i> 🔒 Upload Baseline to Enable Wizard
-                        </button>
-                        {% endif %}
                     </div>
                     <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
                         <span class="text-slate-400 italic">"Save & Add Next Question" is disabled for this finalized paper.</span>
@@ -581,9 +567,9 @@ window.scrollToQuestionBuilder = function() {
                     <div class="flex items-center justify-between gap-4">
                         <div>
                             <h3 class="font-bold text-sm theme-text-primary flex items-center gap-2">
-                                <i data-lucide="cpu" class="w-4 h-4 text-brand-500"></i> IUBAT Question Builder
+                                <i data-lucide="edit-3" class="w-4 h-4 text-brand-500"></i> Manual Question Builder
                             </h3>
-                            <p class="text-[10px] theme-text-muted">Choose creation method below: Fill fields manually or write prompt & auto-analyze</p>
+                            <p class="text-[10px] theme-text-muted">Enter examination questions, marking criteria, model answers, and OBE mappings manually.</p>
                         </div>
                         <div class="flex items-center gap-2">
                             <button type="button" onclick="startNewQuestion()" class="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm" title="Clear form & start creating the next question">
@@ -602,26 +588,19 @@ window.scrollToQuestionBuilder = function() {
                     </div>
 
                     <!-- Creation Method Selection Cards -->
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <div class="p-3 rounded-xl border-2 border-brand-500/50 bg-brand-500/5 flex items-center gap-2.5">
                             <span class="w-7 h-7 rounded-lg bg-brand-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
                             <div>
-                                <span class="font-extrabold text-xs theme-text-primary block">Method 1: Manual Written Entry</span>
-                                <span class="text-[10px] theme-text-muted">Type prompt, criteria, marks & taxonomy for written questions</span>
-                            </div>
-                        </div>
-                        <div class="p-3 rounded-xl border border-purple-500/30 bg-purple-500/5 flex items-center gap-2.5">
-                            <span class="w-7 h-7 rounded-lg bg-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
-                            <div>
-                                <span class="font-extrabold text-xs theme-text-primary block">Method 2: AI Auto-Analyze (Written)</span>
-                                <span class="text-[10px] theme-text-muted">Type written question & click ✨ AI Auto-Analyze</span>
+                                <span class="font-extrabold text-xs theme-text-primary block">Manual Written Question Builder</span>
+                                <span class="text-[10px] theme-text-muted">Type question statements, criteria, marks, and OBE taxonomy</span>
                             </div>
                         </div>
                         <button type="button" onclick="openMcqModal()" class="p-3 rounded-xl border-2 border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 transition-all flex items-center gap-2.5 cursor-pointer text-left w-full shadow-sm group">
-                            <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 group-hover:scale-105 transition-transform">3</span>
+                            <span class="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0 group-hover:scale-105 transition-transform">2</span>
                             <div>
-                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400 block flex items-center gap-1">Method 3: MCQ Quiz System &rarr;</span>
-                                <span class="text-[10px] text-emerald-600/90 dark:text-emerald-300/90 font-semibold">Exclusively for MCQ: Option Keys & MCQ Answer Sheets</span>
+                                <span class="font-extrabold text-xs text-emerald-600 dark:text-emerald-400 block flex items-center gap-1">MCQ Quiz System &rarr;</span>
+                                <span class="text-[10px] text-emerald-600/90 dark:text-emerald-300/90 font-semibold">Exclusively for MCQ: Option Keys & Answer Sheets</span>
                             </div>
                         </button>
                     </div>
@@ -654,7 +633,7 @@ window.scrollToQuestionBuilder = function() {
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
                             <i data-lucide="tag" class="w-4 h-4 text-purple-500"></i> Sections 3 & 4: Question Category & Command Verbs
                         </span>
-                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Detected</span>
+                        <span class="text-[10px] theme-text-muted font-bold">Academic Categorization</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -704,13 +683,8 @@ window.scrollToQuestionBuilder = function() {
                     </div>
 
                     <div>
-                        <div class="flex items-center justify-between mb-1">
-                            <label class="block text-xs font-bold theme-text-secondary">Question Statement / Prompt Text</label>
-                            <button type="button" id="aiFullAnalyzeBtn" onclick="analyzeQuestionFullAI()" {% if questions and questions.count > 0 %}disabled title="Paper is finalized. Unlock builder above to auto-analyze questions." class="px-3 py-1 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-[11px] rounded-lg cursor-not-allowed opacity-60 flex items-center gap-1"{% else %}class="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer"{% endif %} title="Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy">
-                                <i data-lucide="sparkles" class="w-3 h-3"></i> ✨ AI Auto-Analyze Question Text
-                            </button>
-                        </div>
-                        <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
+                        <label class="block text-xs font-bold theme-text-secondary mb-1">Question Statement / Prompt Text <span class="text-rose-500">*</span></label>
+                        <textarea name="prompt_text" id="qPrompt" rows="4" placeholder="Enter question statement (e.g. '(a) Explain the difference between Process and Thread with diagrams. [5 Marks]&#10;(b) Describe PCB and TCB state transitions. [5 Marks]')..." required class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none"></textarea>
                     </div>
 
                     <!-- Manual Question Figure / Diagram Upload Dropzone -->
@@ -827,7 +801,7 @@ window.scrollToQuestionBuilder = function() {
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
                             <i data-lucide="award" class="w-4 h-4 text-purple-500"></i> Sections 17-22: Grading Rubrics & Expected Answer
                         </span>
-                        <span class="text-[10px] text-purple-500 font-bold">AI Auto-Generated</span>
+                        <span class="text-[10px] theme-text-muted font-bold">Academic Rubrics</span>
                     </div>
 
                     <div>
@@ -899,15 +873,9 @@ window.scrollToQuestionBuilder = function() {
                     <span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px]">READY FOR GRADING</span>
                 </div>
                 <p class="text-[11px] text-slate-300 leading-relaxed">Questions, maximum marks, and marking rubrics are saved in the system. Proceed to upload and grade student answer scripts.</p>
-                {% if selected_exam.master_solution_file or selected_exam.master_solution_parsed %}
                 <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 animate-pulse">
                     <i data-lucide="sparkles" class="w-4 h-4"></i> 🚀 Launch Evaluation Wizard &rarr;
                 </a>
-                {% else %}
-                <button type="button" onclick="alert('Please upload your Teacher Master Answer / Baseline Solution first to unlock the Evaluation Wizard.'); document.getElementById('masterSolutionFileInput').click();" class="w-full py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer">
-                    <i data-lucide="lock" class="w-4 h-4 text-amber-400"></i> 🔒 Step 2: Upload Baseline Model Answer First
-                </button>
-                {% endif %}
             </div>
             {% endif %}
 
@@ -2097,12 +2065,28 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 });
 
+function scrollToQuestionBuilder() {
+    const form = document.getElementById('questionBuilderForm');
+    if (!form) return;
+    if (!isBuilderUnlocked && document.getElementById('builderLockedNotice')) {
+        toggleBuilderUnlock();
+    }
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const promptEl = document.getElementById('qPrompt');
+    if (promptEl) {
+        setTimeout(() => {
+            promptEl.focus();
+            promptEl.classList.add('ring-4', 'ring-brand-500/50');
+            setTimeout(() => promptEl.classList.remove('ring-4', 'ring-brand-500/50'), 1500);
+        }, 400);
+    }
+}
+
 let isBuilderUnlocked = false;
 function toggleBuilderUnlock() {
     isBuilderUnlocked = !isBuilderUnlocked;
     const saveNext = document.getElementById('saveAndNextBtn');
     const saveOnly = document.getElementById('saveOnlyBtn');
-    const aiBtn = document.getElementById('aiFullAnalyzeBtn');
     const unlockBtn = document.getElementById('unlockBuilderBtn');
 
     if (isBuilderUnlocked) {
@@ -2115,11 +2099,6 @@ function toggleBuilderUnlock() {
             saveOnly.disabled = false;
             saveOnly.className = "w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-brand-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer";
             saveOnly.title = "";
-        }
-        if (aiBtn) {
-            aiBtn.disabled = false;
-            aiBtn.className = "px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-[11px] rounded-lg shadow transition-all flex items-center gap-1 cursor-pointer";
-            aiBtn.title = "Type question prompt text and click here to auto-fill criteria, rubrics, model answer & Bloom taxonomy";
         }
         if (unlockBtn) {
             unlockBtn.innerHTML = `<i data-lucide="lock" class="w-3 h-3 text-amber-400"></i> Lock Builder (Disable Manual Save)`;
@@ -2134,11 +2113,6 @@ function toggleBuilderUnlock() {
             saveOnly.disabled = true;
             saveOnly.className = "w-full py-3 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-xs rounded-xl cursor-not-allowed opacity-50 flex items-center justify-center gap-2";
             saveOnly.title = "Examination paper is already finalized. Unlock builder above to edit questions.";
-        }
-        if (aiBtn) {
-            aiBtn.disabled = true;
-            aiBtn.className = "px-3 py-1 bg-slate-800 text-slate-500 border border-slate-700 font-extrabold text-[11px] rounded-lg cursor-not-allowed opacity-60 flex items-center gap-1";
-            aiBtn.title = "Paper is finalized. Unlock builder above to auto-analyze questions.";
         }
         if (unlockBtn) {
             unlockBtn.innerHTML = `<i data-lucide="unlock" class="w-3 h-3 text-cyan-400"></i> Unlock Builder to Manually Edit/Add`;
