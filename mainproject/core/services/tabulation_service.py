@@ -174,6 +174,23 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
     else: record.letter_grade = 'F'
 
     record.save()
+
+    # 6. Clean up any stale / duplicate ghost records for this course that have no matching active submission
+    try:
+        active_ids = set()
+        course_subs = StudentSubmission.objects.filter(examination__course=course)
+        for s in course_subs:
+            s_id = (s.student_roll_no or s.student_name or f"STU-{s.id}").strip()
+            if s_id:
+                active_ids.add(s_id)
+        
+        stale_records = StudentGradeRecord.objects.filter(tabulation=tabulation).exclude(student_id__in=active_ids)
+        if stale_records.exists():
+            print(f"[TABULATION CLEANUP] Purging {stale_records.count()} orphaned/renamed grade record(s) from {course.code} tabulation.")
+            stale_records.delete()
+    except Exception as e_clean:
+        print(f"[TABULATION CLEANUP WARNING] {e_clean}")
+
     return record
 
 

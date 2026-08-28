@@ -107,11 +107,16 @@ class FinalizationService:
         count = 0
         working_count = 0
 
-        # Delete working image files (media/submission_working/sub_<id>_*)
+        # Purge only obsolete working image versions (keep active version on disk for teacher workspace viewing)
+        active_paths = set(
+            SubmissionPage.objects.filter(submission_id=submission_id)
+            .values_list('working_image_path', flat=True)
+        )
         working_pattern = os.path.join(WorkingCopyManager.WORKING_DIR, f"sub_{submission_id}_*")
         for f in glob.glob(working_pattern):
             try:
-                if os.path.isfile(f):
+                # If this file is NOT the active page image, clean it up
+                if os.path.normpath(f) not in {os.path.normpath(p) for p in active_paths if p} and os.path.isfile(f):
                     os.remove(f)
                     count += 1
                     working_count += 1

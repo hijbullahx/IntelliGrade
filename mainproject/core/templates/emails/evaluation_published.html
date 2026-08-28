@@ -54,7 +54,12 @@
 </div>
 {% endif %}
 
-<p style="margin-top: 24px;">You can view your complete evaluated answer script, annotations, and detailed rubrics directly in your student workspace.</p>
+<p style="margin-top: 24px; color: #cbd5e1; font-size: 13px;">
+    📎 <strong>Evaluated Script PDF Attached:</strong> An official certified PDF copy of your evaluated examination script with complete mark distributions and instructor feedback is attached to this email.
+</p>
+<p style="margin-top: 8px; color: #94a3b8; font-size: 13px;">
+    You can also view and download your complete evaluated answer script, annotations, and detailed rubrics directly in your student workspace.
+</p>
 
-<a href="{{ script_url|default:'http://127.0.0.1:8000/dashboard/student/' }}" class="btn-primary" style="text-align: center; display: inline-block;">Open Student Dashboard & Evaluated Script</a>
+<a href="{{ script_url|default:'http://127.0.0.1:8000/dashboard/student/' }}" class="btn-primary" style="text-align: center; display: inline-block; margin-top: 10px;">Open Student Dashboard & Download PDF</a>
 {% endblock %}

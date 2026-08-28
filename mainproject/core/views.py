@@ -1546,7 +1546,24 @@ def grading_workbench(request, script_id=None):
                 first_eval.teacher_final_marks = float(final_marks)
                 first_eval.status = Evaluation.ReviewStatus.APPROVED
                 first_eval.save()
-        messages.success(request, "Evaluation approved and finalized successfully!")
+
+            if script and script.student and script.student.email:
+                try:
+                    from core.services.email_service import EmailService
+                    st_marks = float(first_eval.teacher_final_marks or first_eval.ai_suggested_marks or 0.0)
+                    EmailService.send_evaluation_published_notification(
+                        student_email=script.student.email,
+                        student_name=script.student.get_full_name() or script.student.username,
+                        exam_title=script.examination.title if script.examination else 'Examination',
+                        score=f"{st_marks} / {script.examination.total_marks if script.examination else 100}",
+                        grade="Certified",
+                        remarks=first_eval.ai_feedback,
+                        sync=False
+                    )
+                except Exception as _e_sc_email:
+                    print(f"[SCRIPT NOTIFICATION WARNING] {_e_sc_email}")
+
+        messages.success(request, "Evaluation approved and finalized successfully! Student notified via email & dashboard.")
         return redirect('teacher_dashboard')
 
     return render(request, 'core/grading_workbench.html', context)
@@ -3518,6 +3535,10 @@ def evaluation_workspace(request, submission_id):
     exam = submission.examination
     answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
 
+    # Ensure working copy images exist on disk for all pages (self-healing)
+    from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+    WorkingCopyManager.ensure_working_copies(submission.id)
+
     # Prefetch QuestionMappings and SubmissionPages for question-scoped visual binding
     from core.models import QuestionMapping
     q_mappings = {qm.question_id: qm for qm in QuestionMapping.objects.filter(submission=submission)}
@@ -3550,10 +3571,12 @@ def evaluation_workspace(request, submission_id):
         q_dto = QuestionAccessor.to_dto(ans.question)
         eval_res = getattr(ans, 'evaluation_result', None)
         
-        # Resolve mapped pages for this question
+        # Resolve mapped pages for this question (fallback to all_pages if unmapped so image is never blank)
         qm = q_mappings.get(ans.question.id)
         pg_nums = qm.page_numbers_json if (qm and qm.page_numbers_json) else ([ans.page.page_number] if ans.page else [])
         mapped_pages = [pages_by_num[p] for p in pg_nums if p in pages_by_num]
+        if not mapped_pages and all_pages:
+            mapped_pages = all_pages
 
         # Extract and normalize structured rubric / step breakdown
         rubric_breakdown = []
@@ -3771,6 +3794,28 @@ def review_evaluation_answer(request, result_id):
         if all(e.status in ['APPROVED', 'OVERRIDDEN'] for e in all_evals):
             submission.status = StudentSubmission.Status.REVIEWED
         submission.save()
+
+        # Sync OBE Course Tabulation with updated marks
+        try:
+            from core.services.tabulation_service import sync_submission_to_tabulation
+            sync_submission_to_tabulation(submission)
+        except Exception as _e_tab:
+            print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} after review: {_e_tab}")
+
+        # Regenerate updated Evaluated Script PDF with new marks and dispatch email to student
+        try:
+            from core.ai_engine.evaluation.evaluated_pdf_service import EvaluatedScriptPDFService
+            from core.services.email_service import EmailService
+
+            pdf_path = EvaluatedScriptPDFService.generate_evaluated_pdf(submission.id)
+            if action in ['APPROVE', 'OVERRIDE'] or submission.status in [StudentSubmission.Status.REVIEWED, StudentSubmission.Status.FINALIZED]:
+                EmailService.send_submission_evaluated_email(
+                    submission=submission,
+                    final_pdf_path=pdf_path,
+                    sync=False
+                )
+        except Exception as _e_pdf_email:
+            print(f"[EVALUATED PDF / EMAIL WARNING] Failed generating PDF or sending email for submission #{submission.id}: {_e_pdf_email}")
 
         EvaluationAuditLog.objects.create(
             submission=submission,
@@ -5106,21 +5151,27 @@ def course_tabulation_view(request, course_id):
             weightage_config={'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0}
         )
 
-    # Only sync/backfill submissions for students who DO NOT have a StudentGradeRecord yet!
+    # Synchronize and reconcile submissions for this course (removes obsolete ghost records)
     from core.services.tabulation_service import sync_submission_to_tabulation
     evaluated_subs = StudentSubmission.objects.filter(
         examination__course=course
     )
-    
-    existing_ids = set(StudentGradeRecord.objects.filter(tabulation=tabulation).values_list('student_id', flat=True))
+
+    # 1. Clean up obsolete ghost records with outdated IDs
+    active_ids = set()
     for sub in evaluated_subs:
         stu_id = (sub.student_roll_no or sub.student_name or f"STU-{sub.id}").strip()
-        if stu_id not in existing_ids:
-            try:
-                sync_submission_to_tabulation(sub)
-                existing_ids.add(stu_id)
-            except Exception as e_backfill:
-                print(f"[TABULATION BACKFILL WARNING] {e_backfill}")
+        if stu_id:
+            active_ids.add(stu_id)
+
+    StudentGradeRecord.objects.filter(tabulation=tabulation).exclude(student_id__in=active_ids).delete()
+
+    # 2. Sync all active evaluated submissions
+    for sub in evaluated_subs:
+        try:
+            sync_submission_to_tabulation(sub)
+        except Exception as e_backfill:
+            print(f"[TABULATION BACKFILL WARNING] {e_backfill}")
 
     grade_records = StudentGradeRecord.objects.filter(tabulation=tabulation).order_by('student_id')
 

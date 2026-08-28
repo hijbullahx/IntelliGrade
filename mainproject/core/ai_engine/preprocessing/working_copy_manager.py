@@ -61,6 +61,69 @@ class WorkingCopyManager:
         return best_path
 
     @classmethod
+    def ensure_working_copies(cls, submission_id: int) -> List[str]:
+        """
+        Guarantees working copy images exist on disk for all pages of a submission.
+        If files are missing (e.g. after finalization or upload), auto-reconstructs from PDF or raw image sources.
+        """
+        cls.ensure_directories()
+        submission = StudentSubmission.objects.get(id=submission_id)
+        pages = list(submission.pages.all().order_by('page_number'))
+
+        # Check if all existing page records have valid files on disk
+        missing_on_disk = False
+        working_paths = []
+        if not pages:
+            missing_on_disk = True
+        else:
+            for sp in pages:
+                img_path = sp.working_image_path if (sp.working_image_path and os.path.exists(sp.working_image_path)) else cls.get_latest_working_image_path(submission_id, sp.page_number)
+                if not img_path or not os.path.exists(img_path):
+                    missing_on_disk = True
+                    break
+                working_paths.append(img_path)
+
+        if not missing_on_disk and working_paths:
+            return working_paths
+
+        # Self-heal from any available source
+        working_paths = []
+        pdf_source = None
+        if hasattr(submission, 'pdf_document') and submission.pdf_document and submission.pdf_document.pdf_file and os.path.exists(submission.pdf_document.pdf_file.path):
+            pdf_source = submission.pdf_document.pdf_file.path
+        elif submission.script_file and os.path.exists(submission.script_file.path):
+            pdf_source = submission.script_file.path
+        else:
+            final_pdf = os.path.join(cls.FINAL_DIR, f"evaluated_final_submission_{submission.id}.pdf")
+            if os.path.exists(final_pdf):
+                pdf_source = final_pdf
+            else:
+                prev_pdf = os.path.join(cls.PREVIEW_DIR, f"submission_{submission.id}_preview.pdf")
+                if os.path.exists(prev_pdf):
+                    pdf_source = prev_pdf
+
+        if pdf_source and os.path.exists(pdf_source):
+            try:
+                doc = fitz.open(pdf_source)
+                for page_idx, page in enumerate(doc, 1):
+                    out_path = cls.get_working_image_path(submission_id, page_idx, version=1)
+                    if not os.path.exists(out_path):
+                        pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
+                        pix.save(out_path)
+                    sp, _ = SubmissionPage.objects.get_or_create(submission=submission, page_number=page_idx)
+                    sp.working_image_path = out_path
+                    sp.version = 1
+                    sp.save()
+                    working_paths.append(out_path)
+                doc.close()
+                return working_paths
+            except Exception as e_pdf:
+                print(f"[WORKING COPY HEAL WARNING] Failed extracting pages from {pdf_source}: {e_pdf}")
+
+        # Fallback to create_initial_working_copies
+        return cls.create_initial_working_copies(submission_id)
+
+    @classmethod
     def create_initial_working_copies(cls, submission_id: int) -> List[str]:
         """
         Creates v1 working image copies from original uploaded images or PDF script.
@@ -100,7 +163,7 @@ class WorkingCopyManager:
         elif submission.script_file and os.path.exists(submission.script_file.path):
             doc = fitz.open(submission.script_file.path)
             for page_idx, page in enumerate(doc, 1):
-                pix = page.get_pixmap(dpi=300, colorspace=fitz.csRGB)
+                pix = page.get_pixmap(dpi=150, colorspace=fitz.csRGB)
                 out_path = cls.get_working_image_path(submission_id, page_idx, version=1)
                 pix.save(out_path)
 
