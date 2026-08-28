@@ -1197,7 +1197,7 @@ def dept_head_dashboard(request):
             'evaluated_count': ex_eval,
             'progress_percent': ex_pct,
             'status': ex.get_status_display() if hasattr(ex, 'get_status_display') else ex.status,
-            'tabulation_url': f"/teacher/exam/{ex.id}/course-tabulation/"
+            'tabulation_url': f"/course/{ex.course.id}/tabulation/"
         })
 
     # 8. Department Student Roster
@@ -5352,6 +5352,12 @@ Return ONLY a valid JSON array matching this exact schema:
         'data': {'questions': normalized_questions},
         'message': f"✓ Scanned & extracted {len(normalized_questions)} question(s) successfully!"
     })
+
+
+def exam_course_tabulation_redirect(request, exam_id):
+    """Convenience redirect from /teacher/exam/<exam_id>/course-tabulation/ to /course/<course_id>/tabulation/."""
+    exam = get_object_or_404(Examination, id=exam_id)
+    return redirect('course_tabulation_view', course_id=exam.course.id)
 
 
 def course_tabulation_view(request, course_id):
