@@ -706,41 +706,52 @@ window.scrollToQuestionBuilder = function() {
                 <div class="glass-card p-5 rounded-2xl space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
-                            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Sections 9-11: CO, Bloom & PO Mapping
+                            <i data-lucide="target" class="w-4 h-4 text-emerald-500"></i> Sections 9-11: Course Outcomes (CO), Bloom Taxonomy & Program Outcomes (PO)
                         </span>
-                        <span class="text-[10px] text-emerald-500 font-bold">OBE Aligned</span>
+                        <span class="text-[10px] text-emerald-500 font-bold">BAETE OBE Aligned</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold theme-text-secondary mb-1">Course Outcome (CO)</label>
                             <select name="co_mapping" id="qCOSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                                <option value="CO1" selected>CO1 - Core Fundamental Knowledge</option>
-                                <option value="CO2">CO2 - Analytical Problem Solving</option>
-                                <option value="CO3">CO3 - Design & Implementation</option>
-                                <option value="CO4">CO4 - Modern Tool & System Evaluation</option>
+                                <option value="CO1" selected>CO1 - Core Fundamental Principles & Theoretical Knowledge</option>
+                                <option value="CO2">CO2 - Analytical Problem Solving & Mathematical Formulation</option>
+                                <option value="CO3">CO3 - Design, Implementation & Engineering Synthesis</option>
+                                <option value="CO4">CO4 - Critical Investigation & Complex Problem Evaluation</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold theme-text-secondary mb-1">Bloom Taxonomy Level</label>
+                            <label class="block text-xs font-bold theme-text-secondary mb-1">Bloom's Taxonomy Level</label>
                             <select name="bloom_level" id="qBloomSelect" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs theme-text-primary font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
-                                <option value="Remember">1. Remember (Recall)</option>
-                                <option value="Understand" selected>2. Understand (Explain)</option>
-                                <option value="Apply">3. Apply (Execute)</option>
-                                <option value="Analyze">4. Analyze (Differentiate)</option>
-                                <option value="Evaluate">5. Evaluate (Justify)</option>
-                                <option value="Create">6. Create (Design)</option>
+                                <option value="Remember">1. Remember (Knowledge Recall)</option>
+                                <option value="Understand" selected>2. Understand (Comprehension & Explanation)</option>
+                                <option value="Apply">3. Apply (Execution & Implementation)</option>
+                                <option value="Analyze">4. Analyze (Differentiate & Breakdown)</option>
+                                <option value="Evaluate">5. Evaluate (Assessment, Validation & Justification)</option>
+                                <option value="Create">6. Create (Design & Synthesis)</option>
                             </select>
                         </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs font-bold theme-text-secondary mb-1.5">Program Outcome (PO) Checkbox Matrix</label>
-                        <div class="grid grid-cols-4 gap-2 text-[11px]">
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(a)" checked class="rounded text-brand-600"> <span class="font-bold">PO(a)</span> Math/Sci</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(b)" class="rounded text-brand-600"> <span class="font-bold">PO(b)</span> Analysis</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(c)" checked class="rounded text-brand-600"> <span class="font-bold">PO(c)</span> Design</label>
-                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-1.5 rounded-lg cursor-pointer"><input type="checkbox" name="po_mapping" value="PO(d)" class="rounded text-brand-600"> <span class="font-bold">PO(d)</span> Investigation</label>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-bold theme-text-secondary">Program Outcome (PO) Matrix (BAETE Standard PO1–PO12)</label>
+                            <span class="text-[10px] theme-text-muted font-mono">Select applicable outcomes</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px]">
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO1" checked class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO1 / PO(a)</span> Engineering Knowledge</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO2" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO2 / PO(b)</span> Problem Analysis</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO3" checked class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO3 / PO(c)</span> Design of Solutions</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO4" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO4 / PO(d)</span> Investigation</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO5" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO5 / PO(e)</span> Modern Tool Usage</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO6" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO6 / PO(f)</span> Engineer & Society</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO7" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO7 / PO(g)</span> Environment & Sustainability</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO8" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO8 / PO(h)</span> Ethics</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO9" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO9 / PO(i)</span> Individual & Team Work</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO10" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO10 / PO(j)</span> Communication</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO11" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO11 / PO(k)</span> Project Management</label>
+                            <label class="flex items-center gap-1.5 bg-slate-100/60 dark:bg-slate-900/60 p-2 rounded-lg cursor-pointer hover:bg-slate-200/60 dark:hover:bg-slate-800/60 transition-colors"><input type="checkbox" name="po_mapping" value="PO12" class="rounded text-brand-600"> <span class="font-bold text-brand-500">PO12 / PO(l)</span> Life-long Learning</label>
                         </div>
                     </div>
                 </div>
@@ -749,9 +760,9 @@ window.scrollToQuestionBuilder = function() {
                 <div class="glass-card p-5 rounded-2xl space-y-4">
                     <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                         <span class="font-bold text-xs theme-text-primary flex items-center gap-1.5">
-                            <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i> Sections 12-16: KP, CEP, CEA & Complexity
+                            <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i> Sections 12-16: Knowledge Profile (KP), Complex Problem (CEP) & Activity (CEA)
                         </span>
-                        <span class="text-[10px] theme-text-muted">Engineering Attributes</span>
+                        <span class="text-[10px] text-amber-500 font-bold">Engineering Classification</span>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
@@ -770,26 +781,40 @@ window.scrollToQuestionBuilder = function() {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-3 text-[11px]">
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Knowledge Profile (KP)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP1" checked> KP1 Natural Sci</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="kp_mapping" value="KP3" checked> KP3 Engineering</label>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Knowledge Profile (KP)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP1" checked> <span class="font-semibold">KP1:</span> Natural Sciences</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP2"> <span class="font-semibold">KP2:</span> Mathematics & Computing</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP3" checked> <span class="font-semibold">KP3:</span> Engineering Fundamentals</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP4"> <span class="font-semibold">KP4:</span> Specialist Engineering</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP5"> <span class="font-semibold">KP5:</span> Engineering Design</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP6"> <span class="font-semibold">KP6:</span> Engineering Practice</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP7"> <span class="font-semibold">KP7:</span> Engineering in Society</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="kp_mapping" value="KP8"> <span class="font-semibold">KP8:</span> Research Literature</label>
                             </div>
                         </div>
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Complex Problems (CEP)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP1" checked> CEP1 Depth Knowledge</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cep_mapping" value="CEP2"> CEP2 Conflicting Req</label>
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Complex Problems (CEP)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP1" checked> <span class="font-semibold">CEP1:</span> In-depth Knowledge</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP2" checked> <span class="font-semibold">CEP2:</span> Conflicting Requirements</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP3"> <span class="font-semibold">CEP3:</span> Depth of Analysis</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP4"> <span class="font-semibold">CEP4:</span> Unfamiliar Issues</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP5"> <span class="font-semibold">CEP5:</span> Beyond Standard Codes</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP6"> <span class="font-semibold">CEP6:</span> Diverse Stakeholders</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cep_mapping" value="CEP7"> <span class="font-semibold">CEP7:</span> Interdependence</label>
                             </div>
                         </div>
-                        <div>
-                            <span class="font-bold block mb-1 theme-text-secondary">Complex Activities (CEA)</span>
-                            <div class="space-y-1 max-h-20 overflow-y-auto pr-1">
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA1" checked> CEA1 Diverse Resources</label>
-                                <label class="flex items-center gap-1"><input type="checkbox" name="cea_mapping" value="CEA2"> CEA2 Novel Solution</label>
+                        <div class="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
+                            <span class="font-bold block mb-1.5 text-amber-600 dark:text-amber-400">Complex Activities (CEA)</span>
+                            <div class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA1" checked> <span class="font-semibold">CEA1:</span> Diverse Resources</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA2"> <span class="font-semibold">CEA2:</span> Significant Interactions</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA3"> <span class="font-semibold">CEA3:</span> Innovation & Novelty</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA4"> <span class="font-semibold">CEA4:</span> Societal Consequences</label>
+                                <label class="flex items-center gap-1.5"><input type="checkbox" name="cea_mapping" value="CEA5"> <span class="font-semibold">CEA5:</span> Unfamiliarity</label>
                             </div>
                         </div>
                     </div>

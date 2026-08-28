@@ -869,13 +869,13 @@ Return strict JSON ONLY:
                     f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
                     for idx, s in enumerate(q_dto.master_solution_steps)
                 )
-            master_solution_section = f"""
+            master_solution_section += f"""
 [AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
 {q_dto.master_solution_text}{steps_formatted}
 """
-        elif q_dto.ideal_answer:
-            master_solution_section = f"""
-[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+        if q_dto.ideal_answer and q_dto.ideal_answer.strip() != (q_dto.master_solution_text or '').strip():
+            master_solution_section += f"""
+[TEACHER EXPECTED MODEL ANSWER & IDEAL KEY]
 {q_dto.ideal_answer}
 """
 
@@ -977,13 +977,13 @@ Return ONLY raw JSON without markdown commentary.
                     f"- Step {s.get('step', idx+1)}: {s.get('description', '')} [Expected Marks: {s.get('marks', 0)}]"
                     for idx, s in enumerate(q_dto.master_solution_steps)
                 )
-            master_solution_section = f"""
+            master_solution_section += f"""
 [AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
 {q_dto.master_solution_text}{steps_formatted}
 """
-        elif q_dto.ideal_answer:
-            master_solution_section = f"""
-[AUTHORITATIVE MASTER / BENCHMARK SOLUTION (GOLDEN GROUND TRUTH)]
+        if q_dto.ideal_answer and q_dto.ideal_answer.strip() != (q_dto.master_solution_text or '').strip():
+            master_solution_section += f"""
+[TEACHER EXPECTED MODEL ANSWER & IDEAL KEY]
 {q_dto.ideal_answer}
 """
 
