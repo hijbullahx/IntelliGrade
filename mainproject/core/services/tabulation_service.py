@@ -45,15 +45,22 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
     student_id = (submission.student_roll_no or submission.student_name or f"STU-{submission.id}").strip()
     student_name = (submission.student_name or "Unknown Student").strip()
 
-    # 3. Aggregate Question-level Marks & CO/PO Distributions for ALL submissions of this student in this course
-    all_subs = StudentSubmission.objects.filter(
-        examination__course=course
-    ).filter(
+    # 3. Aggregate Question-level Marks & CO/PO Distributions for latest submissions of each distinct exam
+    raw_subs = StudentSubmission.objects.filter(
+        examination__course=course,
         student_roll_no=student_id
-    ).select_related('examination')
+    ).select_related('examination').order_by('examination_id', '-updated_at', '-id')
 
-    if not all_subs.exists():
-        all_subs = [submission]
+    # Deduplicate: pick only the latest active submission per distinct examination
+    unique_exam_subs = {}
+    for s in raw_subs:
+        if s.examination_id not in unique_exam_subs:
+            unique_exam_subs[s.examination_id] = s
+
+    if not unique_exam_subs and submission.examination_id:
+        unique_exam_subs[submission.examination_id] = submission
+
+    active_subs = list(unique_exam_subs.values())
 
     co_scores = {}
     po_scores = {}
@@ -65,7 +72,7 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
         'assignment': []
     }
 
-    for sub in all_subs:
+    for sub in active_subs:
         sub_exam = sub.examination
         ex_title = (sub_exam.title or '').upper()
         if 'MID' in ex_title:
@@ -83,7 +90,6 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
         total_sub_obtained = 0.0
         total_sub_max = 0.0
 
-        # Try sub.answers.all() first
         answers = sub.answers.all().select_related('question', 'evaluation_result')
         if answers.exists():
             for sa in answers:
@@ -139,27 +145,29 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
     record.co_scores = co_scores
     record.po_scores = po_scores
 
-    # 5. Calculate Weighted Overall Marks & Letter Grade
+    # 5. Calculate Exact Institutional Weighted Total Score & Letter Grade
     weights = tabulation.weightage_config or {
-        'class_test': 10, 'midterm': 25, 'final': 50, 'assignment': 10, 'attendance': 5
+        'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0
     }
+    w_ct = float(weights.get('class_test', 10.0))
+    w_mid = float(weights.get('midterm', 25.0))
+    w_fn = float(weights.get('final', 50.0))
+    w_as = float(weights.get('assignment', 10.0))
+    w_att = float(weights.get('attendance', 5.0))
 
-    weighted_sum = 0.0
-    active_weights = 0.0
+    ct_pct = (sum(category_percentages['class_test']) / len(category_percentages['class_test'])) if category_percentages['class_test'] else 0.0
+    mid_pct = (sum(category_percentages['midterm']) / len(category_percentages['midterm'])) if category_percentages['midterm'] else 0.0
+    fn_pct = (sum(category_percentages['final']) / len(category_percentages['final'])) if category_percentages['final'] else 0.0
+    as_pct = (sum(category_percentages['assignment']) / len(category_percentages['assignment'])) if category_percentages['assignment'] else 0.0
 
-    for cat_key, pct_list in category_percentages.items():
-        if pct_list:
-            avg_cat_pct = sum(pct_list) / len(pct_list)
-            w = float(weights.get(cat_key, 0.0))
-            weighted_sum += (avg_cat_pct * (w / 100.0))
-            active_weights += w
+    # Institutional standard weighted sum
+    weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0))
+    
+    # If all academic assessments are taken, attendance is included
+    if category_percentages['final'] or category_percentages['midterm'] or category_percentages['class_test']:
+        weighted_total += w_att
 
-    if active_weights > 0:
-        overall = (weighted_sum / (active_weights / 100.0))
-    else:
-        overall = 0.0
-
-    overall = round(min(100.0, overall), 2)
+    overall = round(min(100.0, max(0.0, weighted_total)), 2)
     record.overall_score = overall
 
     if overall >= 80: record.letter_grade = 'A+'
