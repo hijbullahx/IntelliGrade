@@ -202,33 +202,22 @@ class StudentQuestionHeadingDetector:
         r'^\s*(?:Step|Part|Point|Section|Item)\s*[0-9]{1,2}\b', re.IGNORECASE
     )
 
-    # Universal student question heading patterns supporting ANY question count (1, 2, 5, 10, 20+)
-    HEADING_REGEX_PATTERNS = [
-        # "Ans to the question no. N" / "Answer to Question No. N" / "Ans to the qs no N" / "Ans to N" / "Answer to N" / "Ans to QN" / "Ans to Q.N" / "Ans - N" / "Ans: N" / "Answer No N" / "Ans. 1(a)"
-        re.compile(
-            r'(?:ans(?:wer)?|sol(?:ution)?|soln)\s*(?:to\s*(?:the\s*)?)?(?:(?:q(?:uestion|s)?\s*\.?\s*)?(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)',
-            re.IGNORECASE
-        ),
-        # "Question No N" / "Q. No N" / "Q.N" / "QN" / "Question N" / "Q No: 5" / "Q 2(b)"
-        # Fix 1: Require Q to be a standalone word token — not embedded inside longer OCR garbage
-        # like "Q1cq", "YLQ4vUQSUOAL". The (?:^|[\s\(\[\{]) anchor ensures Q is preceded only by
-        # whitespace, line start, or an opening bracket.
-        re.compile(
-            r'(?:^|[\s\(\[\{])(?:q(?:uestion|s)?\s*\.?\s*(?:no\s*\.?\s*)?)[:\-\.]?\s*([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)',
-            re.IGNORECASE
-        ),
-        # "N নং প্রশ্নের উত্তর" / "N নং সমাধান" / "N নং উত্তর"
-        re.compile(
-            r'([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)\s*(?:নং\s*)?(?:প্রশ্নের\s*)?(?:উত্তর|সমাধান)',
-            re.IGNORECASE
-        ),
-        # "উত্তর নং N" / "প্রশ্ন নং N" / "সমাধান নং N" / "উত্তর: N"
-        re.compile(
-            r'(?:উত্তর|প্রশ্ন|সমাধান)\s*(?:নং\s*)?[:\-\.]?\s*([0-9]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|[০-৯]{1,2}(?:\s*[\(\[]?[a-zA-Z][\)\]]?)?|\b[ivxlcdm]{1,5}\b)',
-            re.IGNORECASE
-        ),
+    # Strict Full-Sentence Academic Answer Header Patterns
+    STRICT_SENTENCE_HEADER_PATTERNS = [
+        # "Ans to the ques/question/q no 1", "Answer to the question no. 2(a)"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+the\s+(?:ques(?:tion)?|q)\.?\s*(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to the no 1", "Answer to the no 2"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+the\s+(?:no\.?|num(?:ber)?\.?)\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to ques/q no 1", "Answer to question 2"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+(?:ques(?:tion)?|q)\.?\s*(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b'),
+        
+        # "Ans to no 1", "Answer to 1"
+        re.compile(r'(?i)\b(?:ans(?:wer)?)\s+to\s+(?:no\.?|num(?:ber)?\.?)?\s*[:\-]?\s*(\d+[a-z]?|[a-z])\b')
     ]
-    SUBCONTINENTAL_HEADING_PATTERNS = HEADING_REGEX_PATTERNS
+    HEADING_REGEX_PATTERNS = STRICT_SENTENCE_HEADER_PATTERNS
+    SUBCONTINENTAL_HEADING_PATTERNS = STRICT_SENTENCE_HEADER_PATTERNS
 
     NUMBER_WORDS = {
         'one': '1', 'two': '2', 'three': '3', 'four': '4', 'foutr': '4', 'five': '5',
@@ -693,57 +682,8 @@ class StudentQuestionHeadingDetector:
                         'reason': 'VERBOSE_SUBCONTINENTAL_PATTERN_MATCH'
                     }
 
-        best_cand = None
-        best_score = 0
-
-        for raw_num, norm_num in num_candidates:
-            # Validate question number against exam questions
-            base_norm = re.sub(r'\D', '', norm_num)
-            is_cand_valid = True
-            if valid_nums_clean:
-                is_cand_valid = (
-                    (norm_num in valid_nums_clean) or
-                    (norm_num.lower() in [v.lower() for v in valid_nums_clean]) or
-                    (base_norm and any(re.sub(r'\D', '', v) == base_norm for v in valid_nums_clean if v))
-                )
-
-            if not is_cand_valid:
-                continue
-
-            # Multi-Factor Score Calculation:
-            score = 0
-            if has_ans_ctx:
-                score += 40
-            if has_q_ctx:
-                score += 35
-            score += 30  # Valid question number
-            score += 10  # Spatial proximity within line window
-            if ymin_pct <= 0.25:
-                score += 5  # Top page position bonus
-
-            if score > best_score:
-                best_score = score
-                best_cand = (raw_num, norm_num)
-
-        if best_cand and best_score >= 70:
-            raw_num, norm_num = best_cand
-            conf = min(0.99, round(best_score / 100.0, 2))
-            return {
-                'is_question_heading': True,
-                'question_number': norm_num,
-                'normalized_number': norm_num,
-                'heading_text': line_str,
-                'confidence': conf,
-                'score': best_score,
-                'heading_type': 'ANSWER_HEADING_CONTEXT',
-                'raw_text': text,
-                'ans_token': ans_token if has_ans_ctx else 'NO',
-                'q_token': q_token if has_q_ctx else 'NO',
-                'raw_num': raw_num,
-                'norm_num': norm_num,
-                'reason': 'CONTEXT_AND_NUMBER_MATCH'
-            }
-
+        # Strict Sentence-Only Policy: Require explicit match from STRICT_SENTENCE_HEADER_PATTERNS.
+        # Loose context combinations (e.g. 'Ans: 1', 'Ans - 1') without full structural sentence are rejected.
         return {
             'is_question_heading': False,
             'question_number': None,
@@ -754,8 +694,9 @@ class StudentQuestionHeadingDetector:
             'raw_text': text,
             'ans_token': ans_token if has_ans_ctx else 'NO',
             'q_token': q_token if has_q_ctx else 'NO',
-            'reason': 'HEADING_SCORE_TOO_LOW'
+            'reason': 'STRICT_FULL_SENTENCE_HEADER_REQUIRED'
         }
+
 
     @classmethod
     def is_potential_heading_line(cls, text: str, ymin_pct: float) -> bool:

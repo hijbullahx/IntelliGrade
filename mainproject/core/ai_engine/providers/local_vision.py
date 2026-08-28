@@ -41,25 +41,55 @@ class LocalOfflineVisionProvider(BaseAIProvider):
         **kwargs
     ) -> str:
         """
-        Sends generation request to local Ollama multimodal endpoint.
+        Sends generation request to local Ollama multimodal endpoint with downscaled 800px JPEG.
         """
+        full_prompt = prompt
+        if system_instruction:
+            full_prompt = f"{system_instruction}\n\n{prompt}"
+
         payload = {
             "model": self.model_name,
-            "prompt": prompt,
+            "prompt": full_prompt,
             "stream": False,
-            "format": "json"
+            "options": {"num_predict": 256, "temperature": 0.1}
         }
-        if system_instruction:
-            payload["system"] = system_instruction
 
         if image_bytes:
+            processed_bytes = None
             if isinstance(image_bytes, str):
-                encoded_img = image_bytes
+                try:
+                    processed_bytes = base64.b64decode(image_bytes)
+                except Exception:
+                    encoded_img = image_bytes
             else:
-                encoded_img = base64.b64encode(image_bytes).decode("utf-8")
+                processed_bytes = image_bytes
+
+            if processed_bytes:
+                try:
+                    import io
+                    from PIL import Image
+                    img = Image.open(io.BytesIO(processed_bytes))
+                    if img.mode in ("RGBA", "P"):
+                        img = img.convert("RGB")
+                    
+                    max_dim = 800
+                    w, h = img.size
+                    if max(w, h) > max_dim:
+                        scale = max_dim / float(max(w, h))
+                        new_w = max(1, int(w * scale))
+                        new_h = max(1, int(h * scale))
+                        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                    
+                    out_buffer = io.BytesIO()
+                    img.save(out_buffer, format="JPEG", quality=75, optimize=True)
+                    encoded_img = base64.b64encode(out_buffer.getvalue()).decode("utf-8")
+                except Exception as resize_err:
+                    logger.warning(f"[LocalOfflineVisionProvider] Image downscale fallback: {resize_err}")
+                    encoded_img = base64.b64encode(processed_bytes).decode("utf-8")
+
             payload["images"] = [encoded_img]
 
-        req_timeout = timeout if (timeout is not None and timeout > 0) else 90.0
+        req_timeout = timeout if (timeout is not None and timeout > 0) else 35.0
         try:
             resp = requests.post(self.endpoint, json=payload, timeout=req_timeout)
             resp.raise_for_status()

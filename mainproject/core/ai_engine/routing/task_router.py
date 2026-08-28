@@ -47,15 +47,15 @@ class TaskRouter:
     """
 
     TASK_CHAINS: Dict[TaskType, List[Type[BaseAIProvider]]] = {
-        TaskType.OCR_TEXT: [GeminiProvider, GroqProvider, OpenRouterProvider, OpenAIProvider, LocalOfflineVisionProvider, OllamaProvider],
-        TaskType.ROUTINE_PARSE: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.QUESTION_MAPPING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, GroqProvider, OpenRouterProvider, OpenAIProvider, LocalOfflineVisionProvider],
-        TaskType.ANSWER_GRADING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.FEEDBACK_GENERATION: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.REPORT_SUMMARY: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.COMPLEX_REASONING: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
-        TaskType.GENERIC: [GroqProvider, GeminiProvider, OpenRouterProvider, OpenAIProvider, OllamaProvider],
+        TaskType.OCR_TEXT: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ROUTINE_PARSE: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.QUESTION_MAPPING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ANSWER_GRADING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.FEEDBACK_GENERATION: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.REPORT_SUMMARY: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.COMPLEX_REASONING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
+        TaskType.GENERIC: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
     }
 
     TASK_MAX_IMAGES: Dict[TaskType, int] = {
@@ -137,13 +137,20 @@ class TaskRouter:
 
             candidate_chain.append(p_cls)
 
+        # Set 30.0s timeout budget for local CPU inference on Moondream/Ollama, 6.0s for cloud APIs
+        is_local_cpu_inference = any(
+            issubclass(p, (LocalOfflineVisionProvider, OllamaProvider)) or p in (LocalOfflineVisionProvider, OllamaProvider)
+            for p in candidate_chain
+        )
+        timeout_budget = 30.0 if is_local_cpu_inference else 6.0
+
         return ProviderStrategy(
             task_type=task_type,
             execution_chain=candidate_chain,
             requires_local_deterministic=requires_local,
             max_images=max_imgs,
             requires_json=requires_json,
-            timeout_seconds=6.0,
+            timeout_seconds=timeout_budget,
             manual_review_threshold=0.70
         )
 

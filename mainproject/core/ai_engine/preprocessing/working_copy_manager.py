@@ -113,7 +113,7 @@ class WorkingCopyManager:
             doc.close()
 
         from core.ai_engine.services.workflow import SubmissionWorkflow
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.WORKING_COPY_CREATED)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.WORKING_COPY_CREATED, force=True)
 
         print(f"\n==================================================")
         print(f"WORKING COPY CREATED")
@@ -175,6 +175,7 @@ class WorkingCopyManager:
         preview_pdf_path = os.path.join(cls.PREVIEW_DIR, f"submission_{submission.id}_preview.pdf")
 
         doc = fitz.open()
+        page_count = 0
 
         for sp in pages:
             img_path = sp.working_image_path if (sp.working_image_path and os.path.exists(sp.working_image_path)) else cls.get_latest_working_image_path(submission.id, sp.page_number)
@@ -185,17 +186,20 @@ class WorkingCopyManager:
                 pdf_page.insert_image(fitz.Rect(0, 0, w, h), filename=img_path)
                 pix = None
 
-        doc.save(preview_pdf_path)
-        page_count = len(doc)
-        doc.close()
+        if len(doc) > 0:
+            doc.save(preview_pdf_path)
+            page_count = len(doc)
+            doc.close()
 
-        sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
-        with open(preview_pdf_path, 'rb') as f_pdf:
-            from django.core.files.base import ContentFile
-            sub_pdf.pdf_file.save(f"submission_{submission.id}_preview.pdf", ContentFile(f_pdf.read()), save=False)
-            sub_pdf.page_count = page_count
-            sub_pdf.file_size_bytes = os.path.getsize(preview_pdf_path)
-            sub_pdf.save()
+            sub_pdf, _ = SubmissionPDF.objects.get_or_create(submission=submission)
+            with open(preview_pdf_path, 'rb') as f_pdf:
+                from django.core.files.base import ContentFile
+                sub_pdf.pdf_file.save(f"submission_{submission.id}_preview.pdf", ContentFile(f_pdf.read()), save=False)
+                sub_pdf.page_count = page_count
+                sub_pdf.file_size_bytes = os.path.getsize(preview_pdf_path)
+                sub_pdf.save()
+        else:
+            doc.close()
 
         from core.ai_engine.services.workflow import SubmissionWorkflow
         SubmissionWorkflow.advance(submission, StudentSubmission.Status.PDF_GENERATED)

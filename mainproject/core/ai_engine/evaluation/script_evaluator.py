@@ -168,15 +168,28 @@ class AIScriptEvaluator:
         total_max = 0.0
         has_manual_review = False
 
-        from django.db import close_old_connections
-
         # Rate-Safe Sequential Evaluation (Guarantees zero concurrency collisions on Groq/Cloud APIs)
         evaluated_results = []
         for a_idx, ans_obj in enumerate(answers, 1):
             close_old_connections()
             if a_idx > 1:
-                time.sleep(1.2)  # 1.2s delay between questions to respect rate limit thresholds
+                time.sleep(0.5)
             try:
+                # Progress update per question evaluation
+                try:
+                    from core.views import _update_submission_progress_cache
+                    _update_submission_progress_cache(
+                        submission_id=submission.id,
+                        processed_pages=total_pages_count,
+                        total_pages=total_pages_count,
+                        evaluated_regions=a_idx,
+                        total_regions=total_answers_count,
+                        msg=f"Evaluating Question {ans_obj.question.question_number} with Master Benchmark...",
+                        status='processing'
+                    )
+                except Exception:
+                    pass
+
                 eval_res = cls._evaluate_answer_v3(ans_obj, options, user, trace_dir)
                 if eval_res:
                     evaluated_results.append((a_idx, ans_obj, eval_res, None))
@@ -658,14 +671,22 @@ Return strict JSON ONLY:
             if need_save:
                 submission.save()
 
+        # Store complete OCR page text cache map into StudentSubmission for fast zero-vision evaluation
+        try:
+            ocr_cache = {f"page_{sp.page_number}": sp.ocr_raw_text or "" for sp in extracted_pages}
+            submission.extracted_ocr_data = ocr_cache
+            submission.save(update_fields=['extracted_ocr_data'])
+        except Exception as cache_err:
+            print(f"[OCR CACHE SAVE WARNING] {cache_err}")
+
         from core.ai_engine.services.workflow import SubmissionWorkflow
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE)
-        SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.OCR_COMPLETE, force=True)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.SEGMENTED, force=True)
         return extracted_pages
 
     @classmethod
     def _run_ocr_on_bgr(cls, bgr_img: np.ndarray) -> Tuple[str, float]:
-        # 1. Try PyTesseract first (fast, CPU safe)
+        # 1. Try PyTesseract first (fast, native CPU safe)
         try:
             import pytesseract
             from PIL import Image as PILImg
@@ -673,28 +694,49 @@ Return strict JSON ONLY:
             rgb = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
             pil_img = PILImg.fromarray(rgb)
             text = pytesseract.image_to_string(pil_img).strip()
-            if text:
-                return text, 0.80
+            if text and len(text) > 5:
+                return text, 0.85
         except Exception:
             pass
 
-        # 2. Try EasyOCR if explicitly enabled
+        # 2. Try EasyOCR for handwritten script page indexing
         try:
             from config.ocr_config import get_ocr_reader, is_easyocr_enabled
-            if not is_easyocr_enabled():
-                return "", 0.0
-            reader = get_ocr_reader()
-            if not reader:
-                return "", 0.0
-            results = reader.readtext(bgr_img)
-            texts = [r[1].strip() for r in results if r[1].strip()]
-            confs = [float(r[2]) for r in results if r[1].strip()]
-            joined_text = "\n".join(texts)
-            avg_conf = float(np.mean(confs)) if confs else 0.0
-            return joined_text, round(avg_conf, 2)
+            if is_easyocr_enabled():
+                reader = get_ocr_reader()
+                if reader:
+                    results = reader.readtext(bgr_img)
+                    texts = [r[1].strip() for r in results if r[1].strip()]
+                    confs = [float(r[2]) for r in results if r[1].strip()]
+                    joined_text = "\n".join(texts).strip()
+                    if joined_text:
+                        avg_conf = float(np.mean(confs)) if confs else 0.80
+                        return joined_text, round(avg_conf, 2)
         except Exception as e:
-            print(f"[OCR V3 WARNING] {e}")
-            return "", 0.0
+            print(f"[OCR V3 EASYOCR WARNING] {e}")
+
+        # 3. Only query Vision LLM if text length is strictly 0 (with short 5.0s timeout max)
+        try:
+            import cv2
+            _, enc_buf = cv2.imencode('.jpg', bgr_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            img_bytes = enc_buf.tobytes()
+            from core.ai_engine.providers.factory import AIProviderFactory
+            from core.ai_engine.routing.task_types import TaskType
+            provider = AIProviderFactory.get_provider()
+            vis_text = provider.generate_completion(
+                prompt="Transcribe all visible handwritten or printed text on this student exam page verbatim line-by-line. Output text only.",
+                image_bytes=img_bytes,
+                mime_type="image/jpeg",
+                timeout=5.0,
+                task_type=TaskType.OCR_TEXT
+            )
+            if vis_text and len(vis_text.strip()) > 5:
+                cleaned = re.sub(r'```[a-zA-Z]*', '', vis_text).replace('```', '').strip()
+                return cleaned, 0.80
+        except Exception as e_vis:
+            print(f"[OCR V3 VISION FALLBACK WARNING] {e_vis}")
+
+        return "", 0.0
 
     @classmethod
     def _segment_answers_v3(
@@ -1142,12 +1184,19 @@ Return ONLY JSON without markdown commentary.
 
         # Check if student extracted OCR text is available for Pure Text-First Fast Evaluation (< 4KB, ~1.5s per question)
         extracted_text = (answer.extracted_text or '').strip()
+        cached_ocr_data = getattr(answer.submission, 'extracted_ocr_data', {}) or {}
+
         if (not extracted_text or len(extracted_text) <= 15 or extracted_text.startswith('[Question')) and q_map and q_map.page_numbers_json:
-            pages_dict = {p.page_number: p for p in answer.submission.pages.all()}
+            mapped_pages = sorted([int(p) for p in q_map.page_numbers_json if str(p).isdigit() or isinstance(p, (int, float))])
             combined_parts = []
-            for p_num in sorted(q_map.page_numbers_json):
-                if p_num in pages_dict and pages_dict[p_num].ocr_raw_text:
-                    combined_parts.append(f"--- PAGE {p_num} ---\n" + pages_dict[p_num].ocr_raw_text)
+            pages_dict = {p.page_number: p for p in answer.submission.pages.all()}
+            for p_num in mapped_pages:
+                key = f"page_{p_num}"
+                p_text = cached_ocr_data.get(key)
+                if not p_text and p_num in pages_dict:
+                    p_text = pages_dict[p_num].ocr_raw_text
+                if p_text and p_text.strip():
+                    combined_parts.append(f"--- PAGE {p_num} ---\n" + p_text.strip())
             if combined_parts:
                 extracted_text = "\n\n".join(combined_parts).strip()
                 answer.extracted_text = extracted_text
@@ -1261,6 +1310,8 @@ Return ONLY JSON without markdown commentary.
 
         elapsed_ms = round((time.time() - start_t) * 1000, 2)
         cls._write_pipeline_log(answer.submission.id, f"[AI LLM EVAL] Q{q_dto.number} evaluated via {ai_provider.__class__.__name__} in {elapsed_ms}ms (VisualMode={used_visual_mode}, Success={eval_data is not None}).")
+
+
 
         if eval_data:
             # Update student answer transcription from multimodal vision output

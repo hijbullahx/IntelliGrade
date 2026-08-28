@@ -397,6 +397,7 @@ class StudentSubmission(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.UPLOADED)
     requires_manual_review = models.BooleanField(default=False)
     is_finalized = models.BooleanField(default=False, help_text="Set to True after teacher clicks Finalize Evaluation. Triggers temp file cleanup.")
+    extracted_ocr_data = models.JSONField(default=dict, blank=True, help_text='Cached OCR text per page: {"page_1": "...", "page_2": "..."}')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

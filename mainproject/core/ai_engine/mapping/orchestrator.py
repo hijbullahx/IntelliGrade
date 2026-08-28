@@ -137,6 +137,8 @@ class QuestionMappingOrchestrator:
         print(f"Submission #{submission.id} ({len(pages)} pages)")
         print(f"==================================================\n")
 
+
+
         # PASS 1: Evidence Gathering (Global Ownership Evidence Matrix)
         evidence_matrix = {}
 
@@ -579,9 +581,8 @@ class QuestionMappingOrchestrator:
             if not pg_list:
                 missing_q_nums.append(QuestionAccessor.get_question_number(q))
 
-            status = QuestionMapping.Status.AUTO_HIGH
-            if avg_conf < 0.75 or not pg_list or any(r.requires_review for r in reg_list) or QuestionAccessor.get_question_number(q) in duplicate_nums:
-                status = QuestionMapping.Status.AMBIGUOUS
+            status = QuestionMapping.Status.AUTO_HIGH if (avg_conf >= 0.75 and pg_list and not any(r.requires_review for r in reg_list) and QuestionAccessor.get_question_number(q) not in duplicate_nums) else QuestionMapping.Status.AMBIGUOUS
+            if status == QuestionMapping.Status.AMBIGUOUS:
                 requires_review = True
 
             q_map_obj, _ = QuestionMapping.objects.get_or_create(

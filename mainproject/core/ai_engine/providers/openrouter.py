@@ -129,18 +129,12 @@ class OpenRouterProvider(BaseAIProvider):
             method='POST'
         )
 
-        # Free-tier vision models are slow with large payloads — use generous defaults
-        has_images_in_call = bool(image_bytes or extra_files)
+        # Strict Hard Timeout: Enforce max 6.0s on OpenRouter free tier to prevent 90s stalls
         if timeout is not None:
-            timeout_sec = float(timeout)
+            timeout_sec = min(float(timeout), 6.0)
         else:
-            env_timeout = float(os.environ.get('AI_REQUEST_TIMEOUT', 0) or 0)
-            if env_timeout > 0:
-                timeout_sec = env_timeout
-            elif has_images_in_call:
-                timeout_sec = float(os.environ.get('AI_OPENROUTER_VISION_TIMEOUT', 6.0))
-            else:
-                timeout_sec = float(os.environ.get('AI_OPENROUTER_TEXT_TIMEOUT', 6.0))
+            timeout_sec = 6.0
+
         start_t = time.monotonic()
         print(f"[AI TIMING] OpenRouter model {selected_model} START (timeout={timeout_sec:.1f}s)")
         import socket

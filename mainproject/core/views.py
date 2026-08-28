@@ -124,29 +124,35 @@ def student_dashboard(request):
 
     # 1. Fetch evaluated StudentSubmissions
     student_submissions = StudentSubmission.objects.filter(
-        Q(student=user) | Q(student_roll_no__iexact=user.username),
+        Q(student=user) | Q(student_roll_no__iexact=user.username) | Q(student_name__icontains=user.username),
         status__in=[
             StudentSubmission.Status.AI_EVALUATED,
             StudentSubmission.Status.UNDER_REVIEW,
             StudentSubmission.Status.FINALIZED
         ]
-    ).select_related('examination', 'examination__course')
+    ).select_related('examination', 'examination__course').order_by('-updated_at')
 
     for sub in student_submissions:
         max_marks = float(sub.examination.total_marks if (sub.examination and sub.examination.total_marks) else (sub.total_max_marks or 100.0))
         obtained = float(sub.total_obtained_marks or 0.0)
-        pct = round((obtained / max_marks * 100), 1) if max_marks > 0 else 0.0
+        pct = round((obtained / max(1.0, max_marks) * 100), 1) if max_marks > 0 else 0.0
 
-        answers = sub.answers.select_related('question', 'evaluation_result').all()
+        answers = sub.answers.select_related('question', 'evaluation_result').all().order_by('question__question_number')
         answer_breakdowns = []
         for ans in answers:
             eval_res = getattr(ans, 'evaluation_result', None)
+            q_num = ans.question.formatted_number if hasattr(ans.question, 'formatted_number') else (ans.question.question_number or 'Q')
+            q_txt = ans.question.prompt_text if hasattr(ans.question, 'prompt_text') else getattr(ans.question, 'question_text', '')
+            q_max = float(eval_res.maximum_marks) if eval_res else float(getattr(ans.question, 'max_marks', 0.0))
+
             answer_breakdowns.append({
-                'question_number': ans.question.question_number if ans.question else 'Q',
-                'question_text': ans.question.question_text if ans.question else '',
+                'question_number': q_num,
+                'question_text': q_txt,
                 'obtained_marks': float(eval_res.obtained_marks) if eval_res else 0.0,
-                'maximum_marks': float(eval_res.maximum_marks) if eval_res else (float(ans.question.marks) if ans.question else 0.0),
+                'maximum_marks': q_max,
                 'feedback_text': eval_res.feedback_text if eval_res else '',
+                'strengths': eval_res.strengths_json if eval_res else [],
+                'mistakes': eval_res.mistakes_json if eval_res else [],
             })
 
         evaluated_results_list.append({
@@ -160,7 +166,9 @@ def student_dashboard(request):
             'percentage': pct,
             'grade': get_letter_grade(pct),
             'status_label': 'Finalized & Certified' if sub.status == StudentSubmission.Status.FINALIZED else 'AI Evaluated',
+            'is_finalized': (sub.status == StudentSubmission.Status.FINALIZED),
             'evaluated_at': sub.updated_at,
+            'download_pdf_url': f"/api/submission/{sub.id}/download-evaluated-pdf/",
             'answers': answer_breakdowns,
         })
 

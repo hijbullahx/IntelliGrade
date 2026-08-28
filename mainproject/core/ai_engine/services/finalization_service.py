@@ -67,6 +67,17 @@ class FinalizationService:
         except Exception as _e_tab:
             print(f"[TABULATION SYNC WARNING] Failed syncing submission #{submission.id} to tabulation: {_e_tab}")
 
+        # 2.2 Dispatch Official Evaluated Results & Grade Email to Student
+        try:
+            from core.services.email_service import EmailService
+            EmailService.send_submission_evaluated_email(
+                submission=submission,
+                final_pdf_path=archived_final_pdf,
+                sync=False
+            )
+        except Exception as _e_email:
+            print(f"[STUDENT EMAIL NOTIFICATION WARNING] {_e_email}")
+
         # 3. Purge Temporary Files (Working images, preview PDFs, temporary crops, OCR cache)
         deleted_files = cls._purge_temporary_artifacts(submission.id)
 

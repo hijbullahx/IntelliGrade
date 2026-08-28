@@ -54,14 +54,14 @@
         </div>
     </div>
 
-    <!-- Collapsible Student Evaluated Answer Scripts & Results Section -->
-    <div id="scripts-results-section" class="space-y-4 hidden transition-all duration-300">
+    <!-- Student Evaluated Answer Scripts & Results Section -->
+    <div id="scripts-results-section" class="space-y-4 transition-all duration-300">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold theme-text-primary flex items-center gap-2">
                 <i data-lucide="file-check-2" class="w-5 h-5 text-emerald-500"></i> Your Evaluated Scripts & Course Results
             </h2>
             <button type="button" onclick="toggleStudentSection('scripts-results-section', 'scripts-chevron')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 theme-text-primary rounded-lg text-xs font-bold flex items-center gap-1 transition-all">
-                <i data-lucide="x" class="w-3.5 h-3.5"></i> Close Results
+                <i data-lucide="chevrons-up-down" class="w-3.5 h-3.5"></i> Toggle View
             </button>
         </div>
 
@@ -80,13 +80,18 @@
                     <h3 class="text-base font-bold theme-text-primary">{{ result.course_title }} &bull; {{ result.exam_title }}</h3>
                     <p class="text-xs theme-text-muted mt-0.5">Evaluated on {{ result.evaluated_at|date:"M d, Y" }}</p>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-4 flex-wrap">
                     <div class="text-right">
                         <span class="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
                             {{ result.obtained_marks }} <span class="text-sm font-normal theme-text-muted">/ {{ result.total_marks }}</span>
                         </span>
                         <span class="block text-xs font-bold text-emerald-500 dark:text-emerald-400">Grade: {{ result.grade }} ({{ result.percentage }}%)</span>
                     </div>
+                    {% if result.download_pdf_url %}
+                    <a href="{{ result.download_pdf_url }}" target="_blank" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md transition-all">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> Download Evaluated Script
+                    </a>
+                    {% endif %}
                 </div>
             </div>
 
@@ -106,7 +111,7 @@
                         {% endif %}
                         {% if ans.feedback_text %}
                         <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-200">
-                            <strong>AI & Instructor Feedback:</strong> {{ ans.feedback_text }}
+                            <strong>Feedback:</strong> {{ ans.feedback_text }}
                         </div>
                         {% endif %}
                     </div>
