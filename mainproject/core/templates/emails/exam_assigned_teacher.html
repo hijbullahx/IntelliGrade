@@ -44,9 +44,9 @@
     </ul>
 </div>
 
-<div style="text-align: center; margin-top: 24px;">
-    <a href="{{ workspace_url|default:'http://127.0.0.1:8000/teacher/login/' }}" class="btn-primary" style="display: inline-block; padding: 14px 28px; font-size: 13.5px; font-weight: 800; text-decoration: none; border-radius: 12px; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color: #ffffff; box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4);">
-        Access Examination in Faculty Portal &rarr;
+<div style="text-align: center; margin-top: 26px;">
+    <a href="{{ rubric_url|default:workspace_url|default:'http://127.0.0.1:8000/teacher/questions-rubric/' }}" class="btn-primary" style="display: inline-block; padding: 14px 28px; font-size: 14px; font-weight: 800; text-decoration: none; border-radius: 12px; background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%); color: #ffffff; box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4);">
+        Setup Paper & Rubric &rarr;
     </a>
 </div>
 {% endblock %}

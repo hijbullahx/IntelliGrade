@@ -1338,7 +1338,8 @@ def exam_create(request):
                     course_code=course.code,
                     course_title=course.title,
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass
@@ -1894,7 +1895,8 @@ def edit_exam(request, exam_id):
                     course_code=exam.course.code if exam.course else "",
                     course_title=exam.course.title if exam.course else "",
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass
@@ -1985,7 +1987,8 @@ def api_publish_exam(request):
                     course_code=course.code,
                     course_title=course.title,
                     exam_date=str(exam.exam_date),
-                    total_marks=str(exam.total_marks)
+                    total_marks=str(exam.total_marks),
+                    exam_id=exam.id
                 )
             except Exception as _e:
                 pass

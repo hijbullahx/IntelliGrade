@@ -319,22 +319,30 @@ class EmailService:
         course_title: str,
         exam_date: str,
         total_marks: str = "100",
+        exam_id: Optional[int] = None,
         sync: bool = False,
     ):
-        """Sends notification to a teacher when assigned as the examiner for an examination."""
+        """Sends notification to a teacher when assigned as the examiner for an examination with direct link to Setup Paper & Rubrics."""
         recipient = getattr(teacher_user, 'email', None) or getattr(teacher_user, 'username', None)
         if not recipient or '@' not in recipient:
             return None
 
+        base_url = cls._get_base_url()
         teacher_name = teacher_user.get_full_name() or teacher_user.username
         subject = f"[Examiner Assigned] {course_code} - {exam_title}"
+
+        rubric_url = f"{base_url}/teacher/exam/{exam_id}/questions-rubric/" if exam_id else f"{base_url}/teacher/questions-rubric/"
+
         context = {
             'teacher_name': teacher_name,
+            'exam_id': exam_id,
             'exam_title': exam_title,
             'course_code': course_code,
             'course_title': course_title,
             'exam_date': str(exam_date),
             'total_marks': str(total_marks),
-            'workspace_url': f"{cls._get_base_url()}/teacher/login/",
+            'rubric_url': rubric_url,
+            'workspace_url': rubric_url,
         }
         return cls._send_async_email(subject, [recipient], 'emails/exam_assigned_teacher.html', context, sync=sync)
+
