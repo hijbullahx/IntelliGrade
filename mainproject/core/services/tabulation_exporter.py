@@ -121,39 +121,59 @@ def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
                             if not final_exam:
                                 final_exam = ex_info
 
-                def _get_q(exam_obj, q_num, fallback_pct=None):
-                    if not exam_obj:
-                        return 0
-                    bk = exam_obj.get('breakdown') or {}
-                    for k in [f"Q{q_num}", str(q_num), f"q{q_num}", f"Q{q_num}(a)", f"{q_num}(a)"]:
-                        if k in bk:
-                            return float(bk[k])
-                    if fallback_pct is not None and not bk:
-                        return round(float(exam_obj.get('obtained', 0.0)) * fallback_pct, 1)
-                    return 0
+                # Extract categories
+                ct_data = gr.class_test_data
+                mid_data = gr.midterm_data
+                final_data = gr.final_data
+                assign_data = gr.assignment_data
 
-                # CT Q1..Q6 (Cols D:I)
-                for q_i, col in enumerate(['D', 'E', 'F', 'G', 'H', 'I'], 1):
-                    ws_home[f"{col}{r_idx}"] = _get_q(ct_exam, q_i)
+                # CT Q1..Q6 (Cols D:I) - Active: Q1..Q4 (25 marks each = 100 max)
+                if ct_data:
+                    ct_pct = float(ct_data.get('percentage', 0.0))
+                    q_val = round(ct_pct * 0.25, 2)
+                    for col in ['D', 'E', 'F', 'G']:
+                        ws_home[f"{col}{r_idx}"] = q_val
+                    for col in ['H', 'I']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
+                else:
+                    for col in ['D', 'E', 'F', 'G', 'H', 'I']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
 
-                # Mid Q1..Q6 (Cols L:Q)
-                for q_i, col in enumerate(['L', 'M', 'N', 'O', 'P', 'Q'], 1):
-                    ws_home[f"{col}{r_idx}"] = _get_q(mid_exam, q_i)
+                # Mid Q1..Q6 (Cols L:Q) - Active: Q1..Q4 (25 marks each = 100 max)
+                if mid_data:
+                    mid_pct = float(mid_data.get('percentage', 0.0))
+                    q_val = round(mid_pct * 0.25, 2)
+                    for col in ['L', 'M', 'N', 'O']:
+                        ws_home[f"{col}{r_idx}"] = q_val
+                    for col in ['P', 'Q']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
+                else:
+                    for col in ['L', 'M', 'N', 'O', 'P', 'Q']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
 
                 # 2nd Interim Q1..Q6 (Cols T:Y)
-                for q_i, col in enumerate(['T', 'U', 'V', 'W', 'X', 'Y'], 1):
-                    ws_home[f"{col}{r_idx}"] = _get_q(interim2_exam, q_i)
+                for col in ['T', 'U', 'V', 'W', 'X', 'Y']:
+                    ws_home[f"{col}{r_idx}"] = 0.0
 
-                # Final Exam Q1..Q12 (Cols AB:AM)
-                for q_i, col in enumerate(['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM'], 1):
-                    ws_home[f"{col}{r_idx}"] = _get_q(final_exam, q_i, fallback_pct=1.0/12.0 if (final_exam and not final_exam.get('breakdown')) else None)
+                # Final Exam Q1..Q12 (Cols AB:AM) - Active: Q1..Q10 (10 marks each = 100 max)
+                if final_data:
+                    fn_pct = float(final_data.get('percentage', 0.0))
+                    q_val = round(fn_pct * 0.10, 2)
+                    for col in ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']:
+                        ws_home[f"{col}{r_idx}"] = q_val
+                    for col in ['AL', 'AM']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
+                else:
+                    for col in ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM']:
+                        ws_home[f"{col}{r_idx}"] = 0.0
 
                 # Assignment (Col AP)
-                if assign_exam:
-                    ws_home[f"AP{r_idx}"] = float(assign_exam.get('obtained', 0.0))
-                else:
-                    # Keep formula referencing ASSIGNMENT!F{r_idx-1} or 0
-                    pass
+                as_val = float(assign_data.get('percentage', 0.0)) if assign_data else 0.0
+                ws_home[f"AP{r_idx}"] = as_val
+
+                # Formula for total with Attendance (Col AQ)
+                att_val = float(getattr(gr, 'attendance_marks', 5.0) or 5.0)
+                ws_home[f"AQ{r_idx}"] = f"=(J{r_idx}*0.1)+(R{r_idx}*0.25)+(AN{r_idx}*0.5)+(AP{r_idx}*0.1)+{att_val}"
             else:
                 # Clear unscanned dummy rows so they are not evaluated
                 ws_home[f"A{r_idx}"] = None
@@ -161,6 +181,7 @@ def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
                 ws_home[f"C{r_idx}"] = None
                 for col in ['D', 'E', 'F', 'G', 'H', 'I', 'L', 'M', 'N', 'O', 'P', 'Q', 'T', 'U', 'V', 'W', 'X', 'Y', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AP']:
                     ws_home[f"{col}{r_idx}"] = 0
+                ws_home[f"AQ{r_idx}"] = 0
 
     # 2. ASSIGNMENT SHEET
     if "ASSIGNMENT" in wb.sheetnames:
@@ -169,12 +190,8 @@ def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
             st_idx = r_idx - 10
             if st_idx < num_students:
                 gr = grade_records[st_idx]
-                as_val = 0.0
-                ex_scores = gr.exam_scores or {}
-                for ex in ex_scores.values():
-                    if isinstance(ex, dict) and ('assign' in str(ex.get('category', '')).lower() or 'assign' in str(ex.get('exam_type', '')).lower()):
-                        as_val = float(ex.get('obtained', 0.0))
-
+                assign_data = gr.assignment_data
+                as_val = float(assign_data.get('percentage', 0.0)) if assign_data else 0.0
                 ws_as[f"D{r_idx}"] = round(as_val * 0.5, 1) if as_val > 0 else 0
                 ws_as[f"E{r_idx}"] = round(as_val * 0.5, 1) if as_val > 0 else 0
             else:
