@@ -5497,17 +5497,27 @@ def api_update_student_grade_record(request, record_id):
         if student_name:
             record.student_name = student_name
 
-        ct_pct = float(data.get('class_test', 0.0) or 0.0)
-        mid_pct = float(data.get('midterm', 0.0) or 0.0)
-        fn_pct = float(data.get('final', 0.0) or 0.0)
-        as_pct = float(data.get('assignment', 0.0) or 0.0)
-        att_marks = float(data.get('attendance_marks', data.get('attendance', 5.0)) or 5.0)
-        record.attendance_marks = min(5.0, max(0.0, att_marks))
+        def parse_optional_float(val):
+            if val is None or str(val).strip() == '':
+                return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
+
+        ct_pct = parse_optional_float(data.get('class_test'))
+        mid_pct = parse_optional_float(data.get('midterm'))
+        fn_pct = parse_optional_float(data.get('final'))
+        as_pct = parse_optional_float(data.get('assignment'))
+        att_raw = parse_optional_float(data.get('attendance_marks', data.get('attendance')))
+        record.attendance_marks = min(5.0, max(0.0, att_raw if att_raw is not None else 5.0))
         record.is_manually_edited = True
 
         exam_scores = record.exam_scores or {}
 
         def set_cat_score(cat_key, title, pct_val):
+            if pct_val is None:
+                return
             found = False
             for k, ex in exam_scores.items():
                 if isinstance(ex, dict) and (ex.get('category') == cat_key or ex.get('exam_type') == cat_key):
@@ -5516,7 +5526,7 @@ def api_update_student_grade_record(request, record_id):
                     ex['max_marks'] = 100.0
                     found = True
                     break
-            if not found and pct_val >= 0:
+            if not found:
                 exam_scores[f"manual_{cat_key}"] = {
                     'exam_title': title,
                     'exam_type': cat_key,
@@ -5527,20 +5537,38 @@ def api_update_student_grade_record(request, record_id):
                     'breakdown': {}
                 }
 
-        set_cat_score('class_test', 'Class Test / Quiz', ct_pct)
-        set_cat_score('midterm', 'Mid Term Examination', mid_pct)
-        set_cat_score('final', 'Final Examination', fn_pct)
-        set_cat_score('assignment', 'Course Assignments', as_pct)
+        if ct_pct is not None:
+            set_cat_score('class_test', 'Class Test / Quiz', ct_pct)
+        if mid_pct is not None:
+            set_cat_score('midterm', 'Mid Term Examination', mid_pct)
+        if fn_pct is not None:
+            set_cat_score('final', 'Final Examination', fn_pct)
+        if as_pct is not None:
+            set_cat_score('assignment', 'Course Assignments', as_pct)
 
         record.exam_scores = exam_scores
 
         raw_co = data.get('co_scores')
         if isinstance(raw_co, dict):
-            record.co_scores = {str(k).upper(): float(v or 0.0) for k, v in raw_co.items()}
+            new_co = {}
+            for k, v in raw_co.items():
+                if v is not None and str(v).strip() != '':
+                    try:
+                        new_co[str(k).upper().strip()] = float(v)
+                    except (ValueError, TypeError):
+                        pass
+            record.co_scores = new_co
 
         raw_po = data.get('po_scores')
         if isinstance(raw_po, dict):
-            record.po_scores = {str(k).upper(): float(v or 0.0) for k, v in raw_po.items()}
+            new_po = {}
+            for k, v in raw_po.items():
+                if v is not None and str(v).strip() != '':
+                    try:
+                        new_po[str(k).upper().strip()] = float(v)
+                    except (ValueError, TypeError):
+                        pass
+            record.po_scores = new_po
 
         weights = record.tabulation.weightage_config or {
             'class_test': 10.0, 'midterm': 25.0, 'final': 50.0, 'assignment': 10.0, 'attendance': 5.0
@@ -5550,7 +5578,28 @@ def api_update_student_grade_record(request, record_id):
         w_fn = float(weights.get('final', 50.0))
         w_as = float(weights.get('assignment', 10.0))
 
-        weighted_total = (ct_pct * (w_ct / 100.0)) + (mid_pct * (w_mid / 100.0)) + (fn_pct * (w_fn / 100.0)) + (as_pct * (w_as / 100.0)) + record.attendance_marks
+        weighted_total = 0.0
+        if ct_pct is not None:
+            weighted_total += ct_pct * (w_ct / 100.0)
+        elif record.class_test_data:
+            weighted_total += float(record.class_test_data['weighted'])
+
+        if mid_pct is not None:
+            weighted_total += mid_pct * (w_mid / 100.0)
+        elif record.midterm_data:
+            weighted_total += float(record.midterm_data['weighted'])
+
+        if fn_pct is not None:
+            weighted_total += fn_pct * (w_fn / 100.0)
+        elif record.final_data:
+            weighted_total += float(record.final_data['weighted'])
+
+        if as_pct is not None:
+            weighted_total += as_pct * (w_as / 100.0)
+        elif record.assignment_data:
+            weighted_total += float(record.assignment_data['weighted'])
+
+        weighted_total += record.attendance_marks
         overall = round(min(100.0, max(0.0, weighted_total)), 2)
         record.overall_score = overall
 
@@ -5570,21 +5619,27 @@ def api_update_student_grade_record(request, record_id):
         # Synchronize back to student's live submission records for this course
         try:
             course = record.tabulation.course
-            subs = StudentSubmission.objects.filter(examination__course=course, student_roll_no=record.student_id)
+            subs = StudentSubmission.objects.filter(
+                examination__course=course
+            ).filter(
+                Q(student_roll_no__iexact=record.student_id) |
+                Q(student_name__iexact=record.student_name) |
+                Q(student_name__icontains=record.student_id)
+            )
             for sub in subs:
                 ex_title = (sub.examination.title or '').upper()
                 ex_max = float(sub.examination.total_marks or 100.0)
-                if 'MID' in ex_title and mid_pct > 0:
+                if 'MID' in ex_title and mid_pct is not None:
                     sub.total_obtained_marks = round((mid_pct / 100.0) * ex_max, 2)
                     sub.percentage = mid_pct
                     sub.status = StudentSubmission.Status.FINALIZED
                     sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
-                elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and ct_pct > 0:
+                elif ('QUIZ' in ex_title or 'CT' in ex_title or 'TEST' in ex_title) and ct_pct is not None:
                     sub.total_obtained_marks = round((ct_pct / 100.0) * ex_max, 2)
                     sub.percentage = ct_pct
                     sub.status = StudentSubmission.Status.FINALIZED
                     sub.save(update_fields=['total_obtained_marks', 'percentage', 'status', 'updated_at'])
-                elif ('FINAL' in ex_title or 'EXAM' in ex_title) and fn_pct > 0:
+                elif ('FINAL' in ex_title or 'EXAM' in ex_title) and fn_pct is not None:
                     sub.total_obtained_marks = round((fn_pct / 100.0) * ex_max, 2)
                     sub.percentage = fn_pct
                     sub.status = StudentSubmission.Status.FINALIZED

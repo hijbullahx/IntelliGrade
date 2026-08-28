@@ -744,6 +744,16 @@ class StudentGradeRecord(models.Model):
             'weight': round(w, 2)
         }
 
+    @property
+    def co_json_str(self):
+        import json
+        return json.dumps(self.co_scores or {})
+
+    @property
+    def po_json_str(self):
+        import json
+        return json.dumps(self.po_scores or {})
+
 
 
 

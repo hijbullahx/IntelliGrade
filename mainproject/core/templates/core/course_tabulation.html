@@ -170,28 +170,13 @@
                                 data-record-id="{{ gr.id }}"
                                 data-student-id="{{ gr.student_id }}"
                                 data-student-name="{{ gr.student_name }}"
-                                data-class-test="{{ gr.class_test_data.percentage|default:0.0 }}"
-                                data-midterm="{{ gr.midterm_data.percentage|default:0.0 }}"
-                                data-final="{{ gr.final_data.percentage|default:0.0 }}"
-                                data-assignment="{{ gr.assignment_data.percentage|default:0.0 }}"
+                                data-class-test="{% if gr.class_test_data %}{{ gr.class_test_data.percentage }}{% endif %}"
+                                data-midterm="{% if gr.midterm_data %}{{ gr.midterm_data.percentage }}{% endif %}"
+                                data-final="{% if gr.final_data %}{{ gr.final_data.percentage }}{% endif %}"
+                                data-assignment="{% if gr.assignment_data %}{{ gr.assignment_data.percentage }}{% endif %}"
                                 data-attendance="{{ gr.attendance_marks|default:5.0 }}"
-                                data-co1="{{ gr.co_scores.CO1|default:'' }}"
-                                data-co2="{{ gr.co_scores.CO2|default:'' }}"
-                                data-co3="{{ gr.co_scores.CO3|default:'' }}"
-                                data-co4="{{ gr.co_scores.CO4|default:'' }}"
-                                data-co5="{{ gr.co_scores.CO5|default:'' }}"
-                                data-po1="{{ gr.po_scores.PO1|default:'' }}"
-                                data-po2="{{ gr.po_scores.PO2|default:'' }}"
-                                data-po3="{{ gr.po_scores.PO3|default:'' }}"
-                                data-po4="{{ gr.po_scores.PO4|default:'' }}"
-                                data-po5="{{ gr.po_scores.PO5|default:'' }}"
-                                data-po6="{{ gr.po_scores.PO6|default:'' }}"
-                                data-po7="{{ gr.po_scores.PO7|default:'' }}"
-                                data-po8="{{ gr.po_scores.PO8|default:'' }}"
-                                data-po9="{{ gr.po_scores.PO9|default:'' }}"
-                                data-po10="{{ gr.po_scores.PO10|default:'' }}"
-                                data-po11="{{ gr.po_scores.PO11|default:'' }}"
-                                data-po12="{{ gr.po_scores.PO12|default:'' }}"
+                                data-co-json="{{ gr.co_json_str|escapejs }}"
+                                data-po-json="{{ gr.po_json_str|escapejs }}"
                                 onclick="openEditGradeModalFromButton(this)">
                                 <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Edit
                             </button>
@@ -233,6 +218,7 @@
         </div>
 
         <form id="editGradeForm" onsubmit="submitEditGrade(event)" class="p-6 space-y-4 overflow-y-auto flex-1">
+            {% csrf_token %}
             <input type="hidden" id="editRecordId" value="">
 
             <div class="grid grid-cols-2 gap-3">
@@ -389,22 +375,46 @@ function openEditGradeModalFromButton(btn) {
     document.getElementById('editRecordId').value = ds.recordId;
     document.getElementById('editStudentId').value = ds.studentId;
     document.getElementById('editStudentName').value = ds.studentName;
-    document.getElementById('editClassTest').value = ds.classTest || 0;
-    document.getElementById('editMidterm').value = ds.midterm || 0;
-    document.getElementById('editFinal').value = ds.final || 0;
-    document.getElementById('editAssignment').value = ds.assignment || 0;
+    document.getElementById('editClassTest').value = (ds.classTest !== undefined && ds.classTest !== '') ? ds.classTest : '';
+    document.getElementById('editMidterm').value = (ds.midterm !== undefined && ds.midterm !== '') ? ds.midterm : '';
+    document.getElementById('editFinal').value = (ds.final !== undefined && ds.final !== '') ? ds.final : '';
+    document.getElementById('editAssignment').value = (ds.assignment !== undefined && ds.assignment !== '') ? ds.assignment : '';
     document.getElementById('editAttendance').value = (ds.attendance !== undefined && ds.attendance !== '') ? ds.attendance : 5.0;
     
-    // CO scores
+    // Clear all CO inputs first
     for (let i = 1; i <= 5; i++) {
         const el = document.getElementById(`editCO${i}`);
-        if (el) el.value = ds[`co${i}`] || '';
+        if (el) el.value = '';
     }
     
-    // PO scores
+    // Clear all PO inputs first
     for (let i = 1; i <= 12; i++) {
         const el = document.getElementById(`editPO${i}`);
-        if (el) el.value = ds[`po${i}`] || '';
+        if (el) el.value = '';
+    }
+    
+    // Populate COs from JSON
+    try {
+        const coObj = JSON.parse(ds.coJson || '{}');
+        for (const [k, v] of Object.entries(coObj)) {
+            const num = k.replace(/[^0-9]/g, '');
+            const el = document.getElementById(`editCO${num}`);
+            if (el) el.value = v;
+        }
+    } catch(e) {
+        console.warn('Error parsing coJson', e);
+    }
+    
+    // Populate POs from JSON
+    try {
+        const poObj = JSON.parse(ds.poJson || '{}');
+        for (const [k, v] of Object.entries(poObj)) {
+            const num = k.replace(/[^0-9]/g, '');
+            const el = document.getElementById(`editPO${num}`);
+            if (el) el.value = v;
+        }
+    } catch(e) {
+        console.warn('Error parsing poJson', e);
     }
     
     calculateLiveOverall();
@@ -422,14 +432,27 @@ function closeEditGradeModal() {
 }
 
 function calculateLiveOverall() {
-    const ct = parseFloat(document.getElementById('editClassTest').value) || 0;
-    const mid = parseFloat(document.getElementById('editMidterm').value) || 0;
-    const fn = parseFloat(document.getElementById('editFinal').value) || 0;
-    const as = parseFloat(document.getElementById('editAssignment').value) || 0;
-    const att = parseFloat(document.getElementById('editAttendance').value) || 0;
+    const ctStr = document.getElementById('editClassTest').value.trim();
+    const midStr = document.getElementById('editMidterm').value.trim();
+    const fnStr = document.getElementById('editFinal').value.trim();
+    const asStr = document.getElementById('editAssignment').value.trim();
+    const attStr = document.getElementById('editAttendance').value.trim();
     
-    // Weightages: CT: 10%, Mid: 25%, Final: 50%, Assignment: 10%, Attendance: 5% (raw marks out of 5.0)
-    const overall = Math.min(100, Math.round(((ct * 0.10) + (mid * 0.25) + (fn * 0.50) + (as * 0.10) + att) * 100) / 100);
+    const ct = ctStr !== '' ? parseFloat(ctStr) : 0;
+    const mid = midStr !== '' ? parseFloat(midStr) : 0;
+    const fn = fnStr !== '' ? parseFloat(fnStr) : 0;
+    const as = asStr !== '' ? parseFloat(asStr) : 0;
+    const att = attStr !== '' ? parseFloat(attStr) : 5.0;
+    
+    // Weightages: CT: 10%, Mid: 25%, Final: 50%, Assignment: 10%, Attendance: 5% (raw marks)
+    let weightedTotal = 0;
+    if (ctStr !== '') weightedTotal += (ct * 0.10);
+    if (midStr !== '') weightedTotal += (mid * 0.25);
+    if (fnStr !== '') weightedTotal += (fn * 0.50);
+    if (asStr !== '') weightedTotal += (as * 0.10);
+    weightedTotal += att;
+    
+    const overall = Math.min(100, Math.round(weightedTotal * 100) / 100);
     document.getElementById('previewOverall').innerText = overall.toFixed(1) + '%';
     
     let grade = 'F';
@@ -470,40 +493,53 @@ function submitEditGrade(e) {
 
     const coScores = {};
     for (let i = 1; i <= 5; i++) {
-        const raw = document.getElementById(`editCO${i}`).value.trim();
-        if (raw !== '') {
-            coScores[`CO${i}`] = parseFloat(raw) || 0.0;
+        const el = document.getElementById(`editCO${i}`);
+        if (el && el.value.trim() !== '') {
+            coScores[`CO${i}`] = parseFloat(el.value) || 0.0;
         }
     }
 
     const poScores = {};
     for (let i = 1; i <= 12; i++) {
-        const raw = document.getElementById(`editPO${i}`).value.trim();
-        if (raw !== '') {
-            poScores[`PO${i}`] = parseFloat(raw) || 0.0;
+        const el = document.getElementById(`editPO${i}`);
+        if (el && el.value.trim() !== '') {
+            poScores[`PO${i}`] = parseFloat(el.value) || 0.0;
         }
     }
 
+    const ctVal = document.getElementById('editClassTest').value.trim();
+    const midVal = document.getElementById('editMidterm').value.trim();
+    const fnVal = document.getElementById('editFinal').value.trim();
+    const asVal = document.getElementById('editAssignment').value.trim();
+    const attVal = document.getElementById('editAttendance').value.trim();
+
     const payload = {
         student_name: document.getElementById('editStudentName').value.trim(),
-        class_test: parseFloat(document.getElementById('editClassTest').value) || 0,
-        midterm: parseFloat(document.getElementById('editMidterm').value) || 0,
-        final: parseFloat(document.getElementById('editFinal').value) || 0,
-        assignment: parseFloat(document.getElementById('editAssignment').value) || 0,
-        attendance_marks: parseFloat(document.getElementById('editAttendance').value) || 5.0,
+        class_test: ctVal !== '' ? parseFloat(ctVal) : null,
+        midterm: midVal !== '' ? parseFloat(midVal) : null,
+        final: fnVal !== '' ? parseFloat(fnVal) : null,
+        assignment: asVal !== '' ? parseFloat(asVal) : null,
+        attendance_marks: attVal !== '' ? parseFloat(attVal) : 5.0,
         co_scores: coScores,
         po_scores: poScores
     };
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
 
     fetch(`/api/tabulation/grade-record/${recordId}/update/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
+            'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(payload)
     })
-    .then(res => res.json())
+    .then(res => {
+        if (!res.ok) {
+            return res.text().then(text => { throw new Error(`HTTP ${res.status}: ${text}`); });
+        }
+        return res.json();
+    })
     .then(data => {
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Save & Sync Tabulation`;
@@ -518,7 +554,7 @@ function submitEditGrade(e) {
     .catch(err => {
         btn.disabled = false;
         btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Save & Sync Tabulation`;
-        alert('Network or server error updating record: ' + err.message);
+        alert('Server or network error updating record: ' + err.message);
     });
 }
 </script>
