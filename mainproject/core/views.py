@@ -1035,7 +1035,7 @@ def add_dept_head(request):
 
 
 def dept_head_login(request):
-    """Login view dedicated for Department Heads."""
+    """Login view dedicated for Department Heads supporting both Username and Email authentication."""
     if request.user.is_authenticated:
         user_role, role_name, dashboard_url = get_user_role_and_dashboard(request.user)
         if user_role == Profile.Role.DEPARTMENT_HEAD:
@@ -1045,8 +1045,15 @@ def dept_head_login(request):
             return redirect(dashboard_url)
 
     if request.method == 'POST':
-        username = request.POST.get('username', '').strip()
+        raw_identifier = request.POST.get('username', '').strip()
         password = request.POST.get('password', '')
+
+        # Support sign in by Email OR Username
+        username = raw_identifier
+        if '@' in raw_identifier:
+            matched_user = User.objects.filter(email__iexact=raw_identifier).first()
+            if matched_user:
+                username = matched_user.username
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
@@ -1059,13 +1066,13 @@ def dept_head_login(request):
             messages.success(request, f"Welcome back, {user.get_full_name() or user.username}! Signed in to Department Head Portal.")
             return redirect('dept_head_dashboard')
         else:
-            messages.error(request, "Invalid Username or Password. Please try again or contact your Chief Exam Controller.")
+            messages.error(request, "Invalid Username/Email or Password. Please verify your credentials or contact your Chief Exam Controller.")
 
     return render(request, 'core/dept_head_login.html')
 
 
 def dept_head_dashboard(request):
-    """Dashboard view for Department Heads with strict department isolation."""
+    """Comprehensive Dashboard view for Department Heads with real metrics, student rosters, faculty lists, and exam statuses."""
     if not request.user.is_authenticated:
         messages.warning(request, "Please sign in to access the Department Head Portal.")
         return redirect('dept_head_login')
@@ -1076,69 +1083,83 @@ def dept_head_dashboard(request):
         return redirect('landing_page')
 
     dept = profile.department
-    dept_name = dept.name if dept else "Unassigned Department"
+    dept_name = dept.name if dept else "Academic Department"
 
-    # STRICT Department Isolation: Count ONLY faculty assigned to this specific department
+    # 1. Total Faculty in Department
     faculty_count = Profile.objects.filter(role=Profile.Role.TEACHER, department=dept).count() if dept else 0
 
-    # STRICT Department Isolation: Count ONLY active courses assigned to this specific department
+    # 2. Total Students in Department
+    student_profiles_count = Profile.objects.filter(role=Profile.Role.STUDENT, department=dept).count() if dept else 0
+    unique_student_ids = set()
+    if dept:
+        from core.models import StudentGradeRecord
+        unique_student_ids.update(StudentGradeRecord.objects.filter(tabulation__course__department=dept).values_list('student_id', flat=True))
+        unique_student_ids.update(StudentSubmission.objects.filter(examination__course__department=dept).exclude(student_roll_no='').values_list('student_roll_no', flat=True))
+    total_students_count = max(student_profiles_count, len(unique_student_ids))
+
+    # 3. Active Courses in Department
     active_courses_count = Course.objects.filter(department=dept).count() if dept else 0
 
-    # STRICT Department Isolation: Calculate Pass Rate & AI Approval Rate ONLY for this specific department
+    # 4. Published / Scheduled Examinations in Department
+    dept_exams = Examination.objects.filter(course__department=dept).select_related('course', 'assigned_faculty').order_by('-exam_date', '-id') if dept else Examination.objects.none()
+    published_exams_count = dept_exams.count()
+
+    # 5. Department Submissions & Evaluation Rates
     pass_rate = 'N/A'
     ai_approval_rate = 'N/A'
+    total_submissions_count = 0
+    evaluated_submissions_count = 0
 
-    if dept:
-        dept_exams = Examination.objects.filter(course__department=dept)
-        
-        if dept_exams.exists():
-            # Pass Rate calculation for this department's exams only
-            all_evaluated_submissions = StudentSubmission.objects.filter(
-                examination__in=dept_exams,
-                status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+    if dept and dept_exams.exists():
+        all_submissions = StudentSubmission.objects.filter(examination__in=dept_exams)
+        total_submissions_count = all_submissions.count()
+
+        all_evaluated_submissions = all_submissions.filter(
+            status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
+        )
+        evaluated_submissions_count = all_evaluated_submissions.count()
+
+        if all_evaluated_submissions.exists():
+            passed_count = sum(
+                1 for sub in all_evaluated_submissions 
+                if sub.total_obtained_marks is not None and sub.examination.total_marks 
+                and (float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4))
             )
-            if all_evaluated_submissions.exists():
-                passed_count = sum(
-                    1 for sub in all_evaluated_submissions 
-                    if sub.total_obtained_marks is not None and sub.examination.total_marks 
-                    and (float(sub.total_obtained_marks) >= (float(sub.examination.total_marks) * 0.4))
-                )
-                pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
+            pass_rate = f"{round((passed_count / all_evaluated_submissions.count()) * 100, 1)}%"
 
-            # AI Approval Rate calculation for this department's evaluations only
-            all_evaluations = EvaluationResult.objects.filter(submission_answer__submission__examination__in=dept_exams)
-            if all_evaluations.exists():
-                approved_count = all_evaluations.filter(reviews__action='APPROVE').count()
-                ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
-            else:
-                script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
-                if script_evals.exists():
-                    approved_count = script_evals.filter(review_status=Evaluation.ReviewStatus.APPROVED).count()
-                    ai_approval_rate = f"{round((approved_count / script_evals.count()) * 100, 1)}%"
+        all_evaluations = EvaluationResult.objects.filter(submission_answer__submission__examination__in=dept_exams)
+        if all_evaluations.exists():
+            approved_count = all_evaluations.filter(reviews__action='APPROVE').count()
+            ai_approval_rate = f"{round((approved_count / all_evaluations.count()) * 100, 1)}%"
+        else:
+            script_evals = Evaluation.objects.filter(segment__script__examination__in=dept_exams)
+            if script_evals.exists():
+                approved_count = script_evals.filter(review_status=Evaluation.ReviewStatus.APPROVED).count()
+                ai_approval_rate = f"{round((approved_count / script_evals.count()) * 100, 1)}%"
 
-    # STRICT Department Isolation: Fetch ONLY courses belonging to this department
-    course_list = Course.objects.filter(department=dept) if dept else Course.objects.none()
+    # 6. Course-wise Evaluation Progress List
+    course_list = Course.objects.filter(department=dept).order_by('code') if dept else Course.objects.none()
     course_progress_data = []
 
     for crs in course_list:
-        crs_exams = Examination.objects.filter(course=crs)
+        crs_exams = dept_exams.filter(course=crs)
         if not crs_exams.exists():
             progress_pct = 0
             status_text = "No Exams Scheduled"
             total_scripts = 0
             evaluated_scripts = 0
         else:
-            total_scripts = AnswerScript.objects.filter(examination__in=crs_exams).count()
+            total_scripts = StudentSubmission.objects.filter(examination__in=crs_exams).count()
             if total_scripts == 0:
-                total_scripts = StudentSubmission.objects.filter(examination__in=crs_exams).count()
-                evaluated_scripts = StudentSubmission.objects.filter(
-                    examination__in=crs_exams,
-                    status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
-                ).count()
-            else:
+                total_scripts = AnswerScript.objects.filter(examination__in=crs_exams).count()
                 evaluated_scripts = AnswerScript.objects.filter(
                     examination__in=crs_exams,
                     status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+                ).count()
+            else:
+                evaluated_scripts = StudentSubmission.objects.filter(
+                    examination__in=crs_exams,
+                    status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]
                 ).count()
 
             if total_scripts > 0:
@@ -1158,10 +1179,50 @@ def dept_head_dashboard(request):
             'total_scripts': total_scripts,
         })
 
+    # 7. Department Examination Detailed Roster
+    dept_exams_data = []
+    for ex in dept_exams:
+        ex_subs = StudentSubmission.objects.filter(examination=ex)
+        ex_total = ex_subs.count()
+        ex_eval = ex_subs.filter(status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW, StudentSubmission.Status.FINALIZED]).count()
+        ex_pct = int(round(ex_eval / ex_total * 100)) if ex_total > 0 else 0
+        dept_exams_data.append({
+            'id': ex.id,
+            'title': ex.title,
+            'course_code': ex.course.code,
+            'course_title': ex.course.title,
+            'exam_date': ex.exam_date,
+            'faculty_name': ex.assigned_faculty.get_full_name() if ex.assigned_faculty else (ex.created_by.get_full_name() if ex.created_by else 'Not Assigned'),
+            'total_submissions': ex_total,
+            'evaluated_count': ex_eval,
+            'progress_percent': ex_pct,
+            'status': ex.get_status_display() if hasattr(ex, 'get_status_display') else ex.status,
+            'tabulation_url': f"/teacher/exam/{ex.id}/course-tabulation/"
+        })
+
+    # 8. Department Student Roster
+    dept_students_data = []
+    student_users = User.objects.filter(profile__role=Profile.Role.STUDENT, profile__department=dept).select_related('profile') if dept else User.objects.none()
+    for st_u in student_users:
+        st_subs = StudentSubmission.objects.filter(Q(student=st_u) | Q(student_roll_no__iexact=st_u.username), examination__course__department=dept)
+        sub_cnt = st_subs.count()
+        avg_score = round(sum(sub.percentage for sub in st_subs if sub.percentage) / sub_cnt, 1) if sub_cnt > 0 else 0.0
+        dept_students_data.append({
+            'name': st_u.get_full_name() or st_u.username,
+            'student_id': st_u.username,
+            'email': st_u.email or 'N/A',
+            'submissions_count': sub_cnt,
+            'avg_score': f"{avg_score}%" if sub_cnt > 0 else "Pending",
+        })
+
     stats = {
         'dept_name': dept_name,
         'faculty_count': faculty_count,
+        'students_count': total_students_count,
         'active_courses': active_courses_count,
+        'published_exams': published_exams_count,
+        'total_submissions': total_submissions_count,
+        'evaluated_submissions': evaluated_submissions_count,
         'pass_rate': pass_rate,
         'ai_approval_rate': ai_approval_rate,
     }
@@ -1173,7 +1234,9 @@ def dept_head_dashboard(request):
         'stats': stats,
         'course_progress_list': course_progress_data,
         'dept_faculty': dept_faculty,
+        'dept_students': dept_students_data,
         'dept_courses': dept_courses_qs,
+        'dept_exams': dept_exams_data,
         'head_name': request.user.get_full_name() or request.user.username
     })
 
