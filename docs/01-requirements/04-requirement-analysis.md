@@ -1,376 +1,100 @@
-# Requirement Analysis
+# IntelliGrade — Comprehensive Requirement Analysis
 
-| Document Information | |
-|----------------------|-----------------------------|
-| Project | IntelliGrade |
-| Full Name | AI-Assisted Examination Script Evaluation System |
-| Version | 1.0 |
-| Status | Draft |
-| Prepared By | Md. Taher Bin Omar Hijbullah |
-| Phase | Requirement Engineering |
+**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Last Updated:** August 29, 2026  
+**Auditor:** Principal Enterprise Systems Architect  
 
 ---
 
-# Actor 1: Teacher (Examiner)
+## 1. Domain Modeling & Stakeholder Needs Analysis
+
+IntelliGrade addresses the complex institutional domain of university examination management and Outcome-Based Education (OBE) accreditation.
+
+```mermaid
+classDiagram
+    class College {
+        +String name
+        +String code
+    }
+    class Department {
+        +String name
+        +String code
+        +Boolean is_active
+    }
+    class Course {
+        +String code
+        +String title
+    }
+    class Examination {
+        +String title
+        +Date exam_date
+        +Decimal total_marks
+        +Status status
+    }
+    class Question {
+        +String question_number
+        +String prompt_text
+        +Decimal max_marks
+        +String bloom_level
+        +String co_mapping
+        +List po_mapping
+        +List kp_mapping
+    }
+    class Rubric {
+        +String criteria
+        +String ideal_answer
+        +JSON mark_distribution
+        +JSON common_mistakes
+    }
+    class StudentSubmission {
+        +String student_name
+        +String student_roll_no
+        +Decimal total_obtained_marks
+        +Float percentage
+        +Status status
+    }
+    class CourseTabulation {
+        +String semester
+        +String section
+        +JSON weightage_config
+    }
+    class StudentGradeRecord {
+        +String student_id
+        +String student_name
+        +Float attendance_marks
+        +Float overall_score
+        +String letter_grade
+        +Boolean is_manually_edited
+    }
+
+    College "1" --> "*" Department
+    Department "1" --> "*" Course
+    Course "1" --> "*" Examination
+    Course "1" --> "*" CourseTabulation
+    CourseTabulation "1" --> "*" StudentGradeRecord
+    Examination "1" --> "*" Question
+    Examination "1" --> "*" StudentSubmission
+    Question "1" --> "1" Rubric
+```
 
 ---
 
-## User Requirement 1
+## 2. Stakeholder Need vs. System Capability Mapping
 
-The teacher wants to create examinations and define grading rubrics before evaluating answer scripts.
-
-### System Requirements
-
-1.1 The system shall provide a "Create Examination" page.
-
-1.2 The teacher shall be able to enter examination details including title, course, semester, section, and total marks.
-
-1.3 The system shall allow uploading the question paper in PDF format.
-
-1.4 The teacher shall be able to create grading rubrics for each question.
-
-1.5 Each rubric shall contain:
-
-- Marks
-- Keywords
-- Expected Concepts
-- Evaluation Notes
-
-1.6 The system shall save examinations as Draft or Published.
-1.7 Techer can also upload rubrics as pdf.
+| Stakeholder Role | Core Academic Need | Architectural Capability Delivered |
+| :--- | :--- | :--- |
+| **Chief Exam Controller** | Centralized governance of university academic hierarchy and semester exam schedules. | Administrative CRUD portal with multi-page AI exam routine parser and 0ms local course matcher. |
+| **Department Head** | Real-time visibility into department-level pass rates, teacher grading progress, and accreditation compliance. | Dedicated Department Head dashboard with live pass rate analytics, course tabulation review, and faculty oversight. |
+| **Faculty / Examiner** | Rapid, consistent script evaluation without manual calculation errors; full control over final marks. | Split-screen grading workbench with AI suggestions, criterion scoring, manual override, and 8-sheet OBE Excel export. |
+| **Student** | Transparent, timely evaluation feedback; detailed breakdown of mistakes; certified scripts for review. | Self-service student portal with real-time grade cards, question-by-question feedback, and certified watermarked PDF downloads. |
 
 ---
 
-### Functional Requirements
-
-1. The system shall allow teachers to create new examinations.
-
-2. The system shall allow uploading question papers.
-
-3. The system shall allow defining question-wise rubrics.
-
-4. The system shall store examination information.
-
-5. The system shall allow editing examinations before publication.
-
-6.  The system shall allow uploading rubrics.
-
----
-
-## User Requirement 2
-
-The teacher wants to upload answer scripts and receive AI-assisted grading suggestions.
-
-### System Requirements
-
-2.1 The system shall provide an "Upload Scripts" page.
-
-2.2 The teacher shall upload one or multiple answer scripts.
-
-2.3 The system shall automatically perform OCR.
-
-2.4 The AI Evaluation Engine shall process answers against the predefined rubric to generate scoring suggestions.
-
-2.5 The system shall display:
-
-- Suggested Marks
-- Confidence Score
-- AI Explanation
-- Suggested Feedback
-
-2.6 Teacher review and approval of all AI-generated suggestions shall be mandatory before marks are finalized.
-
----
-
-### Functional Requirements
-
-1. The system shall allow uploading answer scripts.
-
-2. The system shall extract text using OCR.
-
-3. The system's AI Evaluation Engine shall generate scoring suggestions.
-
-4. The system shall compare answers with grading rubrics.
-
-5. The system shall generate suggested marks.
-
-6. The system shall generate feedback.
-
-7. The system shall require teachers to approve or modify all AI-generated marks.
-
----
-
-## User Requirement 3
-
-The teacher wants to analyze examination performance.
-
-### System Requirements
-
-3.1 The system shall provide an Analytics Dashboard.
-
-3.2 The dashboard shall display:
-
-- Average Marks
-- Highest Marks
-- Lowest Marks
-- Question-wise Performance
-- AI Accuracy Statistics
-
-3.3 Reports shall be exportable as PDF and Excel.
-
----
-
-### Functional Requirements
-
-1. The system shall generate examination analytics.
-
-2. The system shall display graphical reports.
-
-3. The system shall export reports.
-
----
-
-# Actor 2: Student
-
----
-
-## User Requirement 1
-
-The student wants to view examination results and AI-generated feedback.
-
-### System Requirements
-
-1.1 Students shall log in securely.
-
-1.2 The Result Dashboard shall list completed examinations.
-
-1.3 Selecting an examination shall display:
-
-- Marks
-- Teacher Remarks
-- AI Feedback
-- Question-wise Marks (With screensshot)
-
-1.4 Students shall be able to download result reports.
-
----
-
-### Functional Requirements
-
-1. The system shall authenticate students.
-
-2. The system shall display examination results.
-
-3. The system shall display AI-generated feedback.
-
-4. The system shall allow downloading reports.
-
----
-
-## User Requirement 2
-
-The student wants to request re-evaluation if dissatisfied with the result.
-
-### System Requirements
-
-2.1 A "Request Re-evaluation" button shall be available.
-
-2.2 Students shall provide a reason.
-
-2.3 Teachers shall receive notification.
-
-2.4 The request status shall be visible.
-
----
-
-### Functional Requirements
-
-1. The system shall accept re-evaluation requests.
-
-2. The system shall notify teachers.
-
-3. The system shall update request status.
-
----
-
-# Actor 3: Administrator
-
----
-
-## User Requirement 1
-
-The administrator wants to manage users and academic information.
-
-### System Requirements
-
-1.1 The Admin Dashboard shall provide:
-
-- User Management
-- Department Management
-- Course Management
-- Semester Management
-
-1.2 The administrator shall assign teacher roles.
-
----
-
-### Functional Requirements
-
-1. The system shall create users.
-
-2. The system shall edit users.
-
-3. The system shall deactivate users.
-
-4. The system shall assign user roles.
-
----
-
-## User Requirement 2
-
-The administrator wants to monitor AI evaluation activities.
-
-### System Requirements
-
-2.1 The system shall provide an AI Monitoring Dashboard.
-
-2.2 The dashboard shall display:
-
-- Number of Evaluated Scripts
-- Average AI Confidence
-- Processing Time
-- Failed OCR Jobs
-
----
-
-### Functional Requirements
-
-1. The system shall monitor AI performance.
-
-2. The system shall generate system statistics.
-
-3. The system shall display OCR status.
-
----
-
-# Actor 4: Department Head (Optional)
-
----
-
-## User Requirement 1
-
-The department head wants to monitor examination quality and instructor performance.
-
-### System Requirements
-
-1.1 The dashboard shall display:
-
-- Examination Statistics
-
-- Course-wise Performance
-
-- Teacher Workload
-
-- Result Distribution
-
-1.2 Reports shall be exportable.
-
----
-
-### Functional Requirements
-
-1. The system shall provide department-level analytics.
-
-2. The system shall generate summary reports.
-
-3. The system shall export reports.
-
----
-
-# Non-Functional Requirements
-
-## Performance
-
-1. The system shall process one answer script within an acceptable response time under normal load.
-
-2. AI evaluation should complete without blocking other users.
-
----
-
-## Availability
-
-1. The system shall maintain at least 99% availability during examination periods.
-
----
-
-## Security
-
-1. User passwords shall be securely hashed.
-
-2. All communications shall use HTTPS.
-
-3. Role-Based Access Control (RBAC) shall be implemented.
-
----
-
-## Reliability
-
-1. OCR failures shall not crash the system.
-
-2. AI evaluation failures shall be logged for review.
-
----
-
-## Scalability
-
-1. The system shall support multiple departments.
-
-2. The system shall support concurrent evaluations.
-
----
-
-## Maintainability
-
-1. The software architecture shall support future AI model integration.
-
-2. New examination types shall be easily added.
-
----
-
-## Usability
-
-1. The interface shall be intuitive.
-
-2. Teachers shall require minimal training.
-
----
-
-## Data Integrity
-
-1. AI shall never overwrite teacher-approved marks.
-
-2. All evaluation changes shall be logged.
-
----
-
-## Privacy
-
-1. Student answer scripts shall only be accessible to authorized users.
-
-2. AI processing shall comply with institutional privacy policies.
-
----
-
-## Backup & Recovery
-
-1. Examination data shall be backed up regularly.
-
-2. Recovery mechanisms shall be available.
-
----
-
-## Auditability
-
-1. Every grading action shall be recorded.
-
-2. AI suggestions and teacher modifications shall be traceable.
+## 3. High-Priority Functional Requirement Clusters
+
+1. **Academic Governance & Security**: Multi-tier institutional hierarchy with strict RBAC decorators, Argon2 password hashing, and session management.
+2. **AI Multimodal Ingestion**: High-resolution 300 DPI PDF rendering, hybrid OCR (PyMuPDF $\rightarrow$ PyTesseract $\rightarrow$ EasyOCR on PyTorch CPU), and LaTeX formula sanitation.
+3. **OBE Taxonomy & Accreditation**: Complete 23-section IUBAT metadata (CO1–CO5, PO1–PO12, Bloom's levels, KP/CEP/CEA engineering tags).
+4. **Resilient AI Evaluation Pipeline**: Multi-provider failover orchestrator with TaskRouter, 429 rate limit cooldown registries, and JSON schema repair.
+5. **Human-in-the-Loop Verification**: Split-screen grading workbench with immutable audit logging (`TeacherReview`, `EvaluationHistory`, `EvaluationAuditLog`).
+6. **Real-Time Bi-Directional OBE Tabulation**: Dynamic calculation of Class Test (10%), Midterm (25%), Final Exam (50%), Assignment (10%), and Attendance (5%), synchronized in real-time between Web UI, Database, Excel, and Student Portals.

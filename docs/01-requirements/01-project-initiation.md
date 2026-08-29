@@ -1,162 +1,69 @@
-# IntelliGrade
+# IntelliGrade — Project Initiation Document (PID)
 
-## Project Initiation Document
-
-Version: 1.0
-
-Status:
-Draft
-
-Prepared By:
-Md. Taher Bin Omar Hijbullah
-
-Project:
-IntelliGrade – AI-Assisted Examination Script Evaluation System
-
-Date:
-04-07-2026
+**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Project Name:** IntelliGrade — AI-Assisted Outcome-Based Education (OBE) Examination Evaluation & Management System  
+**Prepared By:** Md. Taher Bin Omar Hijbullah (Lead Technical Architect)  
+**Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT) & BAETE OBE Accreditation  
+**Date:** August 29, 2026  
+**Status:** Operational / Fully Implemented  
 
 ---
 
-# 1. Project Vision
+## 1. Project Vision & Purpose
 
-IntelliGrade is an AI-assisted examination evaluation platform designed to support instructors in assessing descriptive answer scripts efficiently, consistently, and transparently. Rather than replacing human examiners, the platform augments the grading process through intelligent rubric-based scoring, AI-generated feedback, similarity analysis, and comprehensive grading analytics while ensuring that instructors retain full authority over the final assessment.
+**IntelliGrade** is an institutional academic evaluation platform designed to empower university educators, department heads, and exam controllers. The system augments traditional examination workflows with state-of-the-art AI evaluation, automated OCR, 23-section OBE taxonomy mapping, and real-time tabulation while ensuring **absolute instructor authority and oversight**.
 
----
-
-# 2. Problem Statement
-
-Educational institutions spend significant time evaluating descriptive examination scripts. Manual grading is labor-intensive, prone to inconsistency, and often delays result publication.
-
-Differences in examiner judgment, fatigue during prolonged evaluation sessions, and limited analytical support contribute to inconsistencies in grading quality.
-
-Recent advances in Artificial Intelligence provide opportunities to assist educators during assessment; however, many existing solutions either lack transparency, fail to support rubric-based evaluation, or do not allow meaningful instructor oversight.
-
-IntelliGrade aims to address these challenges by integrating AI-assisted evaluation into a secure, transparent, and instructor-controlled assessment workflow.
+Unlike generic AI grading tools, IntelliGrade is custom-tailored to the institutional standards of IUBAT and OBE accreditation boards (such as BAETE). It seamlessly connects academic structure creation, routine scanning, question paper authoring, rubric criteria formulation, script preprocessing, question boundary detection, AI evaluation, teacher review, and official 8-sheet OBE Excel tabulation.
 
 ---
 
-# 3. Existing Process
+## 2. Problem Statement & Operational Challenges
 
-Current examination workflow consists of:
-
-1. Question Preparation
-2. Examination Conduct
-3. Script Collection
-4. Manual Reading
-5. Rubric Comparison
-6. Manual Marking
-7. Feedback Writing
-8. Total Calculation
-9. Result Publication
+1. **Labor-Intensive Script Evaluation**: Manually evaluating hundreds of multi-page handwritten scripts per semester leads to examiner fatigue, grading drift, and long turnaround times before results are released.
+2. **Complex Outcome-Based Education (OBE) Accounting**: Calculating student-level and class-wide Course Outcome (CO1–CO5) and Program Outcome (PO1–PO12) attainments requires complex multi-step weighted math that is error-prone when done manually in spreadsheets.
+3. **Lack of Detailed Student Feedback**: Students traditionally receive only a single overall mark, leaving them with no visibility into which concepts they mastered or where they made errors.
+4. **Vulnerability of Physical Paper Records**: Physical paper answer scripts can be misplaced or damaged, and retrieving historical scripts during academic accreditation reviews is cumbersome.
+5. **Multi-Role Coordination Barriers**: Exam controllers, department heads, faculty examiners, and students lack a synchronized digital ecosystem for examination schedules, approvals, and score verification.
 
 ---
 
-# 4. Existing Problems
+## 3. Project Objectives
 
-- Manual grading requires substantial time.
-- Evaluation quality varies among instructors.
-- Examiner fatigue affects consistency.
-- Students receive delayed feedback.
-- Manual calculations may introduce errors.
-- Limited assessment analytics are available.
-- Existing systems provide little or no AI assistance.
-
----
-
-# 5. Proposed Solution
-
-Develop an intelligent web platform capable of:
-
-- Examination Management
-- Rubric Management
-- Answer Script Processing
-- A modular AI pipeline including:
-  - OCR-based Text Extraction
-  - Text Cleaning and Preprocessing
-  - Answer Segmentation and Rubric Matching
-  - AI-assisted evaluation via an extensible LLM Provider layer
-  - Score normalization and confidence validation
-- Instructor Review
-- Feedback Generation
-- Report Generation
-- Analytics Dashboard
-- Result Export
+- **Primary Objective**: Build a robust, scalable, and secure AI-assisted academic examination evaluation platform that slashes grading turnaround time while maintaining total instructor grading authority and full OBE compliance.
+- **Specific Objectives**:
+  1. Reduce answer script grading time by up to 70% through automated OCR and AI-suggested marks.
+  2. Implement complete 23-section IUBAT OBE taxonomy metadata across all examination questions.
+  3. Provide a split-screen teacher grading workbench with 1-click override and approval mechanisms.
+  4. Implement real-time Course OBE Tabulation with bi-directional 8-sheet Excel workbook export (`openpyxl`).
+  5. Provide role-based access control (RBAC) portals for Chief Exam Controller, Department Head, Teacher, and Student.
+  6. Support resilient, zero-downtime AI evaluation via a multi-provider failover orchestrator (Local Vision, Groq, OpenRouter, Gemini, OpenAI).
+  7. Deliver institutional email notifications for account creation, password reset OTPs, exam assignments, and published results.
 
 ---
 
-# 6. Project Objectives
+## 4. Scope Matrix
 
-## Primary Objective
-
-Develop an AI-assisted examination evaluation platform that enhances grading efficiency while preserving instructor authority and grading transparency.
-
-## Specific Objectives
-
-- Reduce grading time.
-- Improve grading consistency.
-- Support rubric-driven evaluation.
-- Generate AI-assisted feedback.
-- Provide assessment analytics.
-- Enable instructor approval before publishing grades.
-- Produce structured reports.
-- Maintain secure academic records.
-
----
-
-# 7. Project Scope
-
-## Included
-
-- Teacher Management
-- Course Management
-- Examination Management
-- Question Paper Upload
-- Rubric Management
-- Student Management
-- Answer Script Upload
-- OCR Processing
-- AI Evaluation
-- Instructor Review
-- Final Grade Publication
-- Analytics Dashboard
-- Report Generation
-
-## Excluded
-
-- Online Examination
-- Mobile Application
-- Live Proctoring
-- Payment Gateway
-- Learning Management System
+```text
+========================================================================================
+SYSTEM AREA               IN-SCOPE CAPABILITY                                  OUT-OF-SCOPE
+========================================================================================
+Academic Governance       Colleges, Schools, Departments, Courses, User RBAC   Financial Billing
+Exam Administration       AI Exam Routine Parsing, Batch Exam Scheduling       Live Video Proctoring
+Question Paper Studio     23-Taxonomy Builder, Figures, Tables, LaTeX Matrices Online Quiz Authoring
+Answer Script Ingestion   300 DPI Preprocessing, Hybrid PyTesseract/EasyOCR    Automated Essay Writing
+Boundary Detection        State machine regex, multi-page answer propagation   Plagiarism Web Crawling
+AI Evaluation Core        Multi-provider failover (Local Moondream/Groq/etc.)  Unsupervised Auto-Pass
+Teacher Review            Split-screen workbench, score override, audit log    Student Re-grading
+OBE Tabulation            5% Attendance, 8-sheet Excel export, live sync       External LMS Sync (Phase 2)
+Dissemination             Certified watermarked PDF script, Student Dashboard  Physical Postal Mailing
+========================================================================================
+```
 
 ---
 
-# 8. Assumptions
+## 5. Key Stakeholders & Personas
 
-- Instructors prepare grading rubrics.
-- AI assists rather than replaces instructors.
-- Uploaded scripts are readable.
-- Internet connectivity is available.
-- Instructors review AI-generated evaluations before publishing results.
-
----
-
-# 9. Constraints
-
-- OCR performance depends on handwriting quality.
-- AI-generated results require validation.
-- Large file uploads increase processing time.
-- External AI services may incur costs.
-- Academic privacy regulations must be maintained.
-
----
-
-# 10. Expected Outcomes
-
-- Reduced grading effort.
-- Improved grading consistency.
-- Faster result publication.
-- Better student feedback.
-- Rich assessment analytics.
-- Increased transparency.
+- **Chief Exam Controller (ADMIN)**: Oversees institutional structure, approves student accounts, configures AI API credentials, and scans university exam routines.
+- **Department Head (DEPT_HEAD)**: Monitors department pass rates, audits course tabulation reports, and tracks faculty evaluation progress.
+- **Faculty / Examiner (TEACHER)**: Prepares question papers and rubrics, uploads answer scripts, reviews AI grades on the split-screen workbench, and finalizes course tabulations.
+- **Student (STUDENT)**: Registers for portal access, tracks exam schedules, reviews question-by-question graded feedback, and downloads certified PDF scripts.
