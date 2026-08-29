@@ -46,6 +46,142 @@ class AIScriptEvaluator:
     """
 
     @classmethod
+    def initialize_manual_evaluation(
+        cls,
+        submission_id: int,
+        confirmed_mappings: List[Dict[str, Any]],
+        options: Dict[str, Any],
+        user=None
+    ) -> StudentSubmission:
+        """
+        Initializes a submission for direct manual teacher evaluation without any AI or OCR calls.
+        Creates empty SubmissionAnswer and EvaluationResult placeholders based on questions and confirmed mappings.
+        """
+        submission = StudentSubmission.objects.get(id=submission_id)
+        
+        # 1. Update basic student details
+        student_name = options.get('student_name')
+        roll_no = options.get('roll_no')
+        if student_name and student_name.strip():
+            submission.student_name = student_name.strip()
+        if roll_no and roll_no.strip():
+            submission.student_roll_no = roll_no.strip()
+
+        # 2. Build SubmissionPages and working copies from raw images or PDF
+        try:
+            from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
+            WorkingCopyManager.create_initial_working_copies(submission.id)
+            WorkingCopyManager.ensure_working_copies(submission.id)
+        except Exception as e:
+            print(f"[MANUAL INIT WORKING COPY WARNING] {e}")
+
+        # 3. Create or update SubmissionAnswer, QuestionMapping & EvaluationResult for each question
+        exam = submission.examination
+        questions = exam.questions.all().order_by('question_number')
+        
+        # Build mapping dict
+        mapping_dict = {}
+        for m in confirmed_mappings:
+            qid = m.get('question_id')
+            p_nums = m.get('page_numbers', [1])
+            if qid:
+                mapping_dict[int(qid)] = p_nums
+
+        total_max = 0.0
+        from core.models import QuestionMapping, SubmissionPage
+        for q in questions:
+            max_m = float(getattr(q, 'max_marks', 10.0) or 10.0)
+            total_max += max_m
+            pages = mapping_dict.get(q.id, [1])
+
+            # Save QuestionMapping for question-scoped visual binding in workspace
+            QuestionMapping.objects.update_or_create(
+                submission=submission,
+                question=q,
+                defaults={
+                    'page_numbers_json': pages,
+                    'confidence': 1.0,
+                    'mapping_status': QuestionMapping.Status.MANUAL_OVERRIDE,
+                    'is_confirmed': True
+                }
+            )
+
+            first_page = SubmissionPage.objects.filter(submission=submission, page_number=pages[0]).first() if pages else None
+
+            # Get or create SubmissionAnswer
+            sub_ans, _ = SubmissionAnswer.objects.update_or_create(
+                submission=submission,
+                question=q,
+                defaults={
+                    'page': first_page,
+                    'extracted_text': f"Question {getattr(q, 'formatted_number', q.question_number)} - Manual Evaluation Mode",
+                    'ocr_confidence': 1.0,
+                    'requires_manual_review': True
+                }
+            )
+
+            # Build initial rubric breakdown steps from master steps or standard split
+            raw_master_steps = getattr(q, 'master_solution_steps', None) or []
+            init_breakdown = []
+            if isinstance(raw_master_steps, list) and raw_master_steps:
+                for s_idx, s in enumerate(raw_master_steps, 1):
+                    if isinstance(s, dict):
+                        init_breakdown.append({
+                            'step_num': s_idx,
+                            'step_description': str(s.get('description') or s.get('desc') or f"Step {s_idx}"),
+                            'allocated_marks': float(s.get('marks') or 0.0),
+                            'awarded_marks': 0.0,
+                            'comment': ''
+                        })
+            else:
+                if max_m <= 2:
+                    init_breakdown = [
+                        {'step_num': 1, 'step_description': 'Complete & Correct Answer', 'allocated_marks': max_m, 'awarded_marks': 0.0, 'comment': ''}
+                    ]
+                elif max_m <= 5:
+                    step1_m = round(max_m * 0.5, 1)
+                    step2_m = round(max_m - step1_m, 1)
+                    init_breakdown = [
+                        {'step_num': 1, 'step_description': 'Concept & Method Setup', 'allocated_marks': step1_m, 'awarded_marks': 0.0, 'comment': ''},
+                        {'step_num': 2, 'step_description': 'Derivation & Final Result', 'allocated_marks': step2_m, 'awarded_marks': 0.0, 'comment': ''}
+                    ]
+                else:
+                    step1_m = round(max_m * 0.35, 1)
+                    step2_m = round(max_m * 0.45, 1)
+                    step3_m = round(max_m - step1_m - step2_m, 1)
+                    init_breakdown = [
+                        {'step_num': 1, 'step_description': 'Concept Formulation & Formula/Setup', 'allocated_marks': step1_m, 'awarded_marks': 0.0, 'comment': ''},
+                        {'step_num': 2, 'step_description': 'Detailed Working & Intermediate Steps', 'allocated_marks': step2_m, 'awarded_marks': 0.0, 'comment': ''},
+                        {'step_num': 3, 'step_description': 'Accuracy, Units & Final Result', 'allocated_marks': step3_m, 'awarded_marks': 0.0, 'comment': ''}
+                    ]
+
+            # Get or create EvaluationResult
+            EvaluationResult.objects.update_or_create(
+                submission_answer=sub_ans,
+                defaults={
+                    'obtained_marks': 0.0,
+                    'maximum_marks': max_m,
+                    'percentage': 0.0,
+                    'feedback_text': '',
+                    'confidence': 1.0,
+                    'requires_manual_review': True,
+                    'rubric_breakdown_json': init_breakdown,
+                    'status': EvaluationResult.ReviewStatus.PENDING
+                }
+            )
+
+        submission.status = StudentSubmission.Status.UNDER_REVIEW
+        submission.evaluation_mode = 'MANUAL'
+        submission.total_max_marks = total_max
+        submission.total_obtained_marks = 0.0
+        submission.percentage = 0.0
+        submission.requires_manual_review = True
+        submission.is_finalized = False
+        submission.save()
+
+        return submission
+
+    @classmethod
     def validate_pre_evaluation(cls, submission: StudentSubmission) -> Tuple[bool, List[str]]:
         """
         Validates readiness before triggering AI evaluation.
@@ -247,6 +383,137 @@ class AIScriptEvaluator:
             "requires_manual_review": has_manual_review
         }, ip_address)
         cls._write_pipeline_log(submission.id, f"=== EVALUATION COMPLETED: {total_obtained}/{total_max} ({submission.percentage}%) ===")
+
+        return submission
+
+    @classmethod
+    def initialize_manual_evaluation(
+        cls,
+        submission_id: int,
+        confirmed_mappings: List[Dict[str, Any]],
+        options: Optional[Dict[str, Any]] = None,
+        user=None,
+        ip_address: Optional[str] = None
+    ) -> StudentSubmission:
+        """
+        Initializes manual teacher grading without calling AI LLMs.
+        Creates SubmissionAnswer and EvaluationResult placeholders with rubric criteria.
+        """
+        options = options or {}
+        submission = StudentSubmission.objects.get(id=submission_id)
+
+        # 1. Update Student Name and Roll if passed
+        st_name = options.get('student_name', '').strip()
+        st_roll = options.get('roll_no', '').strip() or options.get('student_roll_no', '').strip()
+        if st_name and st_name != 'Pending OCR Extraction':
+            submission.student_name = st_name
+        if st_roll:
+            submission.student_roll_no = st_roll
+
+        # 2. Process Question Mappings
+        from core.models import Question, SubmissionAnswer, EvaluationResult, EvaluationFeedback, QuestionMapping
+
+        exam = submission.examination
+
+        # Save QuestionMapping records for audit & persistence
+        QuestionMapping.objects.filter(submission=submission).delete()
+        for m in confirmed_mappings:
+            q_id = m.get('question_id')
+            page_numbers = m.get('page_numbers', [])
+            if q_id:
+                try:
+                    q_obj = exam.questions.get(id=q_id)
+                    QuestionMapping.objects.create(
+                        submission=submission,
+                        question=q_obj,
+                        page_numbers_json=page_numbers,
+                        detected_header_text=f"Manual Mapping for Q{q_obj.question_number}",
+                        confidence_score=1.0,
+                        detection_method=QuestionMapping.DetectionMethod.MANUAL_OVERRIDE
+                    )
+                except Exception:
+                    pass
+
+        # Re-create SubmissionAnswer and EvaluationResult entries
+        submission.answers.all().delete()
+        total_max = 0.0
+
+        all_exam_questions = list(exam.questions.select_related('rubric').order_by('question_number'))
+
+        for q in all_exam_questions:
+            matching_m = next((m for m in confirmed_mappings if str(m.get('question_id')) == str(q.id) or m.get('question_id') == q.id), None)
+            page_numbers = matching_m.get('page_numbers', []) if matching_m else []
+
+            sub_ans = SubmissionAnswer.objects.create(
+                submission=submission,
+                question=q
+            )
+            if page_numbers:
+                mapped_pages = submission.pages.filter(page_number__in=page_numbers)
+                if mapped_pages.exists():
+                    sub_ans.page = mapped_pages.first()
+                    sub_ans.save()
+
+            rubric = getattr(q, 'rubric', None)
+            rubric_steps = []
+            if rubric and rubric.criteria and isinstance(rubric.criteria, list):
+                for s_idx, crit in enumerate(rubric.criteria, 1):
+                    rubric_steps.append({
+                        'step_num': s_idx,
+                        'description': str(crit.get('description') or f"Criteria {s_idx}"),
+                        'allocated': float(crit.get('marks') or crit.get('weight') or (float(q.max_marks) / max(1, len(rubric.criteria)))),
+                        'awarded': 0.0,
+                        'grounding_evidence': '',
+                        'comment': ''
+                    })
+            else:
+                rubric_steps = [{
+                    'step_num': 1,
+                    'description': 'Answer correctness & step explanation',
+                    'allocated': float(q.max_marks),
+                    'awarded': 0.0,
+                    'grounding_evidence': '',
+                    'comment': ''
+                }]
+
+            eval_res = EvaluationResult.objects.create(
+                submission_answer=sub_ans,
+                obtained_marks=0.0,
+                maximum_marks=float(q.max_marks),
+                percentage=0.0,
+                confidence=1.0,
+                rubric_breakdown_json=rubric_steps,
+                feedback_text='Manual grading initialized. Enter marks and feedback for this question on the right panel.',
+                requires_manual_review=False,
+                status=EvaluationResult.ReviewStatus.PENDING
+            )
+
+            for step in rubric_steps:
+                EvaluationFeedback.objects.create(
+                    evaluation_result=eval_res,
+                    criteria_name=step.get('description', 'Criteria'),
+                    allocated_marks=float(step.get('allocated', 0.0)),
+                    awarded_marks=0.0,
+                    comments=''
+                )
+            total_max += float(q.max_marks)
+
+        submission.total_obtained_marks = 0.0
+        submission.total_max_marks = total_max or sum(float(q.max_marks) for q in all_exam_questions)
+        submission.percentage = 0.0
+        submission.requires_manual_review = True
+        submission.status = StudentSubmission.Status.UNDER_REVIEW
+        submission.save()
+
+        from core.ai_engine.services.workflow import SubmissionWorkflow
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.AI_EVALUATED, force=True)
+        SubmissionWorkflow.advance(submission, StudentSubmission.Status.UNDER_REVIEW, force=True)
+
+        cls._log_audit(submission, user, "MANUAL_EVALUATION_INITIALIZED", {
+            "questions_count": len(all_exam_questions),
+            "total_max": submission.total_max_marks
+        }, ip_address)
+        cls._write_pipeline_log(submission.id, f"=== MANUAL EVALUATION WORKBENCH INITIALIZED (Questions: {len(all_exam_questions)}, Max: {total_max}) ===")
 
         return submission
 

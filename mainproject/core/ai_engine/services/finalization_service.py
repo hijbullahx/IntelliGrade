@@ -51,6 +51,7 @@ class FinalizationService:
         SubmissionWorkflow.advance(
             submission,
             StudentSubmission.Status.FINALIZED,
+            force=True,
             user=teacher_user,
             details={
                 'total_obtained_marks': float(submission.total_obtained_marks),
