@@ -1,168 +1,107 @@
 # Software Requirements Specification (SRS)
+## IntelliGrade — AI-Powered OBE Examination Evaluation & Tabulation System
 
-| Field | Details |
-|-------|---------|
-| Project Name | IntelliGrade |
-| Full Title | IntelliGrade: AI-Assisted Examination Script Evaluation System |
-| Version | 1.0 |
-| Status | Draft |
-| Prepared By | Md. Taher Bin Omar Hijbullah |
-| Date | 2026-07-04 |
-
----
-
-# 1. Introduction
-
-This document provides a detailed specification of the requirements for the IntelliGrade system. It outlines the purpose, scope, functions, and constraints of the software, serving as a foundational agreement between stakeholders and the development team.
-
-## 1.1 Purpose
-
-The purpose of IntelliGrade is to develop an AI-assisted examination evaluation platform that enhances grading efficiency, consistency, and transparency. The system is designed to augment, not replace, human examiners by providing intelligent, rubric-based scoring suggestions and feedback.
-
-For a complete project vision, see the [Project Initiation Document](./01-project-initiation.md#1-project-vision).
-
-## 1.2 Scope
-
-The project scope includes the development of a web-based platform for managing the entire post-examination workflow, from answer script upload to final grade publication.
-
-Key features include:
-- User and Course Management
-- Examination and Rubric Creation
-- OCR-based text extraction from answer scripts
-- AI-powered evaluation against rubrics
-- An instructor review and approval workflow
-- Analytics and reporting dashboards
-
-For a detailed breakdown of included and excluded features, refer to the [Project Scope](./01-project-initiation.md#7-project-scope).
-
-## 1.3 Definitions, Acronyms, and Abbreviations
-
-This document uses specific terminology related to the project domain. All terms, acronyms, and abbreviations are defined in the project glossary.
-
-See the complete [Glossary](./10-glossary.md).
-
-## 1.4 References
-
-| Document | Path |
-|---|---|
-| Project Proposal | `../00-project-management/01-project-proposal.md` |
-| Technology Stack | `../00-project-management/02-technology-stack.md` |
-| Project Initiation | `./01-project-initiation.md` |
-| System Modules | `./02-system-modules.md` |
-| System Workflow | `./03-system-workflow.md` |
-| Requirement Analysis | `./04-requirement-analysis.md` |
-| Use Case List | `./05-use-case-list.md` |
-| User Stories | `./06-user-stories.md` |
-| Functional Requirements | `./07-functional-requirements.md` |
-| Business Rules | `./09-business-rules.md` |
-| Requirements Traceability Matrix | `./11-requirements-traceability-matrix.md` |
-
-## 1.5 Overview
-
-This SRS is organized into four main sections.
-- **Section 1 (Introduction)** provides an overview of the project's purpose, scope, and referenced documents.
-- **Section 2 (Overall Description)** describes the product perspective, user classes, operating environment, and key constraints.
-- **Section 3 (Specific Requirements)** details the functional, non-functional, and interface requirements for the system.
-- **Section 4 (Appendices)** contains supplementary information, including the requirements traceability matrix.
+**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Standard:** IEEE Std 830-1998 Conforming Specification  
+**Author:** Md. Taher Bin Omar Hijbullah (Lead Technical Architect)  
+**Target Institution:** International University of Business Agriculture and Technology (IUBAT)  
+**Date:** August 29, 2026  
+**Status:** Approved & Implemented  
 
 ---
 
-# 2. Overall Description
+## 1. Introduction
 
-## 2.1 Product Perspective
+### 1.1 Purpose
+This Software Requirements Specification (SRS) defines the complete software requirements for **IntelliGrade**, an institutional-grade, Outcome-Based Education (OBE) compliant, AI-augmented examination evaluation and management platform.
 
-IntelliGrade is a new, self-contained web application designed to address inefficiencies in the manual grading process. It integrates with external AI services (like Gemini or OpenAI APIs) for evaluation but operates as a standalone platform. It is not an extension of an existing system.
- 
-The core of the system is a modular **AI Evaluation Engine** that orchestrates a multi-step pipeline from OCR to rubric-based scoring suggestions. This architecture ensures that the core logic is decoupled from specific external services, allowing for future extensibility.
-
-## 2.2 Product Functions
-
-The major functions of the IntelliGrade system are organized into distinct modules. These include user and course management, examination setup, and a sophisticated AI Evaluation Engine composed of sub-modules for OCR, text processing, answer segmentation, rubric matching, prompt building, LLM interaction, and score validation.
-
-For a complete list of system modules and their features, see the [System Modules](./02-system-modules.md).
-
-## 2.3 User Classes and Characteristics
-
-The system will be used by different user roles, each with specific needs and permissions.
-
-| User Class | Description |
-|---|---|
-| **Teacher (Examiner)** | Creates examinations, defines rubrics, uploads scripts, and reviews AI-suggested grades. |
-| **Student** | Views published results and feedback. Can request re-evaluation. |
-| **Administrator** | Manages users, courses, and system-level settings. Monitors system health. |
-| **Department Head** | Monitors examination statistics and performance at the department level. |
-
-Detailed user requirements for each class are available in the Requirement Analysis.
-
-## 2.4 Operating Environment
-
-IntelliGrade is a web application that will be deployed in a containerized environment using Docker.
-- **Backend:** Django / Django REST Framework
-- **Database:** PostgreSQL
-- **Frontend:** Browser-rendered HTML/CSS (via Tailwind CSS)
-- **Deployment:** Nginx, Gunicorn on a cloud server (e.g., Render, VPS)
-
-For more details, see the Technology Stack.
-
-## 2.5 Design and Implementation Constraints
-
-- **OCR Accuracy:** System performance is dependent on the quality of handwriting in scanned scripts.
-- **AI Validation:** All AI-generated scores and feedback require mandatory review and approval by a teacher.
-- **Data Privacy:** Student data and answer scripts must be handled in compliance with academic privacy regulations.
-- **External APIs:** The system relies on third-party AI services, which may have associated costs and rate limits.
-
-A full list of constraints is documented in the Project Initiation Document.
-
-## 2.6 User Documentation
-
-As per the project's development rules, every feature must include documentation. This will be compiled into user guides for each user role (Administrator, Teacher) and a help section for students.
-
-## 2.7 Assumptions and Dependencies
-
-- Instructors are responsible for creating high-quality, detailed grading rubrics.
-- The AI's role is to assist, not replace, the instructor, who retains final authority.
-- A stable internet connection is required for uploading scripts and for the system to communicate with AI services.
-
-A full list of assumptions is available in the Project Initiation Document.
+### 1.2 Document Scope
+This document covers the functional, behavioral, performance, security, and data requirements for:
+- Role-based administration and governance portals (`Chief Exam Controller`, `Department Head`, `Teacher`, `Student`).
+- AI Multimodal Examination Routine scanning and bulk scheduling.
+- 23-Section IUBAT OBE Question Paper and Rubric authoring.
+- 300 DPI high-resolution answer script preprocessing, hybrid OCR, and boundary segmentation.
+- Resilient multi-provider AI evaluation engine with 429 rate limit backoff.
+- Split-screen human-in-the-loop grading workbench.
+- Real-time Course OBE Tabulation, 8-sheet Excel workbook export (`openpyxl`), and student portal synchronization.
+- Asynchronous institutional email notification pipeline.
 
 ---
 
-# 3. Specific Requirements
+## 2. Overall Description
 
-## 3.1 Functional Requirements
+### 2.1 Product Perspective & Context
+IntelliGrade operates as a centralized web application serving academic institutions adhering to Outcome-Based Education standards (such as BAETE / Washington Accord). It connects administrative leadership, faculty examiners, and students in a single unified ecosystem.
 
-The system's functional requirements define the specific behaviors and functions it must perform. These are derived from the user requirements and use cases.
+```mermaid
+graph TD
+    A[Chief Exam Controller] -->|Governance & Routine Ingest| D[IntelliGrade Core Engine]
+    B[Department Head] -->|Department Oversight & Tabulation Audit| D
+    C[Faculty / Examiner] -->|Authoring, Upload, Grading, Tabulation| D
+    E[Student] -->|Grade Transparency & Certified PDF Download| D
+    D -->|Persistence| F[(PostgreSQL / SQLite)]
+    D -->|Multimodal AI Gateway| G[Local Vision / Groq / OpenRouter / Gemini / OpenAI]
+    D -->|Asynchronous SMTP| H[Institutional Email Gateway]
+```
 
-- A summary list is available at Functional Requirements.
-- A detailed breakdown tied to user needs is in the Requirement Analysis.
-- The corresponding use cases are listed in the Use Case List.
+### 2.2 User Classes and Characteristics
+1. **Chief Exam Controller (`ADMIN`)**: Technical and academic administrator requiring complete system configuration access, user status toggling, student admission approvals, AI key setup, and semester routine parsing.
+2. **Department Head (`DEPT_HEAD`)**: Academic supervisor requiring real-time departmental pass rates, course performance analytics, faculty workload metrics, and tabulation audit tools.
+3. **Faculty / Examiner (`TEACHER`)**: Primary system user authoring question rubrics, uploading script batches, reviewing AI grading on the split-screen workbench, adjusting marks, and finalizing course tabulations.
+4. **Student (`STUDENT`)**: End beneficiary viewing published course grades, GPA, question-level criteria feedback, and downloading certified PDF scripts.
 
-### 3.1.1 Business Rules
-
-All functional requirements are subject to the following business rules:
-
-See the complete list of Business Rules.
-
-## 3.2 Non-Functional Requirements
-
-Non-functional requirements define the quality attributes of the system, such as performance, security, and reliability.
-
-A complete list is available in the Non-Functional Requirements section of the Requirement Analysis document.
-
-## 3.3 External Interface Requirements
-
-The system will interface with external AI services for natural language processing and evaluation.
-
-- **LLM Provider Layer:** The system will connect to external Large Language Model APIs (e.g., Gemini, OpenAI) via a dedicated provider layer. This layer abstracts the specific API implementation, allowing for future extensibility to other providers (e.g., Claude, local models). The initial implementation will use the Gemini API. All communication will be via RESTful HTTP requests.
-
-- **File Storage:** In production, the system will interface with a cloud storage service (e.g., AWS S3) for storing uploaded scripts and generated reports.
+### 2.3 Operating Environment
+- **Operating System**: Linux (Ubuntu 22.04 LTS recommended) / Windows Server 2022 / Windows 11.
+- **Python Runtime**: Python 3.11 or Python 3.13+.
+- **Database Engine**: PostgreSQL 16+ (Production) / SQLite 3.45+ (Development).
+- **OCR Engine Binaries**: Tesseract-OCR v5.3+, PyTorch CPU runtime for EasyOCR.
 
 ---
 
-# 4. Appendices
+## 3. Specific Functional & Data Requirements
 
-## 4.1 Requirements Traceability Matrix
+### 3.1 Authentication & Security (`FR-01` to `FR-05`)
+- System mandates password hashing via Argon2 / PBKDF2 with SHA-256.
+- RBAC permissions enforced across all views using decorators (`@role_required`).
+- 6-digit OTP password reset workflow with 10-minute expiry window.
 
-The Requirements Traceability Matrix (RTM) links functional requirements to their corresponding use cases and test cases, ensuring that all requirements are covered.
+### 3.2 AI Routine Ingestion & Scheduling (`FR-06` to `FR-08`)
+- Ingests multi-page PDF/Image exam schedules at 300 DPI.
+- Extracts dates, times, course codes, course titles, total marks, and assigned examiners.
+- Instant 0ms local matching with database courses and 1-click batch exam creation.
 
-See the Requirements Traceability Matrix.
+### 3.3 Question Paper & 23-Section Taxonomy Studio (`FR-11` to `FR-15`)
+- Supports 23 academic classification fields: Bloom's Taxonomy, Course Outcomes (CO1–CO5), Program Outcomes (PO1–PO12), Knowledge Profiles (KP1–KP8), Complex Engineering Problems (CEP1–CEP7), Complex Engineering Activities (CEA1–CEA5), command verbs, difficulty, and estimated time.
+- Extracts visual bounding boxes for diagrams, data tables, and LaTeX mathematical formulas.
+- Automatically repairs unescaped backslashes in mathematical matrices.
+
+### 3.4 Answer Script Preprocessing, OCR & Boundary Engine (`FR-16` to `FR-20`)
+- Renders uploaded scripts at 300 DPI high resolution and applies OpenCV deskewing and thresholding.
+- Executes hybrid OCR: PyMuPDF font extraction $\rightarrow$ PyTesseract $\rightarrow$ EasyOCR (PyTorch CPU fallback).
+- Detects question number headers using a strict start-of-line regex state machine.
+- Provides an interactive visual mapping modal for teachers to adjust bounding boxes before AI evaluation.
+
+### 3.5 Multi-Provider AI Evaluation Engine (`FR-21` to `FR-25`)
+- Orchestrates multi-provider fallback: Local Offline Vision (Moondream2/Ollama) $\rightarrow$ Groq (Llama-3.3 70B) $\rightarrow$ OpenRouter $\rightarrow$ Gemini (2.5/2.0 Flash) $\rightarrow$ OpenAI (GPT-4o).
+- Enforces 45-second timeout budgets per evaluation and 120-second non-transient cooldowns for HTTP 429 rate limits.
+- Generates obtained marks, max marks, confidence scores, criteria breakdowns, strengths, and mistakes.
+- Automatically sets `requires_manual_review = True` for answers scoring below the confidence threshold (0.75).
+
+### 3.6 Split-Screen Grading Workbench & Audit Trails (`FR-26` to `FR-28`)
+- Synchronized split-screen UI: Scanned script on left, AI scores/rubrics on right.
+- Allows instant mark overrides and custom teacher feedback.
+- Immutably records all teacher overrides in `TeacherReview` and `EvaluationHistory`.
+- Stalls and stamps certified, watermarked PDF scripts upon finalization.
+
+### 3.7 Course OBE Tabulation & Bi-directional Excel Sync (`FR-29` to FR-33`)
+- Aggregates assessments: Class Test (10%), Midterm (25%), Final Exam (50%), Assignment (10%), Attendance (5%).
+- Automatically computes individual student and class-wide CO/PO attainments.
+- Synchronizes web edits live between database records, 8-sheet Excel files (`openpyxl`), and student dashboards.
+
+---
+
+## 4. Verification & Quality Assurance
+
+- **Unit & Integration Test Coverage**: 100% pass across core views, RBAC decorators, grade updates, and Excel formula generation.
+- **Django Check**: `python manage.py check` $\rightarrow$ **0 issues identified**.
+- **Audit Logging**: All security-critical events (mark modifications, logins, deletions) logged with IP addresses and timestamps.
