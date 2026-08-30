@@ -1,7 +1,7 @@
-# IntelliGrade - Master System Report & Architectural Blueprint
+# IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
 **Document Reference:** `DOCS-MSR-4.0.0`  
-**System Name:** IntelliGrade - AI-Powered Outcome-Based Education (OBE) Academic Evaluation & Management Platform  
+**Official System Title:** IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions  
 **Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT) & BAETE OBE Accreditation Standards  
 **Release Version:** 4.0.0 (Enterprise Academic Edition)  
 **Lead System Architect & Auditor:** Principal Enterprise Systems Architect & Technical Documentation Specialist  
@@ -12,9 +12,7 @@
 
 ## 1. System Executive Blueprint & High-Level Architecture
 
-IntelliGrade is an enterprise academic assessment and grading automation SaaS platform designed to modernize university examination lifecycles. Higher education institutions face severe bottlenecks during examination periods: faculty spend hundreds of hours deciphering handwriting, manually cross-referencing answers against multi-tiered criteria, and performing complex multi-component Course Outcome (CO) and Program Outcome (PO) weighted mathematics for accreditation compliance.
-
-IntelliGrade resolves these bottlenecks through a **Human-in-the-Loop, AI-Augmented Evaluation Pipeline**. The system automates routine ingestion, question paper digitizing, 23-section IUBAT OBE taxonomy mapping, 300 DPI high-resolution script preprocessing, optical character recognition (OCR), question boundary segmentation, multi-provider AI evaluation, split-screen teacher verification workbenches, and real-time OBE tabulation with 8-sheet Excel workbook export.
+**IntelliGrade** is an end-to-end outcome-based examination management and intelligent script evaluation ecosystem engineered for higher education institutions. The system modernizes and unifies the complete examination lifecycle: Central Exam Controller Governance & AI Routine Scheduling $\rightarrow$ 23-Taxonomy OBE Question Paper & Master Solution Studio $\rightarrow$ Universal 300 DPI Script Preprocessing & Boundary Detection $\rightarrow$ Dual Evaluation Workbenches (Multi-Provider AI & Fast-Track Manual) $\rightarrow$ Live 8-Sheet Course OBE Tabulation & Certified Student Portals.
 
 ```mermaid
 graph TD

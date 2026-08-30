@@ -1,6 +1,7 @@
-# IntelliGrade - System Update & Architectural Audit Log
+# IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
-**Platform:** IntelliGrade (v4.0.0 Enterprise Academic Release)  
+**Document Reference:** `DOCS-UPDATE-4.0.0`  
+**Official System Title:** IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions  
 **Lead Architect & Auditor:** Md. Taher Bin Omar Hijbullah  
 **Audit Timestamp:** August 30, 2026  
 **System Health:** Production Ready — Zero System Check Errors (Django 5.2.x, SQLite/PostgreSQL, Multi-Provider AI Core)
@@ -9,7 +10,7 @@
 
 ## 1. Executive Summary & Core Milestones
 
-IntelliGrade is an enterprise-grade academic automation and Outcome-Based Education (OBE) evaluation platform engineered specifically for higher education institutions aligned with IUBAT and BAETE accreditation standards. The platform eliminates manual grading fatigue and computational errors by uniting computer vision (PyMuPDF, PyTesseract, EasyOCR), structured rubric engines, multi-provider AI evaluation failovers (Local Ollama Moondream, Groq Llama-3.3 70B, Google Gemini, OpenRouter, OpenAI GPT-4o), interactive split-screen workbenches, and real-time OBE tabulation with 8-sheet Excel reporting.
+**IntelliGrade** is an end-to-end outcome-based examination management and intelligent script evaluation ecosystem engineered specifically for higher education institutions aligned with IUBAT and BAETE accreditation standards. The platform eliminates manual examination management and grading friction by uniting central administrative governance, AI routine scheduling, 23-taxonomy OBE question blueprints, computer vision (PyMuPDF, PyTesseract, EasyOCR), structured rubric engines, multi-provider AI evaluation failovers (Local Ollama Moondream, Groq Llama-3.3 70B, Google Gemini, OpenRouter, OpenAI GPT-4o), interactive split-screen workbenches, and real-time OBE course tabulation with 8-sheet Excel reporting.
 
 ### Core Architectural Capabilities Implemented:
 1. **Academic Hierarchy & Multi-Tier Governance**: Complete RBAC governance covering Chief Exam Controller (`ADMIN`), Department Head (`DEPT_HEAD`), Faculty Member / Examiner (`TEACHER`), and Student (`STUDENT`) with profile approval workflows.

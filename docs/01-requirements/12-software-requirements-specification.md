@@ -1,5 +1,5 @@
 # Software Requirements Specification (SRS)
-## IntelliGrade — AI-Powered OBE Examination Evaluation & Tabulation System
+## IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
 **Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Standard:** IEEE Std 830-1998 Conforming Specification  
@@ -13,7 +13,7 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
-This Software Requirements Specification (SRS) defines the complete software requirements for **IntelliGrade**, an institutional-grade, Outcome-Based Education (OBE) compliant, AI-augmented examination evaluation and management platform.
+This Software Requirements Specification (SRS) defines the complete software, functional, and behavioral requirements for **IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions**, an enterprise-grade academic platform built to unify and automate the complete examination and evaluation lifecycle.
 
 ### 1.2 Document Scope
 This document covers the functional, behavioral, performance, security, and data requirements for:

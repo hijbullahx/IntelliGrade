@@ -1,6 +1,6 @@
-# IntelliGrade - Comprehensive Project Proposal & System Blueprint
+# IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
-**Project Title:** IntelliGrade - AI-Powered Outcome-Based Education (OBE) Examination Evaluation, Grading & Academic Management Platform  
+**Official Project Title:** IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions  
 **Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Lead Architect & Developer:** Md. Taher Bin Omar Hijbullah  
 **Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT) & BAETE OBE Accreditation Standards  
@@ -10,9 +10,9 @@
 
 ## 1. Executive Summary & Vision
 
-**IntelliGrade** is an enterprise academic SaaS platform engineered to transform the manual, labor-intensive, and subjective nature of university examinations. Higher education institutions face significant bottlenecks during examination cycles: instructors spend hundreds of hours manually reading handwriting, grading descriptive scripts, matching answers against complex multi-criteria rubrics, and calculating Course Outcome (CO) and Program Outcome (PO) attainments for accreditation.
+**IntelliGrade** is an enterprise academic SaaS platform and comprehensive evaluation ecosystem engineered to unify and automate the complete university examination lifecycle. Higher education institutions face significant challenges across the examination spectrum: manual routine scheduling, disconnected question paper and rubric authoring, laborious handwriting deciphering, grading fatigue, complex Course Outcome (CO) and Program Outcome (PO) weighted mathematics, and delayed student feedback.
 
-IntelliGrade solves these challenges by deploying a **Human-in-the-Loop, AI-Augmented Evaluation Pipeline**. The system automates routine ingestion, question paper digitizing, 23-section IUBAT OBE taxonomy mapping, 300 DPI high-resolution script preprocessing, optical character recognition (OCR), question boundary segmentation, multi-provider AI evaluation, split-screen teacher verification workbenches, and real-time OBE tabulation with 8-sheet Excel workbook export.
+IntelliGrade resolves these institutional challenges through a **Human-in-the-Loop, AI-Augmented Evaluation Pipeline**. The platform provides centralized administrative governance, AI exam routine parsing, 23-section IUBAT OBE taxonomy mapping, 300 DPI high-resolution script preprocessing, optical character recognition (OCR), question boundary segmentation, dual evaluation workbenches (Multi-Provider AI & Fast-Track Manual), split-screen teacher verification, and real-time OBE tabulation with 8-sheet Excel workbook export.
 
 ---
 
