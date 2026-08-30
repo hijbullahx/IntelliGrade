@@ -1,104 +1,113 @@
-# IntelliGrade - End-to-End System Workflows & State Machines
+# IntelliGrade — End-to-End System Workflow & State Machine
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
 
-## 1. High-Level University Examination Lifecycle Workflow
+## 1. Global End-to-End Process Workflow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Chief Exam Controller
-    actor T as Faculty Member / Examiner
-    actor S as Student
-    participant Sys as IntelliGrade Core System
-    participant OCR as OCR & Boundary Engine
-    participant AI as Multi-Provider AI Failover
+    actor Admin as Chief Exam Controller
+    actor Teacher as Faculty / Examiner
+    actor Student as Student
+    participant System as IntelliGrade Core & Router
+    participant OCR as Vision & OCR Pipeline
+    participant AI as Multi-Provider AI Engine
     participant Tab as OBE Tabulation Engine
 
-    Note over C,Sys: Stage 1: Academic Structure & Routine Setup
-    C->>Sys: Manage Colleges, Schools, Departments, Courses & Faculty
-    C->>Sys: Upload Examination Routine PDF/Image
-    Sys->>AI: Parse Routine Schedule & Detect Courses
-    AI-->>Sys: Return Structured Exam Schedule
-    Sys-->>C: Display Batch Scheduled Exams & Publish
+    %% Phase 1: Governance & Routine
+    Admin->>System: Upload University Exam Routine (PDF/Image)
+    System->>OCR: Ingest & Parse Routine Table
+    OCR-->>System: Extracted Exam Dates, Times, Courses, Rooms
+    System->>Admin: Provision Scheduled Examinations
+    System->>Teacher: Email Notification: Course & Exam Assigned
 
-    Note over T,Sys: Stage 2: Question Paper & Rubric Studio
-    T->>Sys: Open Question Paper Studio (/teacher/questions-rubric/)
-    T->>Sys: Upload Official Question Paper & Syllabus Outline
-    Sys->>AI: Extract 23-Taxonomy Metadata (CO/PO, Bloom, Tables, Formulas)
-    AI-->>Sys: Return Questions & Criterion Rubrics
-    T->>Sys: (Optional) Upload Master Benchmark Solution Script
-    T->>Sys: Verify & Save Golden Exam Configuration
+    %% Phase 2: Question & Rubric Studio
+    Teacher->>System: Author/Scan Question Paper with 23-Section OBE Taxonomy
+    Teacher->>System: Upload Master Benchmark Solution (Optional)
+    System->>OCR: Extract Figures, Tables, LaTeX Formulas, Model Steps
+    System->>Teacher: Confirmed Question Paper & Rubric Configuration
 
-    Note over S,T: Stage 3: Examination Conduct
-    S->>T: Students complete handwritten examination scripts
+    %% Phase 3: Script Ingestion & Boundary Mapping
+    alt Mode: AI Evaluation Wizard (v3.0)
+        Teacher->>System: Batch Upload Student Answer Scripts (PDF/Images/ZIP)
+        System->>OCR: Render 300 DPI Images + Hybrid OCR (Tesseract / EasyOCR)
+        OCR-->>System: Word/Line Coordinates & Raw Text
+        System->>System: State-Machine Heading Detection & Page Mapping
+        System->>Teacher: Interactive Mapping Review Matrix
+        Teacher->>System: Confirm Question-to-Page Mappings
+        
+        %% Phase 4: AI Evaluation
+        System->>AI: TaskRouter Dispatch (Moondream/Groq/OpenRouter/Gemini)
+        AI-->>System: Structured JSON Score, Feedback, Strengths, Mistakes
+        System->>System: Transition State: AI_EVALUATED
+    else Mode: Manual Grading Wizard
+        Teacher->>System: Upload Script PDF (Fast Page Slicing)
+        System->>System: Split Pages into 300 DPI Images (Zero AI/OCR)
+        Teacher->>System: Direct Manual Question-to-Page Selection
+        System->>System: Launch Direct Manual Grading Workbench
+    end
 
-    Note over T,OCR: Stage 4: Script Ingestion, 300 DPI Preprocess & OCR
-    T->>Sys: Batch Upload Student Answer Scripts (PDF / Images)
-    Sys->>OCR: Preprocess Images, Deskew & Render at 300 DPI
-    OCR->>OCR: Run Hybrid OCR (PyMuPDF -> PyTesseract -> EasyOCR)
-    OCR->>OCR: Detect Question Numbers & Segment Boundaries
-    OCR-->>Sys: Generated Mapped Question Regions
-    Sys-->>T: Present Interactive Visual Mapping Modal for Verification
+    %% Phase 5: Teacher Review & Finalization
+    Teacher->>System: Open Split-Screen Evaluation Workspace
+    Teacher->>System: Verify Answer Crops, Rubric Criteria, Adjust Marks
+    Teacher->>System: Click 'Finalize Evaluation'
+    System->>System: Generate Certified PDF with Security Watermark
+    System->>System: Purge Obsolete Temporary Working Images
+    System->>Tab: Sync Marks to StudentGradeRecord (OBE Attainments)
+    System->>Student: Email Notification: Graded Result Published (with PDF)
 
-    Note over T,AI: Stage 5: Multi-Provider AI Script Evaluation
-    T->>Sys: Confirm Mapping & Start Evaluation
-    Sys->>AI: Evaluate Mapped Answers against Rubric Criteria (Failover: Local -> Groq -> Gemini -> OpenAI)
-    AI-->>Sys: Return Scores, Strengths, Mistakes & Missing Points
-    Sys->>Sys: Flag Low Confidence Submissions for Mandatory Review
-
-    Note over T,Sys: Stage 6: Teacher Grading Review & Certification
-    T->>Sys: Open Split-Screen Grading Workbench
-    T->>Sys: Verify Scores, Override Marks, Edit Comments & Click 'Finalize'
-    Sys->>Sys: Stamp & Generate Certified Evaluated PDF Script
-
-    Note over Tab,S: Stage 7: Real-Time Tabulation, Excel Export & Results
-    Sys->>Tab: Sync Evaluation Marks to StudentGradeRecord
-    Tab->>Tab: Calculate CT (10%) + Mid (25%) + Final (50%) + Assign (10%) + Att (5%)
-    Tab->>Tab: Calculate Individual & Class CO/PO Attainments
-    Tab->>Sys: Generate 8-Sheet OBE Excel Workbook (.xlsx)
-    Sys->>S: Dispatch Institutional Result Email with PDF Attachment
-    S->>Sys: View Live Tabulation Breakdown & Download Stamped Script (/dashboard/student/)
+    %% Phase 6: OBE Tabulation & Dissemination
+    Teacher->>Tab: Review Course Tabulation (CT 10%, Mid 25%, Final 50%, Assign 10%, Att 5%)
+    Tab->>Teacher: Export Official 8-Sheet OBE Excel Workbook
+    Student->>System: Login to Student Portal -> View Transparency Breakdown & Download PDF
 ```
 
 ---
 
-## 2. Granular State Machine Specifications
+## 2. Detailed State-Machine Lifecycle of `StudentSubmission`
 
-### 2.1 StudentSubmission Lifecycle State Machine
+The `StudentSubmission` entity progresses through a strictly validated state machine managed by `core/ai_engine/services/workflow.py`:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> UPLOADED: Script PDF/Images Uploaded
-    UPLOADED --> PREVIEW_READY: Thumbnail & Metadata Generated
-    PREVIEW_READY --> WORKING_COPY_CREATED: 300 DPI Normalization in submission_working/
-    WORKING_COPY_CREATED --> PDF_GENERATED: Unified Preview PDF Compiled
-    PDF_GENERATED --> OCR_COMPLETE: PyTesseract / EasyOCR Text Extracted
-    OCR_COMPLETE --> SEGMENTED: Answer Boundaries Detected
-    SEGMENTED --> MAPPING_COMPLETE: Auto-Mapping Generated
-    MAPPING_COMPLETE --> WAITING_TEACHER_CONFIRMATION: Ambiguous Mappings Detected
-    WAITING_TEACHER_CONFIRMATION --> AI_EVALUATED: Teacher Confirms Mapping / Starts AI Eval
-    MAPPING_COMPLETE --> AI_EVALUATED: High-Confidence Auto Match Proceeded
-    AI_EVALUATED --> UNDER_REVIEW: Teacher Opens Split-Screen Workbench
-    UNDER_REVIEW --> REVIEWED: Teacher Modifies / Approves Question Marks
-    REVIEWED --> FINALIZED: Teacher Clicks 'Finalize Evaluation'
-    FINALIZED --> ARCHIVED: Temp Files Cleaned, Certified PDF Stamped
-    AI_EVALUATED --> FAILED: Provider Timeout / All Chains Exhausted
-    FAILED --> AI_EVALUATED: Retry / Fallback Triggered
+    [*] --> UPLOADED: Script Ingested (PDF / Image / ZIP)
+    UPLOADED --> PREVIEW_READY: 300 DPI Working Copies Generated
+    PREVIEW_READY --> WORKING_COPY_CREATED: Rotation & Ordering Applied
+    WORKING_COPY_CREATED --> PDF_GENERATED: Clean Script PDF Compiled
+    PDF_GENERATED --> OCR_COMPLETE: Hybrid Text & Word BBoxes Extracted
+    OCR_COMPLETE --> SEGMENTED: Answer Regions Isolated
+    SEGMENTED --> MAPPING_COMPLETE: Question Numbers Mapped to Pages
+    MAPPING_COMPLETE --> WAITING_TEACHER_CONFIRMATION: Low-Confidence / Multi-Question Conflict
+    WAITING_TEACHER_CONFIRMATION --> MAPPING_COMPLETE: Teacher Confirms Mapping
+    MAPPING_COMPLETE --> AI_EVALUATED: Multi-Provider AI Scoring Complete
+    AI_EVALUATED --> UNDER_REVIEW: Teacher Opens Evaluation Workspace
+    UNDER_REVIEW --> REVIEWED: Teacher Adjusts / Approves Marks
+    REVIEWED --> FINALIZED: Final Evaluated PDF Certified & Locked
+    FINALIZED --> ARCHIVED: Course Closed & Tabulation Exported
+    
+    UPLOADED --> FAILED: Ingestion Error / Corrupt File
+    OCR_COMPLETE --> FAILED: Unreadable Script
+    AI_EVALUATED --> FAILED: Provider Timeout / All Fallbacks Exhausted
 ```
 
-### 2.2 Question Mapping State Machine
-- **AUTO_HIGH**: Full regex match found at line beginning (e.g. `Question 1: Explain...`, `Ans to Q.1`), confidence >= 85%.
-- **AMBIGUOUS**: Substring match or overlapping page boundaries detected, confidence < 85%. Triggers teacher confirmation modal before AI grading.
-- **MANUAL_OVERRIDE**: Teacher visually modifies bounding boxes or page numbers via the interactive crop tool.
+### State Definitions & Trigger Events:
 
-### 2.3 EvaluationResult Review State Machine
-- **PENDING**: AI evaluation completed, awaiting instructor inspection.
-- **UNDER_REVIEW**: Instructor currently modifying marks/comments in split-screen workbench.
-- **APPROVED**: Instructor confirms score matching criteria benchmarks.
-- **MODIFIED**: Instructor overrode AI suggested score with manual value.
-- **FLAGGED**: Marked for secondary departmental audit or moderation.
+1. **`UPLOADED`**: Script file received via API (`upload_student_submission`, `api_upload_raw_images`, `api_wizard_upload_pdf`).
+2. **`PREVIEW_READY`**: Pages rendered to 300 DPI high-resolution working copies in `media/submission_working/`.
+3. **`WORKING_COPY_CREATED`**: Page orientation angles (0°, 90°, 180°, 270°) and sequence orders normalized.
+4. **`PDF_GENERATED`**: Clean composite answer script PDF generated in `media/submission_preview/`.
+5. **`OCR_COMPLETE`**: Text extracted via PyMuPDF font parser, PyTesseract, or EasyOCR deep learning backend.
+6. **`SEGMENTED`**: Visual bounding box coordinates (`[ymin, xmin, ymax, xmax]`) generated for distinct answer regions.
+7. **`MAPPING_COMPLETE`**: Each exam question mapped to corresponding answer pages.
+8. **`WAITING_TEACHER_CONFIRMATION`**: Flagged if question headers are missing, duplicated, or below 75% confidence.
+9. **`AI_EVALUATED`**: Multi-provider AI completes partial-credit scoring, feedback generation, and rubric matching.
+10. **`UNDER_REVIEW`**: Teacher actively inspecting script in split-screen Evaluation Workspace.
+11. **`REVIEWED`**: Teacher completes manual score overrides and saves verified criteria marks.
+12. **`FINALIZED`**: Final watermarked PDF generated in `media/submission_final/`, temporary working drafts purged, and marks synced to OBE Course Tabulation.
+13. **`ARCHIVED`**: Grade records locked and exported for accreditation audits.
+14. **`FAILED`**: Error state with detailed diagnostics recorded in `EvaluationAuditLog`.

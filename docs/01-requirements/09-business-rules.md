@@ -1,6 +1,6 @@
 # IntelliGrade - Academic Business Rules & Evaluation Policy
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
@@ -49,10 +49,10 @@ Below 40.0%                  F                0.00                      Fail
 
 ### BR-03: Outcome-Based Education (OBE) Attainment Rules
 1. **Course Outcome (CO) Calculation**:
-   - Each examination question is mapped to a specific Course Outcome (e.g. `CO1`, `CO2`).
+   - Each examination question is mapped to a specific Course Outcome (e.g. `CO1`, `CO2` up to `CO6`).
    - Student CO attainment is the percentage of obtained marks relative to the maximum marks allocated to that CO across all assessments.
 2. **Program Outcome (PO) Calculation**:
-   - Course Outcomes are mapped to Program Outcomes (e.g. `PO1` to `PO12`).
+   - Course Outcomes are mapped to Program Outcomes (`PO1` to `PO12`).
    - PO attainment is calculated via the weighted contribution of constituent CO scores.
 3. **Class OBE Attainment Threshold**:
    - Standard institutional benchmark: A Course Outcome is considered **"Attained by the Class"** if >= 50% of enrolled students score >= 50% on that specific CO.
@@ -70,4 +70,12 @@ Below 40.0%                  F                0.00                      Fail
 ### BR-05: Multi-Provider AI Failover & Timeout Rules
 1. **Timeout Budget**: Each AI evaluation request is allocated a hard timeout budget of **45 seconds**. If no response is received within 45s, the request immediately fails over to the next provider in the chain.
 2. **HTTP 429 Rate Limit Cooldown**: When an AI provider returns HTTP 429 (Rate Limited / Quota Exhausted), it is placed on a **120-second non-transient cooldown** in `ProviderHealthTracker`, routing subsequent requests to alternate providers without thread blocking.
-3. **LaTeX Formula Sanitization**: All mathematical matrices and LaTeX formulas must pass through regex backslash escaping before JSON decoding.
+3. **Local Vision Downsampling**: All image payloads sent to Ollama Moondream must be pre-processed with 800px LANCZOS downsampling and JPEG quality=75 compression.
+4. **LaTeX Formula Sanitization**: All mathematical matrices and LaTeX formulas must pass through regex backslash escaping before JSON decoding.
+
+---
+
+### BR-06: Storage Lifecycle & Privacy Policy
+1. **Finalized Script Protection**: Certified evaluated PDFs stored in `media/submission_final/` are permanent institutional records and cannot be deleted by automated cleanup jobs.
+2. **Temporary Draft Purging**: Non-active intermediate working copies in `media/submission_working/` and preview PDFs in `media/submission_preview/` are automatically purged upon submission finalization.
+3. **Abandoned Draft Purge**: Unfinalized draft submissions older than 24 hours are subject to automated temp artifact cleanup.

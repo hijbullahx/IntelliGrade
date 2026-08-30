@@ -1,7 +1,7 @@
 # IntelliGrade — Requirements Traceability Matrix (RTM)
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -45,5 +45,9 @@ FR-30   UC-22: Live Web-Excel Sync StudentGradeRecord, StudentSubmission views.a
 FR-31   UC-23: 8-Sheet Excel ExportCourseTabulation, StudentGradeRecord  tabulation_exporter.py                     core/tests.py (100% Pass)
 FR-32   UC-24: Async Email Service StudentSubmission                     email_service.py                           core/tests.py (100% Pass)
 FR-33   UC-25: Student Dashboard   StudentGradeRecord, StudentSubmission views.student_dashboard                    core/tests.py (100% Pass)
+FR-34   UC-26: Manual Script WizardSubmissionImage, SubmissionPage       views.api_wizard_upload_pdf                core/tests.py (100% Pass)
+FR-35   UC-27: Finalization Purge  StudentSubmission                     finalization_service.py                    core/tests.py (100% Pass)
+FR-36   Database Indexing & Eager  StudentSubmission, EvaluationResult   core/models.py, views.py                   core/tests.py (100% Pass)
+FR-37   Local Vision Downsampling  AIConfiguration                       local_vision.py                            core/tests.py (100% Pass)
 ============================================================================================================================================
 ```

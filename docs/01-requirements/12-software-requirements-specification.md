@@ -1,11 +1,11 @@
 # Software Requirements Specification (SRS)
 ## IntelliGrade — AI-Powered OBE Examination Evaluation & Tabulation System
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Standard:** IEEE Std 830-1998 Conforming Specification  
 **Author:** Md. Taher Bin Omar Hijbullah (Lead Technical Architect)  
 **Target Institution:** International University of Business Agriculture and Technology (IUBAT)  
-**Date:** August 29, 2026  
+**Date:** August 30, 2026  
 **Status:** Approved & Implemented  
 
 ---
@@ -21,9 +21,11 @@ This document covers the functional, behavioral, performance, security, and data
 - AI Multimodal Examination Routine scanning and bulk scheduling.
 - 23-Section IUBAT OBE Question Paper and Rubric authoring.
 - 300 DPI high-resolution answer script preprocessing, hybrid OCR, and boundary segmentation.
-- Resilient multi-provider AI evaluation engine with 429 rate limit backoff.
-- Split-screen human-in-the-loop grading workbench.
+- Dual Evaluation Pipelines: AI Evaluation Wizard (v3.0) and 100% Direct Manual Grading Wizard.
+- Resilient multi-provider AI evaluation engine with 429 rate limit backoff and Local Moondream 800px LANCZOS preprocessing.
+- Split-screen human-in-the-loop grading workbench with eager-loaded relations (N+1 query free).
 - Real-time Course OBE Tabulation, 8-sheet Excel workbook export (`openpyxl`), and student portal synchronization.
+- Storage lifecycle management with automated draft purge upon finalization.
 - Asynchronous institutional email notification pipeline.
 
 ---
@@ -39,7 +41,7 @@ graph TD
     B[Department Head] -->|Department Oversight & Tabulation Audit| D
     C[Faculty / Examiner] -->|Authoring, Upload, Grading, Tabulation| D
     E[Student] -->|Grade Transparency & Certified PDF Download| D
-    D -->|Persistence| F[(PostgreSQL / SQLite)]
+    D -->|Persistence| F[(PostgreSQL / SQLite with Composite Indexes)]
     D -->|Multimodal AI Gateway| G[Local Vision / Groq / OpenRouter / Gemini / OpenAI]
     D -->|Asynchronous SMTP| H[Institutional Email Gateway]
 ```
@@ -71,7 +73,7 @@ graph TD
 - Instant 0ms local matching with database courses and 1-click batch exam creation.
 
 ### 3.3 Question Paper & 23-Section Taxonomy Studio (`FR-11` to `FR-15`)
-- Supports 23 academic classification fields: Bloom's Taxonomy, Course Outcomes (CO1–CO5), Program Outcomes (PO1–PO12), Knowledge Profiles (KP1–KP8), Complex Engineering Problems (CEP1–CEP7), Complex Engineering Activities (CEA1–CEA5), command verbs, difficulty, and estimated time.
+- Supports 23 academic classification fields: Bloom's Taxonomy, Course Outcomes (CO1–CO6), Program Outcomes (PO1–PO12), Knowledge Profiles (KP1–KP8), Complex Engineering Problems (CEP1–CEP7), Complex Engineering Activities (CEA1–CEA5), command verbs, difficulty, and estimated time.
 - Extracts visual bounding boxes for diagrams, data tables, and LaTeX mathematical formulas.
 - Automatically repairs unescaped backslashes in mathematical matrices.
 
@@ -81,19 +83,21 @@ graph TD
 - Detects question number headers using a strict start-of-line regex state machine.
 - Provides an interactive visual mapping modal for teachers to adjust bounding boxes before AI evaluation.
 
-### 3.5 Multi-Provider AI Evaluation Engine (`FR-21` to `FR-25`)
-- Orchestrates multi-provider fallback: Local Offline Vision (Moondream2/Ollama) $\rightarrow$ Groq (Llama-3.3 70B) $\rightarrow$ OpenRouter $\rightarrow$ Gemini (2.5/2.0 Flash) $\rightarrow$ OpenAI (GPT-4o).
+### 3.5 Dual Evaluation Pipelines & Failover Core (`FR-21` to `FR-25`, `FR-34`)
+- **AI Evaluation Wizard (v3.0)**: Automatic question mapping, confidence ratings, strengths, and mistakes.
+- **Manual Script Grading Wizard**: Pure PDF page slicing and direct teacher assignment without AI evaluation interference.
+- **Failover Chain**: Local Offline Vision (Moondream2 800px LANCZOS) $\rightarrow$ Groq (Llama-3.3 70B) $\rightarrow$ OpenRouter $\rightarrow$ Gemini (2.5/2.0 Flash) $\rightarrow$ OpenAI (GPT-4o).
 - Enforces 45-second timeout budgets per evaluation and 120-second non-transient cooldowns for HTTP 429 rate limits.
-- Generates obtained marks, max marks, confidence scores, criteria breakdowns, strengths, and mistakes.
 - Automatically sets `requires_manual_review = True` for answers scoring below the confidence threshold (0.75).
 
-### 3.6 Split-Screen Grading Workbench & Audit Trails (`FR-26` to `FR-28`)
+### 3.6 Split-Screen Grading Workbench & Audit Trails (`FR-26` to `FR-28`, `FR-36`)
 - Synchronized split-screen UI: Scanned script on left, AI scores/rubrics on right.
+- Eager-loaded queries eliminating N+1 database leaks.
 - Allows instant mark overrides and custom teacher feedback.
 - Immutably records all teacher overrides in `TeacherReview` and `EvaluationHistory`.
-- Stalls and stamps certified, watermarked PDF scripts upon finalization.
+- Stalls and stamps certified, watermarked PDF scripts upon finalization, with automatic temporary draft image purging (`FR-35`).
 
-### 3.7 Course OBE Tabulation & Bi-directional Excel Sync (`FR-29` to FR-33`)
+### 3.7 Course OBE Tabulation & Bi-directional Excel Sync (`FR-29` to `FR-33`)
 - Aggregates assessments: Class Test (10%), Midterm (25%), Final Exam (50%), Assignment (10%), Attendance (5%).
 - Automatically computes individual student and class-wide CO/PO attainments.
 - Synchronizes web edits live between database records, 8-sheet Excel files (`openpyxl`), and student dashboards.

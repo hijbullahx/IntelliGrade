@@ -1,7 +1,7 @@
 # IntelliGrade — Detailed User Stories & Acceptance Criteria
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -37,14 +37,23 @@
 
 ### US-04: Faculty Member — 23-Section OBE Question Paper Authoring
 - **As a** Faculty Examiner,
-- **I want to** define question papers with complete IUBAT OBE metadata (Bloom's level, CO1–CO5, PO1–PO12, KP, CEP, CEA),
+- **I want to** define question papers with complete IUBAT OBE metadata (Bloom's level, CO1–CO6, PO1–PO12, KP, CEP, CEA),
 - **So that** my examination adheres strictly to BAETE accreditation standards.
 - **Acceptance Criteria**:
   - *Given* the Question & Rubric Studio (`/teacher/questions-rubric/`),
   - *When* I author or AI-scan a question paper,
   - *Then* the system records question prompts, maximum marks, Bloom taxonomy classifications, Course Outcome mappings, and criterion rubrics in the database.
 
-### US-05: Faculty Member — Multimodal Script Ingestion & 300 DPI Preprocessing
+### US-05: Faculty Member — Master Benchmark Solution Studio
+- **As a** Faculty Examiner,
+- **I want to** upload my golden benchmark solution script,
+- **So that** the system extracts step-by-step model answers and maps partial credit criteria directly to the questions.
+- **Acceptance Criteria**:
+  - *Given* an uploaded teacher solution script PDF,
+  - *When* the system parses the document,
+  - *Then* it extracts `master_solution_steps` with step marks and displays them alongside rubrics in the Evaluation Workspace.
+
+### US-06: Faculty Member — Multimodal Script Ingestion & 300 DPI Preprocessing
 - **As a** Faculty Examiner,
 - **I want to** drag and drop batch PDF or image student scripts,
 - **So that** the system automatically generates high-resolution 300 DPI working copies and runs hybrid OCR.
@@ -53,16 +62,16 @@
   - *When* I upload them via `/scripts/upload/` or the evaluation wizard,
   - *Then* the system generates versioned 300 DPI images in `submission_working/`, runs PyTesseract/EasyOCR fallback, and detects question boundaries.
 
-### US-06: Faculty Member — Interactive Question Boundary Confirmation
+### US-07: Faculty Member — Dual Evaluation Wizards (AI vs Direct Manual)
 - **As a** Faculty Examiner,
-- **I want to** inspect detected question boundaries and adjust visual bounding boxes before AI evaluation,
-- **So that** the AI evaluator evaluates the exact handwritten region corresponding to each question.
+- **I want to** choose between AI Evaluation Wizard (v3.0) and Direct Manual Grading Wizard,
+- **So that** I can either run automated AI grading or grade manually by assigning pages without OCR/AI interference.
 - **Acceptance Criteria**:
-  - *Given* an uploaded script with detected question regions,
-  - *When* the interactive mapping modal opens,
-  - *Then* I can verify page associations, adjust crop coordinates visually, and click "Confirm Mapping & Run Evaluation".
+  - *Given* the Evaluation Hub,
+  - *When* I launch the Manual Wizard,
+  - *Then* the system slices the PDF into pages without AI/OCR, lets me map question-to-page checkboxes, and immediately launches the Manual Grading Workbench.
 
-### US-07: Faculty Member — Split-Screen Grading Workbench & Override
+### US-08: Faculty Member — Split-Screen Grading Workbench & Override
 - **As a** Faculty Examiner,
 - **I want to** review AI-evaluated answers side-by-side with original script images and override marks,
 - **So that** I retain full authority over student grades and can provide custom feedback.
@@ -71,7 +80,7 @@
   - *When* I open `/teacher/submission/<id>/workspace/`,
   - *Then* I see the original script on the left and AI scores/rubrics on the right; adjusting a mark updates the database and logs a `TeacherReview` audit trail entry.
 
-### US-08: Faculty Member — Real-Time OBE Course Tabulation & Excel Export
+### US-09: Faculty Member — Real-Time OBE Course Tabulation & Excel Export
 - **As a** Faculty Examiner,
 - **I want to** manage a course-wide OBE tabulation sheet (CT 10%, Mid 25%, Final 50%, Assign 10%, Att 5%),
 - **So that** I can edit marks live in the web table and export an official 8-sheet Excel workbook.
@@ -80,7 +89,7 @@
   - *When* I edit a student's marks and click "Save & Sync Tabulation",
   - *Then* the system updates `StudentGradeRecord`, recalculates overall percentages and letter grades, synchronizes the student portal, and exports an 8-sheet Excel file (`HOME`, `ASSIGNMENT`, `CO_ATTAINMENT`, `PO_ATTAINMENT`, `CO_CLASS_ATTAINED`, `PO_CLASS_ATTAINED`, `CQI`).
 
-### US-09: Student — Real-Time Grade & Script Transparency
+### US-10: Student — Real-Time Grade & Script Transparency
 - **As a** University Student,
 - **I want to** view my official course tabulation grades, GPA, question-by-question marks, and feedback,
 - **So that** I have full academic transparency and can download certified PDF answer scripts.

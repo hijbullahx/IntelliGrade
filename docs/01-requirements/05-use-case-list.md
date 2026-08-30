@@ -1,6 +1,6 @@
 # IntelliGrade - Exhaustive Use Case Inventory
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
@@ -72,5 +72,9 @@ UC-24         Institutional Email Result Dispatch     System            System e
                                                                         and attached certified PDF answer script.
 UC-25         Student Grade Dashboard & Transparency  Student           Student views official OBE course grades, GPA,
                                                                         question breakdowns, and downloads PDF scripts.
+UC-26         Manual Script Grading Wizard Workflow   Teacher           Teacher uploads script PDF for fast page slicing,
+                                                                        assigns question pages, and grades directly.
+UC-27         Automated Working Draft Storage Purge   System            System cleans obsolete working copies upon
+                                                                        finalization or after 24h abandoned timeout.
 ====================================================================================================
 ```
