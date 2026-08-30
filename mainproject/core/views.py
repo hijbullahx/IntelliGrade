@@ -3790,7 +3790,7 @@ def evaluation_workspace(request, submission_id):
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
     exam = submission.examination
-    answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
+    answers = submission.answers.select_related('question__rubric', 'page', 'evaluation_result').prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel').all()
 
     # Ensure working copy images exist on disk for all pages (self-healing)
     from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
@@ -5623,7 +5623,7 @@ def course_tabulation_view(request, course_id):
     from core.services.tabulation_service import sync_submission_to_tabulation
     evaluated_subs = StudentSubmission.objects.filter(
         examination__course=course
-    )
+    ).select_related('examination')
 
     # 1. Clean up obsolete ghost records with outdated IDs
     active_ids = set()

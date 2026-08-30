@@ -91,7 +91,7 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
         total_sub_obtained = 0.0
         total_sub_max = 0.0
 
-        answers = sub.answers.all().select_related('question', 'evaluation_result').order_by('question_id', 'id')
+        answers = sub.answers.all().select_related('question__rubric', 'evaluation_result').order_by('question_id', 'id')
         if answers.exists():
             import re
             for idx, sa in enumerate(answers, start=1):
