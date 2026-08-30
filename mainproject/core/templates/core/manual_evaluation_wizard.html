@@ -436,7 +436,7 @@ async function uploadSinglePdf(file) {
     formData.append('script_file', file);
 
     try {
-        const resp = await fetch("{% url 'upload_student_submission' exam.id %}", {
+        const resp = await fetch("{% url 'api_wizard_upload_pdf' exam.id %}", {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRFToken': '{{ csrf_token }}' }
