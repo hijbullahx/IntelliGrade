@@ -1039,7 +1039,7 @@ async function openManualQuestionMapping() {
             question_id: {{ q.id }},
             question_number: "{{ q.formatted_number|default:q.question_number }}",
             max_marks: {{ q.max_marks|default:10 }},
-            prompt_text: "{{ q.prompt_text|default:q.text|escapejs|truncatechars:80 }}",
+            prompt_text: "{{ q.prompt_text|default:q.text|truncatechars:80|escapejs }}",
             page_numbers: totalPages === 1 ? [1] : ({{ forloop.counter }} <= totalPages ? [{{ forloop.counter }}] : [1]),
             confidence: 1.0,
             mapping_status: 'CONFIRMED'
