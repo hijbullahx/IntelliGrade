@@ -1,10 +1,10 @@
-# IntelliGrade — System Improvement & Architectural Scaling Roadmap
+# IntelliGrade - System Improvement & Architectural Scaling Roadmap
 
 **Document Reference:** `DOCS-SIR-3.5.0`  
-**System Name:** IntelliGrade — AI-Powered OBE Academic Evaluation & Management Platform  
+**System Name:** IntelliGrade - AI-Powered OBE Academic Evaluation & Management Platform  
 **Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT)  
 **Lead Auditor & Systems Architect:** Principal Enterprise Systems Architect & Technical Auditor  
-**Date:** August 29, 2026  
+**Date:** August 30, 2026  
 **Status:** Strategic Architecture Directive  
 
 ---
@@ -43,7 +43,7 @@ graph TD
 ### 1.1 Technical Deep-Dive on Identified Bottlenecks
 
 #### Bottleneck 1: CPU-Bound Deep Learning OCR & Local Vision Latency
-- **Current Mechanism**: When deep learning OCR fallback (`EasyOCR`) or local offline vision (`Moondream2`) executes on standard CPU environments without dedicated CUDA/ROCm acceleration, inference time can scale to $4.0\text{s} - 8.0\text{s}$ per script page.
+- **Current Mechanism**: When deep learning OCR fallback (`EasyOCR`) or local offline vision (`Moondream2`) executes on standard CPU environments without dedicated CUDA/ROCm acceleration, inference time can scale to 4.0s - 8.0s per script page.
 - **Impact**: Batch processing 50 multi-page scripts sequentially during final exam periods can take several minutes.
 - **Root Cause**: PyTorch CPU thread contention and lack of INT8 model quantization.
 
@@ -53,7 +53,7 @@ graph TD
 
 #### Bottleneck 3: Synchronous Spreadsheet & PDF Generation
 - **Current Mechanism**: `openpyxl` compiles 8 detailed Excel sheets, formats cells, and calculates formulas in the main web thread when the teacher requests `/course/<id>/export-tabulation/`. Similarly, ReportLab stamps and merges multi-page PDFs on-the-fly.
-- **Impact**: Large courses with $>100$ enrolled students may experience HTTP request durations of $2.5\text{s} - 4.5\text{s}$ before browser download starts.
+- **Impact**: Large courses with >100 enrolled students may experience HTTP request durations of 2.5s - 4.5s before browser download starts.
 
 #### Bottleneck 4: High-Volume Media Storage Growth (`submission_working/`)
 - **Current Mechanism**: High-resolution 300 DPI page images and working copies are generated in `media/submission_working/` for interactive boundary cropping.
@@ -92,7 +92,7 @@ PHASE 3: ENTERPRISE     Architecture & Scale     1. Multi-tenant database partit
 ## 3. Detailed Technical Solutions & Architectural Enhancements
 
 ### 3.1 Phase 1: Database Indices & Optimization Directives
-Add the following composite database indices in `core/models.py` to ensure $O(\log N)$ query speed on million-record tables:
+Add the following composite database indices in `core/models.py` to ensure O(log N) query speed on million-record tables:
 
 ```python
 # Recommended indexing enhancements:

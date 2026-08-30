@@ -1,7 +1,7 @@
-# IntelliGrade — AI Evaluation Engine (v3.0) Technical Architecture & Design
+# IntelliGrade - AI Evaluation Engine (v3.0) Technical Architecture & Design
 
 **Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 **Auditor & Architect:** Principal Enterprise Systems Architect  
 
 ---
@@ -11,10 +11,11 @@
 The **IntelliGrade AI Evaluation Engine (v3.0)** is an enterprise-grade multimodal assessment pipeline designed for high accuracy, zero downtime, and strict adherence to institutional Outcome-Based Education (OBE) rubrics.
 
 ### Core Architectural Principles:
-1. **Task-Aware Routing**: Evaluates each request type (`ANSWER_VISUAL_READ`, `ANSWER_GRADING`, `ROUTINE_PARSE`, `OCR_TEXT`) to determine whether local vision or cloud LLM reasoning is required.
+1. **Task-Aware Routing**: Evaluates each request type (`ANSWER_VISUAL_READ`, `ANSWER_GRADING`, `ROUTINE_PARSE`, `OCR_TEXT`) via `TaskRouter` to determine whether local vision or cloud LLM reasoning is required.
 2. **Resilient Multi-Provider Failover**: Sequential provider chain ensuring no single API outage or rate limit (HTTP 429) disrupts evaluation.
 3. **Structured Output & Schema Enforcement**: Strict JSON output validation with auto-retry and regex LaTeX matrix backslash repair.
-4. **Human-in-the-Loop Safeguards**: Low-confidence evaluations (<0.75) are automatically flagged for mandatory instructor review before grade certification.
+4. **Human-in-the-Loop Safeguards**: Low-confidence evaluations (<0.75) are automatically flagged with `requires_manual_review = True` for mandatory instructor review before grade certification.
+5. **MCQ Fast-Path**: Specialized pipeline (< 3s) for objective/MCQ assessments with automatic option matching.
 
 ---
 
@@ -72,6 +73,7 @@ OpenAIProvider               gpt-4o, gpt-4o-mini              Text, Vision, JSON
 ### Health Tracking & Cooldown Registry (`ProviderHealthTracker`):
 - **Cooldown Window**: 120 seconds for HTTP 429 (Rate Limit / Quota Exhaustion) or HTTP 401/403 (Invalid Key).
 - **Transient vs Non-Transient Errors**: Network timeouts trigger immediate retry with the next provider, while rate limits register in the cooldown pool without blocking other workers.
+- **Persistent Telemetry**: Health events, error counts, and average response times logged to `AIProviderHealth` in database.
 
 ---
 
@@ -126,6 +128,7 @@ Raw LLM responses often output unescaped backslashes (`\begin{bmatrix}`), causin
 ### The Sanitization Layer in `BaseAIProvider`:
 ```python
 import re
+import json
 
 def _clean_and_parse_json(raw_text: str) -> dict:
     # 1. Strip markdown code fences

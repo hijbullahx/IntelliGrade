@@ -1,7 +1,7 @@
-# IntelliGrade — End-to-End System Workflows & State Machines
+# IntelliGrade - End-to-End System Workflows & State Machines
 
 **Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -29,7 +29,7 @@ sequenceDiagram
     Note over T,Sys: Stage 2: Question Paper & Rubric Studio
     T->>Sys: Open Question Paper Studio (/teacher/questions-rubric/)
     T->>Sys: Upload Official Question Paper & Syllabus Outline
-    Sys->>AI: Extract 23-Taxonomy Metadata (CO/PO, Bloom's, Tables, Formulas)
+    Sys->>AI: Extract 23-Taxonomy Metadata (CO/PO, Bloom, Tables, Formulas)
     AI-->>Sys: Return Questions & Criterion Rubrics
     T->>Sys: (Optional) Upload Master Benchmark Solution Script
     T->>Sys: Verify & Save Golden Exam Configuration
@@ -92,29 +92,13 @@ stateDiagram-v2
 ```
 
 ### 2.2 Question Mapping State Machine
-- **AUTO_HIGH**: Full regex match found at line beginning (e.g. `Question 1: Explain...`, `Ans to Q.1`), confidence $\ge 85\%$.
-- **AMBIGUOUS**: Substring match or overlapping page boundaries detected, confidence $< 85\%$. Triggers teacher confirmation modal before AI grading.
+- **AUTO_HIGH**: Full regex match found at line beginning (e.g. `Question 1: Explain...`, `Ans to Q.1`), confidence >= 85%.
+- **AMBIGUOUS**: Substring match or overlapping page boundaries detected, confidence < 85%. Triggers teacher confirmation modal before AI grading.
 - **MANUAL_OVERRIDE**: Teacher visually modifies bounding boxes or page numbers via the interactive crop tool.
 
 ### 2.3 EvaluationResult Review State Machine
 - **PENDING**: AI evaluation completed, awaiting instructor inspection.
-- **APPROVED**: Instructor verified and accepted AI-awarded scores without alteration.
-- **OVERRIDDEN**: Instructor adjusted numerical marks or modified criteria feedback. Logs entry in `TeacherReview` and `EvaluationHistory`.
-- **REJECTED**: Instructor marked evaluation invalid and requested targeted AI re-evaluation.
-
----
-
-## 3. Real-Time OBE Tabulation Synchronization Flow
-
-```mermaid
-graph TD
-    A[Teacher Edits Grade in Tabulation Modal] -->|AJAX POST /api/tabulation/grade-record/id/update/| B[views.api_update_student_grade_record]
-    B --> C[Validate & Parse Float Scores with Attendance 5%]
-    C --> D[Update StudentGradeRecord DB Model & Set is_manually_edited=True]
-    D --> E[Sync Matching StudentSubmission.total_obtained_marks & status]
-    D --> F[Recompute Weighted Overall Percentage & Letter Grade]
-    D --> G[Generate 8-Sheet Excel Workbook with openpyxl]
-    G --> H[Export Downloadable .xlsx File]
-    D --> I[Student Dashboard /dashboard/student/ Instantly Displays 91.75% / A+]
-    D --> J[Dept Head Dashboard /dashboard/dept-head/ Updates Pass Rate]
-```
+- **UNDER_REVIEW**: Instructor currently modifying marks/comments in split-screen workbench.
+- **APPROVED**: Instructor confirms score matching criteria benchmarks.
+- **MODIFIED**: Instructor overrode AI suggested score with manual value.
+- **FLAGGED**: Marked for secondary departmental audit or moderation.

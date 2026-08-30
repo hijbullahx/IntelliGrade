@@ -1,7 +1,7 @@
-# IntelliGrade — Academic Business Rules & Evaluation Policy
+# IntelliGrade - Academic Business Rules & Evaluation Policy
 
 **Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -9,18 +9,18 @@
 ## 1. Academic Grading & Assessment Business Rules
 
 ### BR-01: University Assessment Weightage Distribution
-The standard overall course assessment total is calculated out of $100\%$ with the following mandatory component weightages (configurable per course in `CourseTabulation.weightage_config`):
+The standard overall course assessment total is calculated out of 100% with the following mandatory component weightages (configurable per course in `CourseTabulation.weightage_config`):
 
 $$\text{Overall Total} = (\text{CT} \times 0.10) + (\text{Midterm} \times 0.25) + (\text{Final} \times 0.50) + (\text{Assignment} \times 0.10) + \text{Attendance (5%)}$$
 
 | Assessment Component | Standard Weightage (%) | Maximum Marks Base |
 | :--- | :--- | :--- |
-| **Class Test (CT)** | $10.0\%$ | Normalized to 100 base |
-| **Midterm Examination** | $25.0\%$ | Normalized to 100 base |
-| **Final Examination** | $50.0\%$ | Normalized to 100 base |
-| **Assignments & Quizzes** | $10.0\%$ | Normalized to 100 base |
-| **Class Attendance** | $5.0\%$ | Direct marks ($0.0$ to $5.0$) |
-| **Total Course Score** | $\mathbf{100.0\%}$ | $\mathbf{100.0}$ |
+| **Class Test (CT)** | 10.0% | Normalized to 100 base |
+| **Midterm Examination** | 25.0% | Normalized to 100 base |
+| **Final Examination** | 50.0% | Normalized to 100 base |
+| **Assignments & Quizzes** | 10.0% | Normalized to 100 base |
+| **Class Attendance** | 5.0% | Direct marks (0.0 to 5.0) |
+| **Total Course Score** | **100.0%** | **100.0** |
 
 ---
 
@@ -55,13 +55,13 @@ Below 40.0%                  F                0.00                      Fail
    - Course Outcomes are mapped to Program Outcomes (e.g. `PO1` to `PO12`).
    - PO attainment is calculated via the weighted contribution of constituent CO scores.
 3. **Class OBE Attainment Threshold**:
-   - Standard institutional benchmark: A Course Outcome is considered **"Attained by the Class"** if $\ge 50\%$ of enrolled students score $\ge 50\%$ on that specific CO.
+   - Standard institutional benchmark: A Course Outcome is considered **"Attained by the Class"** if >= 50% of enrolled students score >= 50% on that specific CO.
 
 ---
 
 ### BR-04: Human-in-the-Loop & Evaluation Authority Rules
 1. **Zero Unsupervised Auto-Publishing**: AI evaluation results remain in `AI_EVALUATED` or `UNDER_REVIEW` status until a faculty examiner reviews and clicks **"Finalize Evaluation"**.
-2. **Mandatory Manual Review Threshold**: If an evaluation's confidence rating falls below $0.75$ ($75\%$), the submission is flagged with `requires_manual_review = True`, and the teacher is prompted with an explicit visual warning banner.
+2. **Mandatory Manual Review Threshold**: If an evaluation confidence rating falls below 0.75 (75%), the submission is flagged with `requires_manual_review = True`, and the teacher is prompted with an explicit visual warning banner.
 3. **Instructor Overrule Precedence**: Teacher final marks (`teacher_final_marks` or `StudentGradeRecord.is_manually_edited`) strictly supersede all AI-generated scores. Backfill synchronization will never overwrite a record marked `is_manually_edited = True`.
 4. **Immutable Audit History**: Every score alteration, reason, and teacher timestamp is immutably recorded in `TeacherReview`, `EvaluationHistory`, and `EvaluationAuditLog`.
 

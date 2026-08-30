@@ -1,18 +1,18 @@
-# IntelliGrade — Exhaustive Use Case Inventory
+# IntelliGrade - Exhaustive Use Case Inventory
 
 **Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
 
 ## 1. Actor Catalog
 
-- **ACT-01: Chief Exam Controller (ADMIN)** — Master administrator managing academic hierarchy, student approvals, AI configs, and semester routine parsing.
-- **ACT-02: Department Head (DEPT_HEAD)** — Oversees departmental pass rates, faculty evaluation progress, and course OBE tabulations.
-- **ACT-03: Faculty Member / Examiner (TEACHER)** — Authors questions/rubrics, uploads scripts, reviews AI evaluations, overrides marks, and exports tabulations.
-- **ACT-04: Student (STUDENT)** — Views published course grades, question-wise feedback, and downloads certified PDF scripts.
-- **ACT-05: AI Evaluation Engine (SYSTEM)** — Automated background sub-agent performing OCR, boundary detection, rubric evaluation, and email dispatch.
+- **ACT-01: Chief Exam Controller (ADMIN)** - Master administrator managing academic hierarchy, student approvals, AI configs, and semester routine parsing.
+- **ACT-02: Department Head (DEPT_HEAD)** - Oversees departmental pass rates, faculty evaluation progress, and course OBE tabulations. Supports login with both Username and Email.
+- **ACT-03: Faculty Member / Examiner (TEACHER)** - Authors questions/rubrics, uploads scripts, reviews AI evaluations, overrides marks, and exports tabulations.
+- **ACT-04: Student (STUDENT)** - Views published course grades, question-wise feedback, and downloads certified PDF scripts.
+- **ACT-05: AI Evaluation Engine (SYSTEM)** - Automated background sub-agent performing OCR, boundary detection, rubric evaluation, and email dispatch.
 
 ---
 

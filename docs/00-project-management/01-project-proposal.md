@@ -1,10 +1,10 @@
-# IntelliGrade — Comprehensive Project Proposal & System Blueprint
+# IntelliGrade - Comprehensive Project Proposal & System Blueprint
 
-**Project Title:** IntelliGrade — AI-Powered Outcome-Based Education (OBE) Examination Evaluation, Grading & Academic Management Platform  
+**Project Title:** IntelliGrade - AI-Powered Outcome-Based Education (OBE) Examination Evaluation, Grading & Academic Management Platform  
 **Document Version:** 3.5.0 (Enterprise Academic Release)  
 **Lead Architect & Developer:** Md. Taher Bin Omar Hijbullah  
 **Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT) & BAETE OBE Accreditation Standards  
-**Date:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 
 ---
 
@@ -40,7 +40,7 @@ graph TD
 
     subgraph Question & Rubric Studio
         E[Faculty / Examiner] -->|Uploads / Builds| F[23-Section Question Paper & Golden Rubric]
-        F -->|Extracts| G[CO, PO, Bloom's, KP, CEP, CEA, Figures, Tables, Formulas]
+        F -->|Extracts| G[CO, PO, Bloom, KP, CEP, CEA, Figures, Tables, Formulas]
     end
 
     subgraph Script Ingestion & Boundary Engine
@@ -89,7 +89,7 @@ graph TD
 - **Faculty Workload Management**: Monitor script evaluation progress across assigned department examiners.
 
 ### 4.3 Faculty Member / Examiner (`/dashboard/teacher/`)
-- **Question Paper & Rubric Studio**: Build or scan exam papers with 23-section taxonomy (CO/PO, Bloom's levels, figures, data tables, LaTeX matrices).
+- **Question Paper & Rubric Studio**: Build or scan exam papers with 23-section taxonomy (CO/PO, Bloom levels, figures, data tables, LaTeX matrices).
 - **Batch Script Upload**: Ingest student PDF/image answer scripts with automated 300 DPI normalization.
 - **Interactive Question Mapping**: Auto-detect question boundaries with manual visual crop override before AI grading.
 - **Split-Screen Grading Workbench**: Side-by-side verification of scanned scripts, OCR text, rubric benchmarks, AI scores, and feedback.
@@ -97,29 +97,16 @@ graph TD
 
 ### 4.4 Student (`/dashboard/student/`)
 - **Self-Service Portal**: Secure registration, login, and password reset via 6-digit OTP email.
-- **Real-Time Grade Dashboard**: View official course tabulation grades, GPA ($4.00$ scale), and component breakdowns.
-- **Answer Script Transparency**: View question-by-question marks, rubric criteria feedback, strengths, and mistakes.
-- **Certified PDF Download**: One-click download of teacher-certified, watermarked answer scripts.
+- **Real-Time Grade Dashboard**: View official course tabulation grades, GPA (4.00 scale), and component breakdowns.
+- **Certified Script Archive**: Download official watermarked PDF answer scripts containing question-level scores, teacher annotations, and feedback.
 
 ---
 
-## 5. Scope & Deliverables Matrix
+## 5. Summary of Deliverables & Milestones
 
-```text
-========================================================================================
-DELIVERABLE CATEGORY    SCOPE DESCRIPTION                                      STATUS
-========================================================================================
-Core Platform           Django 5.2.x MVC Architecture, SQLite/PostgreSQL       Delivered
-RBAC Portals            Admin, Controller, Dept Head, Teacher, Student         Delivered
-AI Routine Scanner      OCR multi-page routine parser & course mapper          Delivered
-23-Section Taxonomy     IUBAT OBE (CO/PO/KP/CEP/CEA), Figures, LaTeX Tables    Delivered
-Document & OCR Engine   PyMuPDF (300 DPI), PyTesseract, EasyOCR fallback       Delivered
-Boundary Engine         Regex state machine, multi-page answer propagation     Delivered
-AI Engine v3.0          Failover: Local Moondream -> Groq -> OpenRouter ->     Delivered
-                        Gemini -> OpenAI with 429 cooldowns & timeout budgets  
-Grading Workbench       Split-screen review, score overrides, audit history    Delivered
-OBE Tabulation          5% Attendance, 8-sheet Excel export, live sync         Delivered
-Email Pipeline          Asynchronous threading email service with attachments  Delivered
-Security & Compliance   CSRF protection, Argon2 hashing, atomic transactions   Delivered
-========================================================================================
-```
+1. **System Core & Governance**: Completed and operational.
+2. **AI Multimodal Routine Scanner**: Completed with 0ms local course matching.
+3. **23-Section Question Paper Studio**: Completed with LaTeX backslash sanitization.
+4. **Hybrid 300 DPI OCR Engine**: Completed with PyMuPDF, PyTesseract, and EasyOCR.
+5. **Multi-Provider AI Evaluator (v3.0)**: Completed with failover, task routing, and cooldown registries.
+6. **Live OBE Tabulation & 8-Sheet Excel Engine**: Completed with bi-directional sync.
