@@ -482,14 +482,6 @@ window.scrollToQuestionBuilder = function() {
                 <button type="button" onclick="document.getElementById('masterSolutionFileInput').click()" id="btnUploadMasterSolution" class="px-3.5 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer">
                     <i data-lucide="upload-cloud" class="w-4 h-4"></i> {% if selected_exam.master_solution_file %}📁 Replace Master PDF{% else %}📁 Master PDF (Optional){% endif %}
                 </button>
-                
-                <a href="{% url 'evaluation_wizard' selected_exam.id %}?mode=manual" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer">
-                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> ✍️ Manual Evaluation
-                </a>
-
-                <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-1.5 cursor-pointer animate-pulse">
-                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 🚀 AI Evaluation Wizard &rarr;
-                </a>
             </div>
         </div>
     </div>
@@ -542,23 +534,13 @@ window.scrollToQuestionBuilder = function() {
                 {% if questions and questions.count > 0 %}
                 <!-- Paper Finalized & Active Locked Banner -->
                 <div id="builderLockedNotice" class="glass-card p-4 rounded-2xl border-2 border-emerald-500/40 bg-slate-900/90 text-xs space-y-2.5 shadow-xl">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div class="flex items-center gap-2">
-                            <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                                <i data-lucide="shield-check" class="w-4 h-4"></i>
-                            </span>
-                            <div>
-                                <h4 class="font-extrabold text-white text-xs">Paper Finalized & Active ({{ questions.count }} Questions Saved)</h4>
-                                <p class="text-[11px] text-slate-400">Questions and grading rubrics are locked to ensure grading integrity.</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <a href="{% url 'evaluation_wizard' selected_exam.id %}?mode=manual" class="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0">
-                                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> ✍️ Manual Evaluation
-                            </a>
-                            <a href="{% url 'evaluation_wizard' selected_exam.id %}" class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-1.5 shrink-0 animate-pulse">
-                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 🚀 AI Evaluation Wizard &rarr;
-                            </a>
+                    <div class="flex items-center gap-2">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                            <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        </span>
+                        <div>
+                            <h4 class="font-extrabold text-white text-xs">Paper Finalized & Active ({{ questions.count }} Questions Saved)</h4>
+                            <p class="text-[11px] text-slate-400">Questions and grading rubrics are saved and locked for evaluation integrity.</p>
                         </div>
                     </div>
                     <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-[11px]">
