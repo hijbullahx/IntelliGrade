@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions{% endblock %}
+{% block title %}IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation
+Ecosystem for Higher Education Institutions{% endblock %}
 
 {% block content %}
 <div class="relative overflow-x-hidden">
     <!-- Background Gradient -->
-    <div class="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/2 w-[150vw] h-[100vh] bg-gradient-to-br from-blue-50 via-sky-50 to-transparent dark:from-slate-950 dark:via-slate-900/90 dark:to-transparent -z-10"></div>
+    <div
+        class="absolute top-0 left-0 -translate-x-1/4 -translate-y-1/2 w-[150vw] h-[100vh] bg-gradient-to-br from-blue-50 via-sky-50 to-transparent dark:from-slate-950 dark:via-slate-900/90 dark:to-transparent -z-10">
+    </div>
 
     <main>
         <!-- ============================================ -->
@@ -16,23 +19,32 @@
             <div class="container mx-auto px-4 grid lg:grid-cols-2 gap-12 items-center">
                 <!-- Left Content -->
                 <div class="text-center lg:text-left">
-                    <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 text-blue-600 dark:text-brand-400 text-xs font-extrabold mb-4">
+                    <div
+                        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/20 text-blue-600 dark:text-brand-400 text-xs font-extrabold mb-4">
                         <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Enterprise Academic Examination Ecosystem
                     </div>
-                    <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 dark:text-white leading-tight mb-6">
+                    <h1
+                        class="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 dark:text-white leading-tight mb-6">
                         IntelliGrade
-                        <span class="block text-2xl md:text-3xl lg:text-4xl font-bold mt-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 dark:from-brand-400 dark:via-indigo-300 dark:to-cyan-400 text-transparent bg-clip-text">
-                            An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem
+                        <span
+                            class="block text-2xl md:text-3xl lg:text-4xl font-bold mt-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 dark:from-brand-400 dark:via-indigo-300 dark:to-cyan-400 text-transparent bg-clip-text">
+                            An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation
+                            Ecosystem
                         </span>
                     </h1>
-                    <p class="text-base md:text-lg text-slate-600 dark:text-slate-300 max-w-xl mx-auto lg:mx-0 mb-8 leading-relaxed">
-                        Transforming the higher education examination lifecycle — from Central Exam Controller Governance &amp; AI Routine Scheduling to 23-Taxonomy OBE Question Paper Design, Dual Intelligent Script Evaluation Workbenches, and Live 8-Sheet Course Tabulation.
+                    <p
+                        class="text-base md:text-lg text-slate-600 dark:text-slate-300 max-w-xl mx-auto lg:mx-0 mb-8 leading-relaxed">
+                        Transforming the higher education examination lifecycle — from Central Exam Controller
+                        Governance &amp; AI Routine Scheduling to 23-Taxonomy OBE Question Paper Design, Dual
+                        Intelligent Script Evaluation Workbenches, and Live 8-Sheet Course Tabulation.
                     </p>
                     <div class="flex flex-wrap justify-center lg:justify-start gap-4">
-                        <button type="button" onclick="openRoleSelectionModal()" class="px-6 py-3.5 bg-blue-600 dark:bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-500/20 hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 flex items-center gap-2 cursor-pointer text-sm">
+                        <button type="button" onclick="openRoleSelectionModal()"
+                            class="px-6 py-3.5 bg-blue-600 dark:bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-500/20 hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 flex items-center gap-2 cursor-pointer text-sm">
                             <i data-lucide="layers" class="w-4 h-4"></i> Enter Portal Workspace
                         </button>
-                        <a href="#how-it-works" class="px-6 py-3.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all duration-300 transform hover:scale-105 text-sm flex items-center gap-2">
+                        <a href="#how-it-works"
+                            class="px-6 py-3.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all duration-300 transform hover:scale-105 text-sm flex items-center gap-2">
                             <i data-lucide="play-circle" class="w-4 h-4 text-brand-500"></i> Explore Examination Flow
                         </a>
                     </div>
@@ -40,64 +52,86 @@
 
                 <!-- Right Illustration: AI Evaluation Pipeline -->
                 <div class="relative flex items-center justify-center p-8">
-                    <div class="w-full max-w-md aspect-square rounded-full bg-white/50 dark:bg-slate-800/50 shadow-xl backdrop-blur-lg border border-slate-200/50 dark:border-slate-700/50 flex items-center justify-center">
+                    <div
+                        class="w-full max-w-md aspect-square rounded-full bg-white/50 dark:bg-slate-800/50 shadow-xl backdrop-blur-lg border border-slate-200/50 dark:border-slate-700/50 flex items-center justify-center">
                         <!-- Central Core -->
-                        <div class="absolute w-24 h-24 bg-gradient-to-br from-blue-500 to-sky-400 dark:from-brand-600 dark:to-cyan-500 rounded-full shadow-lg flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        <div
+                            class="absolute w-24 h-24 bg-gradient-to-br from-blue-500 to-sky-400 dark:from-brand-600 dark:to-cyan-500 rounded-full shadow-lg flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                             </svg>
                         </div>
 
                         <!-- Orbiting Pipeline Steps -->
                         <div class="absolute w-full h-full animate-spin-slow">
                             <!-- Governance -->
-                            <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center gap-2">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div
+                                class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center gap-2">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="shield-check" class="w-5 h-5 text-amber-500"></i>
                                 </div>
                                 <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Governance</span>
                             </div>
                             <!-- Routine Ingestion -->
-                            <div class="absolute top-1/4 right-0 translate-x-3/4 -translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(45deg) translateX(12rem) rotate(-45deg);">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div class="absolute top-1/4 right-0 translate-x-3/4 -translate-y-1/2 flex flex-col items-center gap-2"
+                                style="transform: rotate(45deg) translateX(12rem) rotate(-45deg);">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="calendar" class="w-5 h-5 text-blue-500"></i>
                                 </div>
                                 <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">AI Routine</span>
                             </div>
                             <!-- 23-OBE Rubric -->
-                            <div class="absolute top-1/2 right-0 translate-x-full -translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(90deg) translateX(12rem) rotate(-90deg);">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div class="absolute top-1/2 right-0 translate-x-full -translate-y-1/2 flex flex-col items-center gap-2"
+                                style="transform: rotate(90deg) translateX(12rem) rotate(-90deg);">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="file-spreadsheet" class="w-5 h-5 text-indigo-500"></i>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">23-OBE Rubric</span>
+                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">23-OBE
+                                    Rubric</span>
                             </div>
                             <!-- 300 DPI OCR -->
-                            <div class="absolute bottom-1/4 right-0 translate-x-3/4 translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(135deg) translateX(12rem) rotate(-135deg);">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div class="absolute bottom-1/4 right-0 translate-x-3/4 translate-y-1/2 flex flex-col items-center gap-2"
+                                style="transform: rotate(135deg) translateX(12rem) rotate(-135deg);">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="scan-line" class="w-5 h-5 text-cyan-500"></i>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">300 DPI OCR</span>
+                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">300 DPI
+                                    OCR</span>
                             </div>
                             <!-- AI Evaluation -->
-                            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full flex flex-col items-center gap-2">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div
+                                class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full flex flex-col items-center gap-2">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="brain-circuit" class="w-5 h-5 text-purple-500"></i>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">AI Evaluation</span>
+                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">AI
+                                    Evaluation</span>
                             </div>
                             <!-- Teacher Review -->
-                            <div class="absolute bottom-1/4 left-0 -translate-x-3/4 translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(225deg) translateX(12rem) rotate(-225deg);">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div class="absolute bottom-1/4 left-0 -translate-x-3/4 translate-y-1/2 flex flex-col items-center gap-2"
+                                style="transform: rotate(225deg) translateX(12rem) rotate(-225deg);">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="user-check" class="w-5 h-5 text-emerald-500"></i>
                                 </div>
                                 <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Workbench</span>
                             </div>
                             <!-- Tabulation & OBE -->
-                            <div class="absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 flex flex-col items-center gap-2" style="transform: rotate(270deg) translateX(12rem) rotate(-270deg);">
-                                <div class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            <div class="absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 flex flex-col items-center gap-2"
+                                style="transform: rotate(270deg) translateX(12rem) rotate(-270deg);">
+                                <div
+                                    class="w-12 h-12 bg-white dark:bg-slate-800 rounded-full shadow-md flex items-center justify-center border border-slate-200 dark:border-slate-700">
                                     <i data-lucide="table" class="w-5 h-5 text-rose-500"></i>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">8-Sheet OBE</span>
+                                <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">8-Sheet
+                                    OBE</span>
                             </div>
                         </div>
                     </div>
@@ -108,24 +142,33 @@
         <!-- ============================================ -->
         <!-- 3. Statistics Section                        -->
         <!-- ============================================ -->
-        <section id="stats" class="py-20 bg-white dark:bg-slate-900/60 border-y border-slate-200/60 dark:border-slate-800/80">
+        <section id="stats"
+            class="py-20 bg-white dark:bg-slate-900/60 border-y border-slate-200/60 dark:border-slate-800/80">
             <div class="container mx-auto px-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">4 Roles</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Controller, Dept Head, Teacher, Student</p>
+                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">4 Roles
+                        </h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+                            Controller, Dept Head, Teacher, Student</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">23-Section OBE</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Bloom's &amp; CO/PO/KP/CEP/CEA Taxonomy</p>
+                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">
+                            23-Section OBE</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Bloom's
+                            &amp; CO/PO/KP/CEP/CEA Taxonomy</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">Dual Workbenches</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Multi-Provider AI &amp; Direct Manual</p>
+                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">Dual
+                            Workbenches</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+                            Multi-Provider AI &amp; Direct Manual</p>
                     </div>
                     <div class="p-4">
-                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">100% Control</h3>
-                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">Instructor Authority &amp; Live Tabulation</p>
+                        <h3 class="text-4xl md:text-5xl font-extrabold text-blue-600 dark:text-brand-400 mb-2">100%
+                            Control</h3>
+                        <p class="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wider">
+                            Instructor Authority &amp; Live Tabulation</p>
                     </div>
                 </div>
             </div>
@@ -137,60 +180,94 @@
         <section id="features" class="py-24">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-bold mb-3">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-bold mb-3">
                         <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Comprehensive System Modules
                     </div>
-                    <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">Complete Academic Examination &amp; Evaluation Ecosystem</h2>
-                    <p class="text-base text-slate-600 dark:text-slate-300">IntelliGrade seamlessly coordinates every phase of the higher education examination lifecycle within an integrated, institutional-grade architecture.</p>
+                    <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">Complete
+                        Academic Examination &amp; Evaluation Ecosystem</h2>
+                    <p class="text-base text-slate-600 dark:text-slate-300">IntelliGrade seamlessly coordinates every
+                        phase of the higher education examination lifecycle within an integrated, institutional-grade
+                        architecture.</p>
                 </div>
                 <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
                     <!-- Feature Card 1 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="shield-check" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Institutional Governance &amp; AI Routine Ingestion</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Chief Exam Controllers administer Colleges, Schools, Departments, Course Catalogs, approve student registrations, and parse multi-page exam routines using AI OCR with 0ms course matching.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Institutional Governance
+                            &amp; AI Routine Ingestion</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Chief Exam Controllers
+                            administer Colleges, Schools, Departments, Course Catalogs, approve student registrations,
+                            and parse multi-page exam routines using AI OCR with 0ms course matching.</p>
                     </div>
                     <!-- Feature Card 2 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-indigo-500/10 text-indigo-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="file-spreadsheet" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Outcome-Based Education &amp; 23-Taxonomy Studio</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Author question blueprints with complete IUBAT OBE metadata: Bloom's cognitive taxonomy, CO1–CO6, PO1–PO12, Knowledge Profiles, engineering problem tags, diagrams, and LaTeX formulas.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Outcome-Based Education
+                            &amp; 23-Taxonomy Studio</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Author question blueprints
+                            with complete IUBAT OBE metadata: Bloom's cognitive taxonomy, CO1–CO6, PO1–PO12, Knowledge
+                            Profiles, engineering problem tags, diagrams, and LaTeX formulas.</p>
                     </div>
                     <!-- Feature Card 3 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="scan-line" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">300 DPI Preprocessing &amp; Boundary Discovery</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Ingest multi-page PDF/image student answer scripts with automated 300 DPI normalization, OpenCV deskewing, hybrid OCR (PyMuPDF, Tesseract, EasyOCR), and regex heading boundary detection.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">300 DPI Preprocessing
+                            &amp; Boundary Discovery</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Ingest multi-page
+                            PDF/image student answer scripts with automated 300 DPI normalization, OpenCV deskewing,
+                            hybrid OCR (PyMuPDF, Tesseract, EasyOCR), and regex heading boundary detection.</p>
                     </div>
                     <!-- Feature Card 4 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="split" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Dual Evaluation Workbenches</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Choose between the Intelligent AI Evaluation Wizard (v3.0) with multi-provider failover (Moondream, Groq, Gemini, OpenAI) and the Direct Manual Grading Wizard for instant teacher scoring.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Dual Evaluation
+                            Workbenches</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Choose between the
+                            Intelligent AI Evaluation Wizard (v3.0) with multi-provider failover (Moondream, Groq,
+                            Gemini, OpenAI) and the Direct Manual Grading Wizard for instant teacher scoring.</p>
                     </div>
                     <!-- Feature Card 5 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="table-2" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Real-Time OBE Tabulation &amp; 8-Sheet Excel</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Live bi-directional tabulation aggregating CT (10%), Midterm (25%), Final (50%), Assignment (10%), and Attendance (5%) with automated 8-sheet OBE Excel workbook export and student sync.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Real-Time OBE Tabulation
+                            &amp; 8-Sheet Excel</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Live bi-directional
+                            tabulation aggregating CT (10%), Midterm (25%), Final (50%), Assignment (10%), and
+                            Attendance (5%) with automated 8-sheet OBE Excel workbook export and student sync.</p>
                     </div>
                     <!-- Feature Card 6 -->
-                    <div class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
-                        <div class="w-12 h-12 bg-cyan-500/10 text-cyan-500 rounded-xl flex items-center justify-center mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800/70 p-8 rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700/60 hover:border-brand-500/40">
+                        <div
+                            class="w-12 h-12 bg-cyan-500/10 text-cyan-500 rounded-xl flex items-center justify-center mb-4">
                             <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
                         </div>
-                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Department Oversight &amp; Student Transparency</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Department Heads track live departmental pass rates and CQI analytics, while students access detailed question-level feedback and download certified watermarked PDF answer scripts.</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Department Oversight &amp;
+                            Student Transparency</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Department Heads track
+                            live departmental pass rates and CQI analytics, while students access detailed
+                            question-level feedback and download certified watermarked PDF answer scripts.</p>
                     </div>
                 </div>
             </div>
@@ -199,14 +276,18 @@
         <!-- ============================================ -->
         <!-- 5. AI Evaluation Process                     -->
         <!-- ============================================ -->
-        <section id="how-it-works" class="py-24 bg-white dark:bg-slate-900/60 border-y border-slate-200/60 dark:border-slate-800/80">
+        <section id="how-it-works"
+            class="py-24 bg-white dark:bg-slate-900/60 border-y border-slate-200/60 dark:border-slate-800/80">
             <div class="container mx-auto px-4">
                 <div class="text-center max-w-3xl mx-auto mb-16">
-                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-bold mb-3">
+                    <div
+                        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-bold mb-3">
                         <i data-lucide="workflow" class="w-3.5 h-3.5"></i> Execution Workflow
                     </div>
-                    <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">The End-to-End Examination Lifecycle</h2>
-                    <p class="text-base text-slate-600 dark:text-slate-300">From institutional structure setup and routine scheduling to script evaluation, teacher verification, and official tabulation.</p>
+                    <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">The End-to-End
+                        Examination Lifecycle</h2>
+                    <p class="text-base text-slate-600 dark:text-slate-300">From institutional structure setup and
+                        routine scheduling to script evaluation, teacher verification, and official tabulation.</p>
                 </div>
 
                 <div class="relative max-w-3xl mx-auto">
@@ -215,33 +296,58 @@
 
                     <!-- Timeline Item 1 -->
                     <div class="relative pl-14 pb-12">
-                        <div class="absolute left-0 top-0 w-10 h-10 bg-amber-500 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">1</div>
-                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Institutional Governance &amp; AI Routine Ingestion</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Chief Exam Controller sets up Colleges, Departments, and Course rosters, then scans university exam routines via AI to automatically schedule examination sessions.</p>
+                        <div
+                            class="absolute left-0 top-0 w-10 h-10 bg-amber-500 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            1</div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Institutional Governance
+                            &amp; AI Routine Ingestion</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Chief Exam Controller sets
+                            up Colleges, Departments, and Course rosters, then scans university exam routines via AI to
+                            automatically schedule examination sessions.</p>
                     </div>
                     <!-- Timeline Item 2 -->
                     <div class="relative pl-14 pb-12">
-                        <div class="absolute left-0 top-0 w-10 h-10 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">2</div>
-                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">23-Taxonomy OBE Question Paper &amp; Master Solution Studio</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Course instructor authors question papers with Bloom's taxonomy, CO/PO classifications, rubric criteria, and uploads golden master benchmark solutions.</p>
+                        <div
+                            class="absolute left-0 top-0 w-10 h-10 bg-blue-600 dark:bg-brand-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            2</div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">23-Taxonomy OBE Question
+                            Paper &amp; Master Solution Studio</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Course instructor authors
+                            question papers with Bloom's taxonomy, CO/PO classifications, rubric criteria, and uploads
+                            golden master benchmark solutions.</p>
                     </div>
                     <!-- Timeline Item 3 -->
                     <div class="relative pl-14 pb-12">
-                        <div class="absolute left-0 top-0 w-10 h-10 bg-indigo-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">3</div>
-                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Dual Evaluation Pipelines: AI Wizard (v3.0) or Direct Manual</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Faculty uploads student scripts. Choose AI Evaluation Wizard (300 DPI OCR, auto-boundary mapping, multi-provider AI scoring) or Fast-Track Manual Grading Wizard (instant page slicing without AI).</p>
+                        <div
+                            class="absolute left-0 top-0 w-10 h-10 bg-indigo-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            3</div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Dual Evaluation Pipelines:
+                            AI Wizard or Direct Manual</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Faculty uploads student
+                            scripts. Choose AI Evaluation Wizard (300 DPI OCR, auto-boundary mapping, multi-provider AI
+                            scoring) or Fast-Track Manual Grading Wizard (instant page slicing without AI).</p>
                     </div>
                     <!-- Timeline Item 4 -->
                     <div class="relative pl-14 pb-12">
-                        <div class="absolute left-0 top-0 w-10 h-10 bg-purple-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">4</div>
-                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Split-Screen Teacher Verification &amp; PDF Certification</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Faculty inspects scanned script side-by-side with rubric criteria, overrides marks if needed, and finalizes the evaluation to stamp certified watermarked PDFs.</p>
+                        <div
+                            class="absolute left-0 top-0 w-10 h-10 bg-purple-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            4</div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Split-Screen Teacher
+                            Verification &amp; PDF Certification</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Faculty inspects scanned
+                            script side-by-side with rubric criteria, overrides marks if needed, and finalizes the
+                            evaluation to stamp certified watermarked PDFs.</p>
                     </div>
                     <!-- Timeline Item 5 -->
                     <div class="relative pl-14">
-                        <div class="absolute left-0 top-0 w-10 h-10 bg-emerald-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">5</div>
-                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Live OBE Course Tabulation, 8-Sheet Excel &amp; Student Transparency</h3>
-                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Live sync aggregates multi-assessment scores into course grade records, compiles official 8-sheet Excel files, and opens transparency dashboards for students.</p>
+                        <div
+                            class="absolute left-0 top-0 w-10 h-10 bg-emerald-600 rounded-full border-4 border-white dark:border-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            5</div>
+                        <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Live OBE Course
+                            Tabulation, 8-Sheet Excel &amp; Student Transparency</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">Live sync aggregates
+                            multi-assessment scores into course grade records, compiles official 8-sheet Excel files,
+                            and opens transparency dashboards for students.</p>
                     </div>
                 </div>
             </div>
@@ -252,12 +358,16 @@
         <!-- ============================================ -->
         <section class="py-24 bg-white dark:bg-slate-900/60 border-t border-slate-200/60 dark:border-slate-800/80">
             <div class="container mx-auto px-4 text-center">
-                <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-extrabold mb-4">
+                <div
+                    class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-500/10 text-brand-500 dark:text-brand-400 text-xs font-extrabold mb-4">
                     <i data-lucide="door-open" class="w-4 h-4"></i> Secure Academic Access
                 </div>
-                <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">Ready to Access Your IntelliGrade Portal?</h2>
-                <p class="text-base text-slate-600 dark:text-slate-300 max-w-2xl mx-auto mb-8">Choose your designated academic role to enter your permission-scoped evaluation and governance workspace.</p>
-                <button type="button" onclick="openRoleSelectionModal()" class="px-8 py-4 bg-blue-600 dark:bg-brand-600 text-white font-extrabold rounded-2xl shadow-xl hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 inline-flex items-center gap-2 cursor-pointer text-sm">
+                <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white mb-4">Ready to Access Your
+                    IntelliGrade Portal?</h2>
+                <p class="text-base text-slate-600 dark:text-slate-300 max-w-2xl mx-auto mb-8">Choose your designated
+                    academic role to enter your permission-scoped evaluation and governance workspace.</p>
+                <button type="button" onclick="openRoleSelectionModal()"
+                    class="px-8 py-4 bg-blue-600 dark:bg-brand-600 text-white font-extrabold rounded-2xl shadow-xl hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 inline-flex items-center gap-2 cursor-pointer text-sm">
                     <i data-lucide="shield-check" class="w-5 h-5"></i> Launch Portal Role Selector
                 </button>
             </div>
@@ -268,17 +378,25 @@
 <!-- ============================================ -->
 <!-- Role Selection Modal                         -->
 <!-- ============================================ -->
-<div id="roleSelectionModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative transform transition-all">
-        
+<div id="roleSelectionModal"
+    class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div
+        class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 relative transform transition-all">
+
         <!-- Close Button -->
-        <button type="button" onclick="closeRoleSelectionModal()" class="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" aria-label="Close Modal">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <button type="button" onclick="closeRoleSelectionModal()"
+            class="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close Modal">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
         </button>
 
         <!-- Header -->
         <div class="text-center space-y-2 pt-2">
-            <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-400 text-white shadow-lg shadow-brand-500/20 mb-2">
+            <div
+                class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-400 text-white shadow-lg shadow-brand-500/20 mb-2">
                 <i data-lucide="layers" class="w-7 h-7"></i>
             </div>
             <h2 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -291,17 +409,22 @@
 
         <!-- Role Options Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            
+
             <!-- 1. Faculty / Examiner -->
-            <a href="{% url 'teacher_login' %}" onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'teacher_login' %}"
+                onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');"
+                class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="award" class="w-5 h-5"></i>
                     </div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">Examiner</span>
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-brand-100 dark:bg-brand-900/60 text-brand-700 dark:text-brand-300">Examiner</span>
                 </div>
                 <div>
-                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                    <h3
+                        class="font-bold text-slate-900 dark:text-white text-base group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                         Faculty / Teacher
                     </h3>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -311,15 +434,20 @@
             </a>
 
             <!-- 2. Student Portal -->
-            <a href="{% url 'student_login' %}" onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'student_login' %}"
+                onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');"
+                class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="user-check" class="w-5 h-5"></i>
                     </div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">Student</span>
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">Student</span>
                 </div>
                 <div>
-                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                    <h3
+                        class="font-bold text-slate-900 dark:text-white text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                         Student Portal
                     </h3>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -329,15 +457,21 @@
             </a>
 
             <!-- 3. Department Head -->
-            <a href="{% url 'dept_head_login' %}" onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'dept_head_login' %}"
+                onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');"
+                class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-cyan-100 dark:bg-cyan-900/50 text-cyan-600 dark:text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
                     </div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">Dept Head</span>
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">Dept
+                        Head</span>
                 </div>
                 <div>
-                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
+                    <h3
+                        class="font-bold text-slate-900 dark:text-white text-base group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
                         Department Head
                     </h3>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -347,15 +481,20 @@
             </a>
 
             <!-- 4. Chief Exam Controller -->
-            <a href="{% url 'exam_controller_login' %}" onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');" class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
+            <a href="{% url 'exam_controller_login' %}"
+                onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');"
+                class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
                 <div class="flex items-center justify-between mb-3">
-                    <div class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div
+                        class="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                         <i data-lucide="shield-check" class="w-5 h-5"></i>
                     </div>
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">Controller</span>
+                    <span
+                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300">Controller</span>
                 </div>
                 <div>
-                    <h3 class="font-bold text-slate-900 dark:text-white text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                    <h3
+                        class="font-bold text-slate-900 dark:text-white text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                         Chief Exam Controller
                     </h3>
                     <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
