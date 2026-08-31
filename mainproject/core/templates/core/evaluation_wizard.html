@@ -13,11 +13,11 @@
                 <span>/</span>
                 <span>{{ exam.course.code }}</span>
             </div>
-            <h1 class="text-2xl font-black theme-text-primary mt-1">AI Answer Script Evaluation Wizard (v3.0)</h1>
-            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ exam.questions.count }}</strong></p>
+            <h1 class="text-2xl font-black theme-text-primary mt-1">{% if is_manual %}✍️ Manual Script Evaluation & Mapping Wizard{% else %}AI Answer Script Evaluation Wizard (v3.0){% endif %}</h1>
+            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ exam.questions.count }}</strong> | Mode: <strong class="{% if is_manual %}text-brand-500{% else %}text-emerald-500{% endif %}">{% if is_manual %}✍️ Manual Teacher Grading{% else %}🚀 AI Engine v3.0{% endif %}</strong></p>
         </div>
-        <div class="px-3.5 py-1.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
-            <i data-lucide="shield-check" class="w-4 h-4"></i> Production Engine v3.0
+        <div class="px-3.5 py-1.5 rounded-full {% if is_manual %}bg-brand-500/10 text-brand-500 border border-brand-500/20{% else %}bg-emerald-500/10 text-emerald-500 border border-emerald-500/20{% endif %} text-xs font-bold flex items-center gap-1.5">
+            <i data-lucide="{% if is_manual %}edit-3{% else %}shield-check{% endif %}" class="w-4 h-4"></i> {% if is_manual %}Manual Grading Mode{% else %}Production Engine v3.0{% endif %}
         </div>
     </div>
 
@@ -36,7 +36,7 @@
             </div>
             <div id="stepHeader3" class="theme-text-muted flex items-center justify-center gap-2">
                 <span class="w-6 h-6 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs">3</span>
-                <span>Preprocessing & AI Options</span>
+                <span>{% if is_manual %}Question-to-Page Mapping{% else %}Preprocessing & AI Options{% endif %}</span>
             </div>
         </div>
 
@@ -134,13 +134,14 @@
                         <i data-lucide="eye" class="w-4 h-4"></i> Preview PDF Script
                     </button>
                     <button type="button" onclick="handleStep2Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
-                        Next: Preprocessing & Options &rarr;
+                        {% if is_manual %}Next: Question-to-Page Mapping &rarr;{% else %}Next: Preprocessing & Options &rarr;{% endif %}
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- STEP 3: Computer Vision Preprocessing & Custom Prompt Options -->
+        {% if not is_manual %}
+        <!-- STEP 3: Computer Vision Preprocessing & Custom Prompt Options (AI Engine Mode Only) -->
         <div id="step3Content" class="hidden space-y-6">
             <h3 class="font-extrabold text-sm theme-text-primary border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center gap-2">
                 <i data-lucide="sliders" class="w-4 h-4 text-emerald-500"></i> Image Preprocessing & Evaluation Configuration
@@ -182,12 +183,13 @@
                 </button>
             </div>
         </div>
+        {% endif %}
 
-        <!-- STEP 2.5: Interactive Question Mapping Review & Confirmation -->
+        <!-- STEP 3 / 2.5: Interactive Question Mapping Review & Confirmation -->
         <div id="stepMappingContent" class="hidden space-y-6">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
                 <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
-                    <i data-lucide="check-circle-2" class="w-4 h-4 text-brand-500"></i> Step 2.5: Question Mapping Review & Teacher Confirmation
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-brand-500"></i> {% if is_manual %}Step 3: Question-to-Page Mapping & Assignment{% else %}Step 2.5: Question Mapping Review & Teacher Confirmation{% endif %}
                 </h3>
                 <div class="flex items-center gap-2">
                     <button type="button" onclick="viewFullAnswerScriptModal()" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5 shrink-0">
@@ -257,13 +259,13 @@
             </div>
 
             <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                <button type="button" onclick="goToStep(3)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Options</button>
+                <button type="button" onclick="{% if is_manual %}goToStep(2){% else %}goToStep(3){% endif %}" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; {% if is_manual %}Back to Pages{% else %}Back to Options{% endif %}</button>
                 <div class="flex items-center gap-3">
                     <button type="button" onclick="viewFullAnswerScriptModal()" class="px-5 py-3 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
                         <i data-lucide="file-text" class="w-4 h-4"></i> View Full Answer Script
                     </button>
-                    <button type="button" id="confirmMappingBtn" onclick="confirmQuestionMappingAndStart()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
-                        <i data-lucide="play" class="w-4 h-4"></i> Confirm Question Mapping & Start AI Evaluation
+                    <button type="button" id="confirmMappingBtn" onclick="confirmQuestionMappingAndStart()" class="px-8 py-3 {% if is_manual %}bg-brand-600 hover:bg-brand-500{% else %}bg-emerald-600 hover:bg-emerald-500{% endif %} text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                        <i data-lucide="{% if is_manual %}edit-3{% else %}play{% endif %}" class="w-4 h-4"></i> {% if is_manual %}Confirm Mapping & Open Manual Grading Workbench &rarr;{% else %}Confirm Question Mapping & Start AI Evaluation{% endif %}
                     </button>
                 </div>
             </div>
@@ -498,6 +500,7 @@ function handlePdfSelection(input) {
 }
 
 async function handleStep1Next() {
+    const isManualMode = {{ is_manual|yesno:"true,false" }};
     const val = document.querySelector('input[name="uploadType"]:checked').value;
     if(val === 'images') {
         if(!currentSubmissionId && uploadedFiles.length > 0) {
@@ -515,7 +518,11 @@ async function handleStep1Next() {
             alert("Please select a PDF file first.");
             return;
         }
-        goToStep(3);
+        if(isManualMode) {
+            await openManualQuestionMapping();
+        } else {
+            goToStep(3);
+        }
     }
 }
 
@@ -525,7 +532,12 @@ async function handleStep2Next() {
         return;
     }
     await syncUpdatedPagesToServer();
-    goToStep(3);
+    const isManualMode = {{ is_manual|yesno:"true,false" }};
+    if(isManualMode) {
+        await openManualQuestionMapping();
+    } else {
+        goToStep(3);
+    }
 }
 
 let isUploading = false;
@@ -568,8 +580,18 @@ async function uploadRawImages() {
         if(data.success) {
             currentSubmissionId = data.submission_id;
             sessionStorage.setItem('ig_sub_id_{{ exam.id }}', data.submission_id);
+            try {
+                const imgResp = await fetch(`/api/submission/${data.submission_id}/images/`);
+                const imgData = await imgResp.json();
+                if(imgData.success && imgData.images && imgData.images.length > 0) {
+                    uploadedFiles = imgData.images;
+                    pageRotationAngles = imgData.images.map(img => img.rotation_angle || 0);
+                }
+            } catch(e) {
+                console.warn("Could not reload persisted submission images:", e);
+            }
             statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
-            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count} page images to Submission Builder!`;
+            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count} page image(s) to Submission Builder!`;
             renderThumbnails();
             goToStep(2);
         } else {
@@ -586,22 +608,47 @@ async function uploadRawImages() {
 }
 
 async function uploadSinglePdf(file) {
+    const statusDiv = document.getElementById('uploadStatusText');
+    statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+    statusDiv.innerText = "Uploading & extracting answer script PDF pages...";
+    statusDiv.classList.remove('hidden');
+
     const formData = new FormData();
     formData.append('student_name', document.getElementById('studentName').value);
     formData.append('roll_no', document.getElementById('studentRoll').value);
     formData.append('script_file', file);
 
-    const resp = await fetch("{% url 'upload_student_submission' exam.id %}", {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-    });
-    const data = await resp.json();
-    if(data.success) {
-        currentSubmissionId = data.submission_id;
-        goToStep(3);
-    } else {
-        alert("PDF Upload Error: " + data.error);
+    try {
+        const resp = await fetch("{% url 'api_wizard_upload_pdf' exam.id %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if(data.success) {
+            currentSubmissionId = data.submission_id;
+            sessionStorage.setItem('ig_sub_id_{{ exam.id }}', data.submission_id);
+            if(data.images && data.images.length > 0) {
+                uploadedFiles = data.images;
+                pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
+            }
+            if(data.student_name && data.student_name !== 'Pending OCR Extraction') {
+                document.getElementById('studentName').value = data.student_name;
+            }
+            if(data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
+            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
+            statusDiv.innerText = `✓ Successfully extracted ${data.page_count} page(s) from PDF!`;
+            renderThumbnails();
+            goToStep(2);
+        } else {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+            statusDiv.innerText = "PDF Upload Error: " + data.error;
+            alert("PDF Upload Error: " + data.error);
+        }
+    } catch(err) {
+        statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+        statusDiv.innerText = "PDF Upload Exception: " + err.message;
+        alert("PDF Upload Exception: " + err.message);
     }
 }
 
@@ -909,7 +956,8 @@ let currentMappingData = [];
 function goToStep(stepNum) {
     document.getElementById('step1Content').classList.add('hidden');
     document.getElementById('step2Content').classList.add('hidden');
-    document.getElementById('step3Content').classList.add('hidden');
+    const s3 = document.getElementById('step3Content');
+    if(s3) s3.classList.add('hidden');
     const mStep = document.getElementById('stepMappingContent');
     if(mStep) mStep.classList.add('hidden');
 
@@ -923,9 +971,10 @@ function goToStep(stepNum) {
     }
 
     if(stepNum === 'Mapping' || stepNum === '2.5') {
-        document.getElementById('stepMappingContent').classList.remove('hidden');
+        if(mStep) mStep.classList.remove('hidden');
     } else {
-        document.getElementById(`step${stepNum}Content`).classList.remove('hidden');
+        const targetEl = document.getElementById(`step${stepNum}Content`);
+        if(targetEl) targetEl.classList.remove('hidden');
     }
 
     // Update Wizard Progress Header Highlighting (Blue when active)
@@ -975,6 +1024,42 @@ function appendScanLog(category, msg, colorClass = "text-slate-300") {
     `;
     logContainer.appendChild(logLine);
     logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+async function openManualQuestionMapping() {
+    if(!currentSubmissionId) return alert("Submission ID not found.");
+    await syncUpdatedPagesToServer();
+
+    const totalPages = (uploadedFiles && uploadedFiles.length > 0) ? uploadedFiles.length : 1;
+
+    // Build instantaneous direct question mapping list from examination questions without AI/OCR scanning
+    const examQuestions = [
+        {% for q in exam.questions.all %}
+        {
+            question_id: {{ q.id }},
+            question_number: "{{ q.formatted_number|default:q.question_number }}",
+            max_marks: {{ q.max_marks|default:10 }},
+            prompt_text: "{{ q.prompt_text|default:q.text|truncatechars:80|escapejs }}",
+            page_numbers: totalPages === 1 ? [1] : ({{ forloop.counter }} <= totalPages ? [{{ forloop.counter }}] : [1]),
+            confidence: 1.0,
+            mapping_status: 'CONFIRMED'
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    currentMappingData = examQuestions;
+    renderMappingTable({
+        success: true,
+        mappings: examQuestions,
+        requires_teacher_confirmation: false
+    });
+
+    const sName = document.getElementById('studentName') ? document.getElementById('studentName').value : '';
+    const sRoll = document.getElementById('studentRoll') ? document.getElementById('studentRoll').value : '';
+    if(document.getElementById('confirmStudentName')) document.getElementById('confirmStudentName').value = sName;
+    if(document.getElementById('confirmStudentRoll')) document.getElementById('confirmStudentRoll').value = sRoll;
+
+    goToStep('Mapping');
 }
 
 async function analyzeQuestionMapping() {
@@ -1250,6 +1335,17 @@ function renderMappingTable(data) {
     if(window.lucide) lucide.createIcons();
 }
 
+function updateMappingPage(qIdx, pageNum, isChecked) {
+    if(!currentMappingData || !currentMappingData[qIdx]) return;
+    const pgSet = new Set(currentMappingData[qIdx].page_numbers || []);
+    if(isChecked) {
+        pgSet.add(pageNum);
+    } else {
+        pgSet.delete(pageNum);
+    }
+    currentMappingData[qIdx].page_numbers = Array.from(pgSet).sort((a, b) => a - b);
+}
+
 function viewFullAnswerScriptModal(startPage = 1) {
     if(currentSubmissionId) {
         compileAndPreviewPdf();
@@ -1285,6 +1381,8 @@ function updateMappingPage(mappingIndex, pageNum, isChecked) {
 async function confirmQuestionMappingAndStart() {
     if(!currentSubmissionId) return alert("Submission ID not found.");
 
+    const isManualMode = {{ is_manual|yesno:"true,false" }};
+
     const confirmedMappings = currentMappingData.map(m => ({
         question_id: m.question_id,
         page_numbers: m.page_numbers
@@ -1293,15 +1391,16 @@ async function confirmQuestionMappingAndStart() {
     const options = {
         student_name: (document.getElementById('confirmStudentName') ? document.getElementById('confirmStudentName').value : '') || document.getElementById('studentName').value,
         roll_no: (document.getElementById('confirmStudentRoll') ? document.getElementById('confirmStudentRoll').value : '') || document.getElementById('studentRoll').value,
-        ink_color: document.querySelector('input[name="inkColor"]:checked').value,
-        deskew: document.getElementById('optDeskew').checked,
-        shadow_removal: document.getElementById('optShadow').checked,
-        background_whitening: document.getElementById('optWhitening').checked,
-        contrast_enhancement: document.getElementById('optContrast').checked,
-        ocr_mode: document.getElementById('optOcrMode').value,
-        strictness: document.getElementById('optStrictness').value,
-        eval_mode: document.getElementById('optEvalMode').value,
-        custom_prompt: document.getElementById('customPrompt').value
+        ink_color: document.querySelector('input[name="inkColor"]:checked') ? document.querySelector('input[name="inkColor"]:checked').value : 'None',
+        deskew: document.getElementById('optDeskew') ? document.getElementById('optDeskew').checked : true,
+        shadow_removal: document.getElementById('optShadow') ? document.getElementById('optShadow').checked : true,
+        background_whitening: document.getElementById('optWhitening') ? document.getElementById('optWhitening').checked : true,
+        contrast_enhancement: document.getElementById('optContrast') ? document.getElementById('optContrast').checked : true,
+        ocr_mode: document.getElementById('optOcrMode') ? document.getElementById('optOcrMode').value : 'Balanced',
+        strictness: document.getElementById('optStrictness') ? document.getElementById('optStrictness').value : 'Balanced',
+        eval_mode: isManualMode ? 'Manual' : (document.getElementById('optEvalMode') ? document.getElementById('optEvalMode').value : 'Rubric-based'),
+        mode: isManualMode ? 'manual' : 'ai',
+        custom_prompt: document.getElementById('customPrompt') ? document.getElementById('customPrompt').value : ''
     };
 
     const modal = document.getElementById('evalProgressModal');
@@ -1319,36 +1418,49 @@ async function confirmQuestionMappingAndStart() {
         }
     }
 
-    log("==================================================", 10);
-    log("UPLOAD COMPLETE", 15);
-    log("==================================================", 20);
-    log("PREVIEW GENERATED", 30);
-    log("==================================================", 40);
-    log("WORKING PDF GENERATED", 50);
-    log("==================================================", 60);
-    log("OCR COMPLETE", 70);
-    log("==================================================", 75);
-    log("QUESTION MAPPING COMPLETE", 80);
+    if(isManualMode) {
+        log("==================================================", 10);
+        log("PREPARING STUDENT ANSWER SCRIPT PAGES", 30);
+        log("==================================================", 50);
+        log("SAVING QUESTION-TO-PAGE MAPPINGS", 75);
+        log("==================================================", 90);
+        log("INITIALIZING SPLIT-SCREEN WORKBENCH", 95);
+    } else {
+        log("==================================================", 10);
+        log("UPLOAD COMPLETE", 15);
+        log("==================================================", 20);
+        log("PREVIEW GENERATED", 30);
+        log("==================================================", 40);
+        log("WORKING PDF GENERATED", 50);
+        log("==================================================", 60);
+        log("OCR COMPLETE", 70);
+        log("==================================================", 75);
+        log("QUESTION MAPPING COMPLETE", 80);
+    }
 
     try {
         const resp = await fetch(`/api/submission/${currentSubmissionId}/confirm-mapping/`, {
             method: 'POST',
-            body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options }),
+            body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options, mode: isManualMode ? 'manual' : 'ai' }),
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
         });
         const data = await resp.json();
         if(data.success) {
             sessionStorage.removeItem('ig_sub_id_{{ exam.id }}');
-            log("==================================================", 85);
-            log("AI EVALUATION COMPLETE", 90);
-            log("==================================================", 95);
-            log("OPENING REVIEW WORKSPACE", 98);
-            log("==================================================", 100);
+            if(isManualMode) {
+                log("OPENING MANUAL GRADING WORKBENCH", 100);
+            } else {
+                log("==================================================", 85);
+                log("AI EVALUATION COMPLETE", 90);
+                log("==================================================", 95);
+                log("OPENING REVIEW WORKSPACE", 98);
+                log("==================================================", 100);
+            }
             setTimeout(() => {
                 window.location.href = data.workspace_url || `/teacher/submission/${currentSubmissionId}/workspace/`;
             }, 600);
         } else {
-            log("[ERROR] Evaluation failed: " + data.error, 100);
+            log("[ERROR] Initialization failed: " + data.error, 100);
             pBar.className = "h-full bg-rose-500 rounded-full transition-all duration-300";
             const closeRow = document.getElementById('evalModalCloseRow');
             if(closeRow) closeRow.classList.remove('hidden');

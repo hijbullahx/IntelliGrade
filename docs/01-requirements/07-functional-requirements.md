@@ -1,7 +1,7 @@
 # IntelliGrade — Functional Requirements Specification (FRS)
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -33,7 +33,7 @@ FR-09     Dept Head Monitoring        The system SHALL display live departmental
 FR-10     Dept Head Audit             The system SHALL allow Department Heads to audit course OBE tabulation sheets
                                       and review Course Outcome and Program Outcome attainment matrices.
 FR-11     23-Taxonomy Authoring       The system SHALL store 23-section IUBAT OBE metadata per Question: prompt,
-                                      max marks, Bloom's level, CO (CO1-CO5), PO (PO1-PO12), KP, CEP, and CEA tags.
+                                      max marks, Bloom's level, CO (CO1-CO6), PO (PO1-PO12), KP, CEP, and CEA tags.
 FR-12     Rubric Management           The system SHALL store structured Rubrics with criteria, ideal answer, mark
                                       distribution, rubric levels, keywords, and common mistakes.
 FR-13     Visual Asset Extraction     The system SHALL extract and store bounding box coordinates for attached
@@ -78,5 +78,13 @@ FR-32     Institutional Email Service The system SHALL dispatch non-blocking bac
                                       intelligrade@dsr.iubat.ac.bd for results, credentials, and OTPs.
 FR-33     Student Dashboard           The system SHALL display real-time course grades, cumulative GPA (4.00 scale),
                                       question-wise score feedback, and certified PDF download links.
+FR-34     Dual Evaluation Wizards     The system SHALL provide both AI Wizard (v3.0) and Manual Script Grading Wizard
+                                      allowing pure page slicing and direct teacher assignment without AI scoring.
+FR-35     Finalization Storage Purge  The system SHALL automatically delete unneeded draft working images from
+                                      media/submission_working/ upon certified PDF creation.
+FR-36     Database Performance        The system SHALL utilize composite indexes on StudentSubmission, EvaluationResult,
+                                      QuestionMapping, and StudentGradeRecord, and eager-load relations to eliminate N+1.
+FR-37     Local Vision Downsampling   The system SHALL enforce 800px LANCZOS downsampling and JPEG quality=75 compression
+                                      prior to dispatching local vision payloads to Ollama.
 ====================================================================================================
 ```

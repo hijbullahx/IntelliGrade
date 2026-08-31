@@ -1,7 +1,7 @@
-# IntelliGrade — Functional System Modules & Architecture Catalog
+# IntelliGrade - Functional System Modules & Architecture Catalog
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -33,16 +33,16 @@ graph TD
         M12[MOD-12: Question Boundary & Mapping Engine]
     end
 
-    subgraph AI Evaluation Core
-        M13[MOD-13: AI Provider Failover Orchestrator]
-        M14[MOD-14: TaskRouter & Cooldown Health Tracker]
-        M15[MOD-15: AI Script Evaluator v3.0]
-        M16[MOD-16: LaTeX Matrix & JSON Sanitize Engine]
+    subgraph Dual Evaluation Pipelines
+        M13[MOD-13: AI Evaluation Wizard v3.0]
+        M14[MOD-14: Manual Script Grading Wizard]
+        M15[MOD-15: AI Provider Failover Orchestrator]
+        M16[MOD-16: TaskRouter & Cooldown Health Tracker]
     end
 
     subgraph Review, Tabulation & Dissemination
         M17[MOD-17: Split-Screen Teacher Grading Workbench]
-        M18[MOD-18: Certified PDF Script Generator]
+        M18[MOD-18: Certified PDF Script Generator & Cleanup]
         M19[MOD-19: Course OBE Tabulation Engine]
         M20[MOD-20: 8-Sheet Excel Export & Bi-directional Sync]
         M21[MOD-21: Asynchronous Institutional Email Service]
@@ -58,6 +58,7 @@ graph TD
 - **Key Functions**:
   - Unified session-based authentication with role redirection (`ADMIN`, `DEPT_HEAD`, `TEACHER`, `STUDENT`).
   - Security decorators enforcing strict role boundaries (`@admin_required`, `@teacher_required`, `@student_required`, `@dept_head_required`).
+  - Department Head login supporting both Username and Email authentication.
   - Self-registration for students with mandatory Exam Controller approval workflow.
   - 6-digit security OTP password reset dispatch and verification pipeline.
 
@@ -77,12 +78,12 @@ graph TD
 ### MOD-04: Teacher / Examiner Workspace (`/dashboard/teacher/`)
 - **Key Functions**:
   - Course-wise examination assignment overview.
-  - Direct entry points to Question Paper Builder, Batch Script Upload, Evaluation Wizard, and OBE Tabulation.
+  - Direct entry points to Question Paper Builder, Batch Script Upload, Dual Evaluation Wizards, and OBE Tabulation.
   - Live progress indicators for pending vs evaluated answer scripts.
 
 ### MOD-05: Student Transparency Portal (`/dashboard/student/`)
 - **Key Functions**:
-  - Top summary cards displaying overall course grade, cumulative GPA ($4.00$ scale), and completion stats.
+  - Top summary cards displaying overall course grade, cumulative GPA (4.00 scale), and completion stats.
   - Course-wise OBE Tabulation table showing individual marks for CT, Mid, Final, Assignment, Attendance (5%), and CO/PO attainments.
   - Script-level transparency view with question-wise score breakdowns, feedback, strengths, and mistakes.
   - One-click certified watermarked PDF script download.
@@ -90,101 +91,106 @@ graph TD
 ### MOD-06: Academic Structure Management
 - **Models**: `College`, `School`, `Department`, `Course`
 - **Key Functions**:
-  - Multi-tier hierarchy matching university governance (College $\rightarrow$ School $\rightarrow$ Department $\rightarrow$ Course).
+  - Multi-tier hierarchy matching university governance (College -> School -> Department -> Course).
   - Assigns multiple faculty instructors to specific course codes.
 
 ### MOD-07: AI Exam Routine Parser
 - **Files**: `core/ai_engine/routine_parser/`, `core/views.py` (`scan_routine_ai`)
 - **Key Functions**:
   - Ingests multi-page official examination routine schedules in PDF or image format.
-  - Employs PyMuPDF and regex LLM prompt routing to extract exam dates, times, course codes, course titles, total marks, and assigned examiners.
-  - 0ms local re-matching against existing database courses with 1-click batch exam creation.
+  - Automatically identifies course codes, course titles, examination dates, start/end times, and departments.
+  - Bulk provisions scheduled `Examination` records in the database.
 
 ### MOD-08: Question Paper & 23-Taxonomy Studio
-- **Models**: `Question`, `Rubric`, `QuestionFigure`, `QuestionTable`, `QuestionFormula`, `DocumentDOM`
+- **Models**: `Question`, `Rubric`, `QuestionFigure`, `QuestionTable`, `QuestionFormula`
 - **Key Functions**:
-  - Full IUBAT OBE taxonomy builder: Course Outcomes (CO1–CO5), Program Outcomes (PO1–PO12), Bloom's Taxonomy, Knowledge Profiles (KP1–KP8), Complex Engineering Problems (CEP1–CEP7), Complex Engineering Activities (CEA1–CEA5), command verbs, difficulty levels, and estimated time.
-  - AI Question Paper Scanner: Upload official question paper PDF $\rightarrow$ automatically extracts all questions, marks, Bloom levels, and rubrics.
-  - Bounding box visual coordinate extraction for attached diagrams, data tables, and LaTeX mathematical formulas.
+  - Authoring and AI scanning of question papers with complete 23-section IUBAT taxonomy: Bloom's level, CO1-CO6, PO1-PO12, KP1-KP8, CEP1-CEP7, CEA1-CEA5.
+  - Multi-modal extraction of visual diagrams, tabular data/matrices, and LaTeX mathematical equations with bounding boxes.
 
 ### MOD-09: Master Benchmark Solution Service
-- **Models**: `Examination.master_solution_file`, `Question.master_solution_text`, `Question.master_solution_steps`
+- **Models**: `Examination.master_solution_file`, `Examination.master_solution_parsed`
 - **Key Functions**:
-  - Allows teachers to upload a golden handwritten/typed master solution script.
-  - Automatically segments and pairs master benchmark solution steps to corresponding questions to guide AI grading.
+  - Ingests golden benchmark solution scripts uploaded by the course instructor.
+  - Extracts step-by-step model solutions and maps partial mark distributions per question.
 
 ### MOD-10: Script Ingestion & 300 DPI Preprocessor
-- **Files**: `core/ai_engine/preprocessing/image_processor.py`, `core/models.py` (`SubmissionImage`, `SubmissionPage`)
+- **Files**: `core/ai_engine/services/submission_processor.py`, `core/ai_engine/preprocessing/working_copy_manager.py`
 - **Key Functions**:
-  - Batch upload support for multi-page PDF files and high-res image sets.
-  - Renders all PDF pages at 300 DPI (`zoom = 4.166`) for maximum OCR fidelity.
-  - OpenCV-based deskewing, noise reduction, and adaptive thresholding with versioned working copy generation (`submission_working/`).
+  - Ingests multi-page PDFs, high-res photos, and ZIP archives.
+  - Converts PDF pages into 300 DPI rasterized images (`zoom = 4.166`) with Hough Line deskewing and adaptive contrast enhancement.
 
 ### MOD-11: Hybrid Multi-Engine OCR
-- **Files**: `core/ai_engine/ocr/`, `core/models.py` (`OCRResult`)
+- **Files**: `core/ai_engine/ocr/`
 - **Key Functions**:
-  - Multi-tier OCR strategy: PyMuPDF font extraction $\rightarrow$ PyTesseract (printed text) $\rightarrow$ EasyOCR (handwritten text on PyTorch CPU).
-  - Stores word-level and line-level bounding box coordinates (`word_boxes_json`, `line_boxes_json`) and overall page confidence ratings.
+  - Primary font map glyph extraction for digital PDFs via PyMuPDF.
+  - High-speed PyTesseract optical character recognition for printed script components.
+  - Deep learning EasyOCR fallback on PyTorch CPU for handwritten text.
 
 ### MOD-12: Question Boundary & Mapping Engine
-- **Files**: `core/ai_engine/mapping/`, `core/models.py` (`QuestionDetection`, `QuestionMapping`, `MappingHistory`)
+- **Files**: `core/ai_engine/mapping/`
 - **Key Functions**:
-  - State-machine question number detector recognizing variations (`Question 1`, `Ans to Q.1`, `১ নং প্রশ্নের উত্তর`).
-  - Strict header validation preventing false positives from question prompts within student answers.
-  - Interactive visual mapping modal enabling teachers to adjust and confirm page-to-question associations before AI evaluation.
+  - Multi-pattern heading detection (`"Answer to the Question No."`, `"Ans to Q."`, `"Q1"`).
+  - State-machine page propagation assigning consecutive pages to active questions until new headers appear.
+  - Teacher confirmation interactive matrix supporting page re-assignments.
 
-### MOD-13: AI Provider Failover Orchestrator
-- **Files**: `core/ai_engine/providers/failover.py`, `registry.py`, `factory.py`
+### MOD-13: AI Evaluation Wizard (v3.0)
+- **Files**: `core/templates/core/evaluation_wizard.html`, `core/views.py` (`api_run_evaluation_v3`)
 - **Key Functions**:
-  - Seamless multi-provider fallback hierarchy: Local Vision (Moondream/Ollama) $\rightarrow$ Groq (Llama-3.3 70B) $\rightarrow$ OpenRouter $\rightarrow$ Gemini (2.5/2.0 Flash) $\rightarrow$ OpenAI (GPT-4o).
-  - Handles HTTP 429 rate limit events, token exhaustion, and API timeouts without crashing.
+  - Multi-step automated pipeline: Image/PDF upload -> Page Builder -> Computer Vision Preprocessing -> Live OCR Scanner Terminal -> Question Mapping Review -> Automated AI Evaluation.
 
-### MOD-14: TaskRouter & Cooldown Health Tracker
-- **Files**: `core/ai_engine/routing/task_router.py`, `core/ai_engine/routing/task_types.py`
+### MOD-14: Manual Script Grading Wizard
+- **Files**: `core/templates/core/manual_evaluation_wizard.html`, `core/views.py` (`manual_evaluation_wizard`, `api_wizard_upload_pdf`)
 - **Key Functions**:
-  - Inspects task types (`ANSWER_VISUAL_READ`, `ANSWER_GRADING`, `ROUTINE_PARSE`, `OCR_TEXT`) to route requests to the most efficient provider.
-  - Enforces exponential backoff cooldown timers for unhealthy or rate-limited API endpoints.
+  - Fast PDF page slicing without triggering OCR/AI scoring.
+  - Direct teacher assignment of question-to-page numbers.
+  - Immediate launch into Manual Grading Workbench.
 
-### MOD-15: AI Script Evaluator v3.0
-- **Files**: `core/ai_engine/evaluation/script_evaluator.py`, `core/models.py` (`EvaluationResult`, `EvaluationFeedback`)
+### MOD-15: Multi-Provider AI Evaluation Core & Failover
+- **Files**: `core/ai_engine/evaluation/`, `core/ai_engine/providers/`
 - **Key Functions**:
-  - Evaluates student answers against question rubrics, criterion allocations, and master solutions.
-  - Produces structured JSON output with obtained marks, maximum marks, confidence scores, strengths, mistakes, and missing points.
-  - Automatically flags answers scoring below the confidence threshold for mandatory teacher review.
+  - Multi-tier provider failover: Local Offline Moondream (800px LANCZOS JPEG quality 75) -> Groq Llama-3.3 70B -> OpenRouter -> Gemini 2.5 Flash -> OpenAI GPT-4o.
+  - Enforces partial credit rubric scoring, confidence estimation, strengths, mistakes, and missing points.
 
-### MOD-16: LaTeX Matrix & JSON Sanitize Engine
-- **Files**: `core/ai_engine/providers/base.py`
+### MOD-16: TaskRouter & Cooldown Health Tracker
+- **Files**: `core/ai_engine/routing/task_router.py`, `core/models.py` (`AIProviderHealth`)
 - **Key Functions**:
-  - Employs regex sanitization to escape unescaped backslashes in mathematical formulas (`$$\begin{bmatrix}...$$`), preventing JSON syntax decode errors.
+  - Evaluates provider health, response latency, and rate-limit errors (HTTP 429).
+  - Applies dynamic cooldown windows to temporarily bypass failing providers.
 
 ### MOD-17: Split-Screen Teacher Grading Workbench
-- **Files**: `core/templates/core/grading_workbench.html`, `core/views.py` (`evaluation_workspace`, `review_evaluation_answer`)
+- **Files**: `core/templates/core/evaluation_workspace.html`, `core/views.py` (`evaluation_workspace`)
 - **Key Functions**:
-  - Side-by-side synchronized user interface: Scanned student script on the left, AI score breakdown and rubric criteria on the right.
-  - Allows instant manual mark overrides, teacher feedback editing, and re-evaluation requests.
-  - Full audit logging of all teacher modifications in `TeacherReview`, `EvaluationHistory`, and `EvaluationAuditLog`.
+  - Side-by-side verification view: Left pane displays high-res script page image with zoom/rotate; right pane displays question statement, master solution, rubric criteria, AI score, and feedback.
+  - Eager-loaded queries eliminating N+1 database bottlenecks.
+  - 1-click teacher override, custom marks adjustment, and real-time re-evaluation.
 
-### MOD-18: Certified PDF Script Generator
-- **Files**: `core/ai_engine/evaluation/evaluated_pdf_service.py`
+### MOD-18: Certified PDF Script Generator & Lifecycle Cleanup
+- **Files**: `core/ai_engine/evaluation/evaluated_pdf_service.py`, `core/ai_engine/services/finalization_service.py`
 - **Key Functions**:
-  - Stitches scanned student pages with official institutional header, awarded marks, teacher feedback, and digital certification watermark.
-  - Generates downloadable, certifiable PDF answer scripts.
+  - Generates official evaluated PDF script with ReportLab grading overlay, summary banner, score breakdown, and security watermarks.
+  - Automatically purges obsolete temporary working images from `media/submission_working/`.
 
 ### MOD-19: Course OBE Tabulation Engine
 - **Files**: `core/services/tabulation_service.py`, `core/models.py` (`CourseTabulation`, `StudentGradeRecord`)
 - **Key Functions**:
-  - Real-time aggregation of multi-component assessments: Class Test (10%), Midterm (25%), Final Exam (50%), Assignment (10%), Attendance (5%).
-  - Automatically computes Course Outcome (CO1–CO5) and Program Outcome (PO1–PO12) percentage attainments.
-  - Supports live teacher mark edits with instant database, Excel, and student portal synchronization.
+  - Aggregates multi-assessment components: Class Tests (10%), Midterm (25%), Final (50%), Assignment (10%), Attendance (5%).
+  - Computes weighted overall score, letter grade (A+ to F), grade point (0.00 to 4.00), and CO/PO attainment distributions.
 
 ### MOD-20: 8-Sheet Excel Export & Bi-directional Sync
-- **Files**: `core/services/tabulation_exporter.py`
+- **Files**: `core/views.py` (`export_course_tabulation`)
 - **Key Functions**:
-  - Generates official 8-sheet OBE Excel workbooks (`HOME`, `ASSIGNMENT`, `CO_ATTAINMENT`, `PO_ATTAINMENT`, `CO_CLASS_ATTAINED`, `PO_CLASS_ATTAINED`, `CQI`) using `openpyxl`.
-  - Maps 100-mark question distributions into sheet formulas (`=(J*0.1)+(R*0.25)+(AN*0.5)+(AP*0.1)+Attendance`).
+  - Generates comprehensive 8-sheet Excel workbook (`openpyxl`):
+    1. Overall Course Summary
+    2. Continuous Assessment (CT & Assignments)
+    3. Midterm Examination
+    4. Final Examination
+    5. CO Attainment Summary Matrix
+    6. PO Attainment Breakdown
+    7. Grade Distribution & CQI Analysis
+    8. Student-wise Detailed Audit Log
 
 ### MOD-21: Asynchronous Institutional Email Service
 - **Files**: `core/services/email_service.py`
 - **Key Functions**:
-  - Dispatches non-blocking emails via Python background threads (`threading.Thread`) from `intelligrade@dsr.iubat.ac.bd`.
-  - Notification triggers: Account creation, student approval, OTP password resets, exam assignments, published evaluation results (with PDF attachments), and faculty OBE summary spreadsheets.
+  - Non-blocking multi-threaded background email delivery via `dsr.iubat.ac.bd` SMTP.
+  - Dispatches account credentials, OTP password resets, exam assignments, published student results (with PDF attachment), and faculty tabulation spreadsheets.

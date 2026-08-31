@@ -411,6 +411,13 @@ class StudentSubmission(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['examination', 'status']),
+            models.Index(fields=['student_roll_no']),
+            models.Index(fields=['is_finalized']),
+        ]
+
     def __str__(self):
         return f"Submission: {self.student_name} ({self.student_roll_no}) - {self.examination.title}"
 
@@ -465,6 +472,11 @@ class EvaluationResult(models.Model):
     status = models.CharField(max_length=20, choices=ReviewStatus.choices, default=ReviewStatus.PENDING)
     evaluated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'requires_manual_review']),
+        ]
 
     def __str__(self):
         return f"Result {self.submission_answer.question.formatted_number}: {self.obtained_marks}/{self.maximum_marks}"
@@ -627,6 +639,10 @@ class QuestionMapping(models.Model):
 
     class Meta:
         unique_together = ('submission', 'question')
+        indexes = [
+            models.Index(fields=['submission', 'mapping_status']),
+            models.Index(fields=['submission', 'is_confirmed']),
+        ]
 
     def __str__(self):
         return f"Mapping Submission #{self.submission.id} {self.question.formatted_number} -> Pages {self.page_numbers_json} ({self.mapping_status})"
@@ -677,6 +693,11 @@ class StudentGradeRecord(models.Model):
 
     class Meta:
         unique_together = ('tabulation', 'student_id')
+        indexes = [
+            models.Index(fields=['tabulation', 'student_id']),
+            models.Index(fields=['tabulation', 'overall_score']),
+            models.Index(fields=['is_manually_edited']),
+        ]
 
     def __str__(self):
         return f"GradeRecord: {self.student_name} ({self.student_id}) - {self.overall_score:.1f}% ({self.letter_grade})"

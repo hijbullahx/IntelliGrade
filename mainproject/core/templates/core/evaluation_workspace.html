@@ -203,9 +203,15 @@
             <!-- Right Panel Secondary Tab Switcher -->
             <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
                 <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                    {% if is_manual %}
+                    <button type="button" onclick="switchRightTab('eval')" id="subTab_eval" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5 text-indigo-500"></i> Manual Grading
+                    </button>
+                    {% else %}
                     <button type="button" onclick="switchRightTab('eval')" id="subTab_eval" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5">
                         <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-500"></i> AI Evaluation & Steps
                     </button>
+                    {% endif %}
                     <button type="button" onclick="switchRightTab('benchmark')" id="subTab_benchmark" class="sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5">
                         <i data-lucide="book-open" class="w-3.5 h-3.5 text-brand-500"></i> Master Benchmark Key
                     </button>
@@ -225,10 +231,146 @@
                 {% for item in normalized_answers %}
                 {% with idx=forloop.counter0 q=item.q eval=item.evaluation_result ans=item.answer %}
                 <div id="qRightPanel_{{ idx }}" class="q-right-panel space-y-4 {% if not forloop.first %}hidden{% endif %}">
-                    
-                    <!-- TAB CONTENT 1: AI Evaluation Breakdown & Step Scoring -->
+                                        <!-- TAB CONTENT 1: Eval Panel (AI or Manual depending on mode) -->
                     <div id="rightTabContent_eval_{{ idx }}" class="right-tab-pane space-y-4">
+
+                    {% if is_manual %}
+                    <!-- ===== MANUAL GRADING PANEL (Comprehensive & Accurate) ===== -->
+                    <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 space-y-4 shadow-sm">
                         
+                        <!-- Header & Quick Score Preset Toolbar -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-500/20 pb-3">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="edit-3" class="w-4 h-4 text-indigo-500"></i>
+                                <span class="font-extrabold text-xs text-indigo-600 dark:text-indigo-400">Manual Grading — Q{{ q.number }}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 font-bold font-mono">Max: {{ q.marks }} Marks</span>
+                            </div>
+
+                            <!-- Quick Preset Score Shortcuts -->
+                            <div class="flex items-center gap-1">
+                                <span class="text-[10px] font-bold theme-text-muted mr-1">Quick Score:</span>
+                                <button type="button" onclick="applyQuickPreset({{ idx }}, {{ eval.id }}, 1.0, {{ q.marks }})" class="px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold transition-all">Full ({{ q.marks }})</button>
+                                <button type="button" onclick="applyQuickPreset({{ idx }}, {{ eval.id }}, 0.8, {{ q.marks }})" class="px-2 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold transition-all">80%</button>
+                                <button type="button" onclick="applyQuickPreset({{ idx }}, {{ eval.id }}, 0.5, {{ q.marks }})" class="px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold transition-all">50%</button>
+                                <button type="button" onclick="applyQuickPreset({{ idx }}, {{ eval.id }}, 0.0, {{ q.marks }})" class="px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-bold transition-all">0</button>
+                            </div>
+                        </div>
+
+                        <!-- Question Prompt & Rubric Reminder -->
+                        <div class="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs theme-text-secondary leading-relaxed space-y-1.5">
+                            <div>
+                                <span class="font-bold text-indigo-500 block">Question Prompt:</span>
+                                <span>{{ q.question_display_text|default:q.text }}</span>
+                            </div>
+                            {% if q.rubric %}
+                            <div class="pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
+                                <span class="font-bold text-amber-500 block">Grading Standard / Rubric:</span>
+                                <span class="theme-text-muted">{{ q.rubric }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Step-by-Step Marks Entry Table with Editable Base Marks -->
+                        <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+                            <div class="p-2.5 bg-slate-100/70 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] font-extrabold theme-text-muted">
+                                <span class="flex items-center gap-1.5 text-indigo-500">
+                                    <i data-lucide="list-ordered" class="w-3.5 h-3.5"></i> Step-by-Step Marking Breakdown
+                                </span>
+                                <span class="text-[10px]">Awarded / Base Marks (Editable)</span>
+                            </div>
+                            <div class="divide-y divide-slate-200 dark:divide-slate-800/60 bg-white dark:bg-slate-900/40" id="steps_container_{{ idx }}">
+                                {% if item.rubric_breakdown %}
+                                    {% for step in item.rubric_breakdown %}
+                                    <div class="p-3 flex flex-wrap items-center justify-between gap-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-850/50 transition-colors step-row-{{ idx }}">
+                                        <div class="flex-1 min-w-[200px] theme-text-primary font-medium flex items-center gap-1.5">
+                                            <span class="text-indigo-500 font-black font-mono mr-1">Step {{ step.step_num }}:</span>
+                                            <input type="text" value="{{ step.description }}" class="step-desc-input-{{ idx }} bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 text-xs theme-text-primary outline-none focus:border-indigo-500 flex-1">
+                                        </div>
+                                        <div class="flex items-center gap-2 font-mono font-bold shrink-0">
+                                            <!-- Step Quick Fraction Buttons -->
+                                            <div class="flex items-center gap-0.5">
+                                                <button type="button" onclick="setStepScore({{ idx }}, {{ forloop.counter0 }}, 'full', {{ eval.id }}, {{ q.marks }})" class="px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px]" title="Full step marks">Full</button>
+                                                <button type="button" onclick="setStepScore({{ idx }}, {{ forloop.counter0 }}, 'half', {{ eval.id }}, {{ q.marks }})" class="px-1.5 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px]" title="Half step marks">Half</button>
+                                                <button type="button" onclick="setStepScore({{ idx }}, {{ forloop.counter0 }}, 'zero', {{ eval.id }}, {{ q.marks }})" class="px-1.5 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[10px]" title="Zero step marks">0</button>
+                                            </div>
+                                            <!-- Awarded Marks -->
+                                            <input type="number" step="0.5" min="0" max="{{ step.allocated }}"
+                                                   value="{{ step.awarded }}"
+                                                   data-allocated="{{ step.allocated }}"
+                                                   oninput="recalculateStepMarks({{ idx }}, {{ eval.id }}, {{ q.marks }})"
+                                                   class="step-score-input-{{ idx }} w-14 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-center text-emerald-500 focus:ring-1 focus:ring-indigo-500 outline-none">
+                                            <span class="theme-text-muted text-[11px]">/</span>
+                                            <!-- Base / Allocated Marks (Editable by Teacher) -->
+                                            <input type="number" step="0.5" min="0.5" max="{{ q.marks }}"
+                                                   value="{{ step.allocated }}"
+                                                   oninput="updateStepAllocated({{ idx }}, {{ forloop.counter0 }}, this.value, {{ q.marks }}, {{ eval.id }})"
+                                                   class="step-alloc-input-{{ idx }} w-12 px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-center theme-text-muted focus:ring-1 focus:ring-indigo-500 outline-none" title="Base allocated marks for this step">
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="p-3 text-center theme-text-muted text-xs">Direct question scoring enabled.</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Demonstrated Strengths Tag Selector -->
+                        <div class="space-y-1.5">
+                            <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Demonstrated Strengths (Click to tag):
+                            </span>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button type="button" onclick="toggleStrengthTag({{ eval.id }}, 'Correct Method & Formula')" class="strength-tag-btn px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold transition-all">+ Correct Formula</button>
+                                <button type="button" onclick="toggleStrengthTag({{ eval.id }}, 'Clear Step-by-Step Derivation')" class="strength-tag-btn px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold transition-all">+ Clear Steps</button>
+                                <button type="button" onclick="toggleStrengthTag({{ eval.id }}, 'Accurate Numerical Result & Units')" class="strength-tag-btn px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold transition-all">+ Accurate Result</button>
+                                <button type="button" onclick="toggleStrengthTag({{ eval.id }}, 'Well Structured Presentation')" class="strength-tag-btn px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold transition-all">+ Well Structured</button>
+                                <button type="button" onclick="toggleStrengthTag({{ eval.id }}, 'Correct Diagram / Graph Drawn')" class="strength-tag-btn px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold transition-all">+ Proper Diagram</button>
+                            </div>
+                        </div>
+
+                        <!-- Deductions & Mistakes Tag Selector -->
+                        <div class="space-y-1.5">
+                            <span class="text-[11px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                                <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> Deductions & Gaps (Click to tag):
+                            </span>
+                            <div class="flex flex-wrap gap-1.5">
+                                <button type="button" onclick="toggleMistakeTag({{ eval.id }}, 'Calculation error in working')" class="mistake-tag-btn px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition-all">- Calculation Error</button>
+                                <button type="button" onclick="toggleMistakeTag({{ eval.id }}, 'Missing units in final answer')" class="mistake-tag-btn px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition-all">- Missing Units</button>
+                                <button type="button" onclick="toggleMistakeTag({{ eval.id }}, 'Incomplete derivation steps')" class="mistake-tag-btn px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition-all">- Incomplete Steps</button>
+                                <button type="button" onclick="toggleMistakeTag({{ eval.id }}, 'Incorrect formula applied')" class="mistake-tag-btn px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition-all">- Formula Error</button>
+                                <button type="button" onclick="toggleMistakeTag({{ eval.id }}, 'Minor conceptual slip')" class="mistake-tag-btn px-2 py-0.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition-all">- Conceptual Gap</button>
+                            </div>
+                        </div>
+
+                        <!-- CO/PO Mapping (Manual Input) -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-bold theme-text-muted mb-1">Course Outcome (CO)</label>
+                                <input type="text" id="manual_co_{{ eval.id }}"
+                                       value="{{ q.co|default:'' }}"
+                                       placeholder="e.g. CO1, CO2"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold theme-text-primary focus:ring-1 focus:ring-indigo-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-bold theme-text-muted mb-1">Program Outcome (PO)</label>
+                                <input type="text" id="manual_po_{{ eval.id }}"
+                                       value="{{ q.po|default:'' }}"
+                                       placeholder="e.g. PO1, PO3"
+                                       class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold theme-text-primary focus:ring-1 focus:ring-indigo-500 outline-none">
+                            </div>
+                        </div>
+
+                        <!-- Teacher Comment / Evaluation Feedback Box -->
+                        <div>
+                            <label class="block text-[11px] font-bold theme-text-muted mb-1">Teacher Feedback & Deduction Rationale</label>
+                            <textarea id="manual_comment_{{ eval.id }}" rows="3"
+                                      placeholder="Write specific feedback, deduction reasons, or comments for the student..."
+                                      class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs theme-text-primary focus:ring-1 focus:ring-indigo-500 outline-none font-sans resize-none">{{ eval.feedback_text|default:'' }}</textarea>
+                        </div>
+                    </div>
+
+                    {% else %}
+                    <!-- ===== AI EVALUATION PANEL ===== -->
                         <!-- AI Assessment Summary Card -->
                         <div class="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2.5 shadow-sm">
                             <div class="flex items-center justify-between">
@@ -277,7 +419,7 @@
                                                        min="0" 
                                                        max="{{ step.allocated }}" 
                                                        value="{{ step.awarded }}" 
-                                                       oninput="recalculateStepMarks({{ idx }}, {{ eval.id }})" 
+                                                       oninput="recalculateStepMarks({{ idx }}, {{ eval.id }}, {{ q.marks }})" 
                                                        class="step-score-input-{{ idx }} w-14 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-center theme-text-primary focus:ring-1 focus:ring-brand-500 outline-none">
                                                 <span class="theme-text-muted">/ {{ step.allocated }}</span>
                                             </div>
@@ -319,7 +461,7 @@
 
                             <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-1.5">
                                 <span class="font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
-                                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Deductions & Gaps
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Deductions &amp; Gaps
                                 </span>
                                 <ul class="list-disc list-inside space-y-1 text-[11px] theme-text-secondary">
                                     {% for m in item.mistakes %}<li>{{ m }}</li>{% empty %}<li class="text-slate-400 italic">No errors flagged</li>{% endfor %}
@@ -327,6 +469,7 @@
                             </div>
                         </div>
 
+                    {% endif %}
                     </div>
 
                     <!-- TAB CONTENT 2: Master Benchmark Key Reference -->
@@ -422,9 +565,15 @@
                     <div class="p-4 rounded-2xl bg-slate-100/90 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 space-y-3 shadow-lg shrink-0 mt-4">
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             
-                            <!-- Score Input -->
+                            <!-- Score Display -->
                             <div class="flex items-center gap-2">
-                                <label class="text-xs font-bold theme-text-primary">Assigned Score:</label>
+                                <span class="text-xs font-bold theme-text-primary">{% if is_manual %}Total Awarded Score:{% else %}Assigned Score:{% endif %}</span>
+                                {% if is_manual %}
+                                <span class="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-950 px-3 py-1 rounded-xl border border-slate-300 dark:border-slate-700 shadow-inner">
+                                    <span id="awarded_total_display_{{ eval.id }}">{{ eval.obtained_marks|default:'0.0' }}</span> / {{ q.marks }} Marks
+                                </span>
+                                <input type="hidden" id="override_input_{{ eval.id }}" value="{{ eval.obtained_marks|default:'0.0' }}">
+                                {% else %}
                                 <div class="flex items-center gap-1 bg-white dark:bg-slate-950 px-2 py-1 rounded-xl border border-slate-300 dark:border-slate-700 shadow-inner">
                                     <input type="number" 
                                            step="0.5" 
@@ -435,10 +584,18 @@
                                            class="w-16 text-center text-sm font-black font-mono text-brand-600 dark:text-brand-400 bg-transparent outline-none">
                                     <span class="text-xs font-bold theme-text-muted">/ {{ q.marks }}</span>
                                 </div>
+                                {% endif %}
                             </div>
 
-                            <!-- Override Action Buttons -->
+                            <!-- Action Buttons -->
                             <div class="flex items-center gap-2">
+                                {% if is_manual %}
+                                <button type="button" 
+                                        onclick="submitManualGrade({{ eval.id }}, {{ idx }})" 
+                                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
+                                    <i data-lucide="save" class="w-3.5 h-3.5"></i> Save Manual Score
+                                </button>
+                                {% else %}
                                 <button type="button" 
                                         onclick="submitReview({{ eval.id }}, 'OVERRIDE', {{ idx }})" 
                                         class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
@@ -450,6 +607,7 @@
                                         class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer">
                                     <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve AI Score
                                 </button>
+                                {% endif %}
 
                                 <button type="button" 
                                         onclick="nextQuestionTab({{ idx }})" 
@@ -459,13 +617,15 @@
                             </div>
                         </div>
 
-                        <!-- Teacher Comment / Audit Feedback Box -->
+                        <!-- Comment Box for AI mode -->
+                        {% if not is_manual %}
                         <div>
                             <input type="text" 
                                    id="review_comment_{{ eval.id }}" 
                                    placeholder="Add optional teacher evaluation comment or override rationale..." 
                                    class="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs theme-text-primary outline-none focus:ring-1 focus:ring-brand-500">
                         </div>
+                        {% endif %}
                     </div>
 
                 </div>
@@ -533,8 +693,43 @@ const questionData = [
     {% endfor %}
 ];
 
+function showToast(message, type = 'success') {
+    let container = document.getElementById('ig_toast_container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'ig_toast_container';
+        container.className = 'fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `px-4 py-2.5 rounded-xl shadow-xl border text-xs font-bold transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto flex items-center gap-2 ${
+        type === 'success' ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-600/20' :
+        type === 'error' ? 'bg-rose-600 text-white border-rose-500 shadow-rose-600/20' :
+        'bg-slate-800 text-white border-slate-700 shadow-slate-900/40'
+    }`;
+    toast.innerHTML = `<span>${message}</span>`;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+    });
+
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+    }, 2500);
+}
+
 function switchQuestionTab(index) {
     if (index < 0 || index >= totalQuestions) return;
+    const prevIdx = activeQuestionIndex;
+    if (prevIdx !== index && typeof prevIdx === 'number') {
+        const prevQ = questionData[prevIdx];
+        if (prevQ && prevQ.evalId) {
+            submitManualGrade(prevQ.evalId, prevIdx, true); // Auto-save previous question in background!
+        }
+    }
     activeQuestionIndex = index;
 
     // 1. Update Tab Button Styles
@@ -552,10 +747,28 @@ function switchQuestionTab(index) {
         else panel.classList.add('hidden');
     });
 
-    // 3. Toggle Right Scoring Panels
+    // 3. Toggle Right Scoring Panels (ensure active question panel and its eval pane are visible)
     document.querySelectorAll('.q-right-panel').forEach((panel, idx) => {
-        if (idx === index) panel.classList.remove('hidden');
-        else panel.classList.add('hidden');
+        if (idx === index) {
+            panel.classList.remove('hidden');
+            panel.querySelectorAll('.right-tab-pane').forEach(p => p.classList.add('hidden'));
+            const evalPane = document.getElementById(`rightTabContent_eval_${index}`);
+            if (evalPane) evalPane.classList.remove('hidden');
+        } else {
+            panel.classList.add('hidden');
+        }
+    });
+
+    // Reset sub-tab navigation buttons to 'eval'
+    ['eval', 'benchmark', 'rubric'].forEach(type => {
+        const btn = document.getElementById(`subTab_${type}`);
+        if (btn) {
+            if (type === 'eval') {
+                btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5";
+            } else {
+                btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5";
+            }
+        }
     });
 
     // 4. Update Header Badges
@@ -567,7 +780,7 @@ function switchQuestionTab(index) {
         if (weightBadge) weightBadge.innerText = `${currentQ.marks} Marks`;
     }
 
-    // Reset Zoom for the new active view
+    if (window.lucide) lucide.createIcons();
     resetActiveImageZoom();
 }
 
@@ -589,12 +802,16 @@ function switchRightTab(tabType) {
     // Update Sub Tab Buttons
     ['eval', 'benchmark', 'rubric'].forEach(type => {
         const btn = document.getElementById(`subTab_${type}`);
-        if (type === tabType) {
-            btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5";
-        } else {
-            btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5";
+        if (btn) {
+            if (type === tabType) {
+                btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white dark:bg-slate-800 theme-text-primary shadow-sm flex items-center gap-1.5";
+            } else {
+                btn.className = "sub-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all theme-text-muted hover:theme-text-primary flex items-center gap-1.5";
+            }
         }
     });
+
+    if (window.lucide) lucide.createIcons();
 }
 
 function toggleOcrAccordion(idx) {
@@ -633,18 +850,90 @@ function applyZoom() {
 }
 
 // Step Marks Recalculation Engine
-function recalculateStepMarks(qIdx, evalId) {
-    const inputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
+function recalculateStepMarks(qIdx, evalId, maxMarks) {
+    const scoreInputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
     let sum = 0.0;
-    inputs.forEach(input => {
-        const val = parseFloat(input.value) || 0.0;
+    scoreInputs.forEach(input => {
+        let val = parseFloat(input.value) || 0.0;
+        val = Math.max(0, val);
         sum += val;
     });
 
-    // Update the total override input for this question
+    // Cap total at question max marks
+    const qMax = maxMarks || (questionData[qIdx] ? parseFloat(questionData[qIdx].marks) : 100.0);
+    if (sum > qMax) {
+        sum = qMax;
+    }
+
+    // Update hidden override input and live display badge
     const overrideInput = document.getElementById(`override_input_${evalId}`);
-    if (overrideInput) {
-        overrideInput.value = sum.toFixed(1);
+    if (overrideInput) overrideInput.value = sum.toFixed(1);
+
+    const displayElem = document.getElementById(`awarded_total_display_${evalId}`);
+    if (displayElem) displayElem.innerText = sum.toFixed(1);
+}
+
+// Update Base Allocated Marks for a step
+function updateStepAllocated(qIdx, stepIdx, newAlloc, maxMarks, evalId) {
+    const scoreInputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
+    if (scoreInputs && scoreInputs[stepIdx]) {
+        const newMax = Math.max(0.5, parseFloat(newAlloc) || 0);
+        scoreInputs[stepIdx].setAttribute('data-allocated', newMax);
+        scoreInputs[stepIdx].max = newMax;
+        if (parseFloat(scoreInputs[stepIdx].value) > newMax) {
+            scoreInputs[stepIdx].value = newMax.toFixed(1);
+        }
+    }
+    recalculateStepMarks(qIdx, evalId, maxMarks);
+}
+
+// Quick Preset Score (Full, 80%, 50%, 0)
+function applyQuickPreset(qIdx, evalId, fraction, maxMarks) {
+    const qMax = maxMarks || (questionData[qIdx] ? parseFloat(questionData[qIdx].marks) : 10.0);
+    const scoreInputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
+    scoreInputs.forEach(inp => {
+        const alloc = parseFloat(inp.getAttribute('data-allocated') || inp.max || 0);
+        inp.value = (alloc * fraction).toFixed(1);
+    });
+    recalculateStepMarks(qIdx, evalId, qMax);
+}
+
+// Quick Step Score (Full, Half, 0)
+function setStepScore(qIdx, stepIdx, mode, evalId, maxMarks) {
+    const scoreInputs = document.querySelectorAll(`.step-score-input-${qIdx}`);
+    if (scoreInputs && scoreInputs[stepIdx]) {
+        const alloc = parseFloat(scoreInputs[stepIdx].getAttribute('data-allocated') || scoreInputs[stepIdx].max || 0);
+        let val = 0.0;
+        if (mode === 'full') val = alloc;
+        else if (mode === 'half') val = alloc * 0.5;
+        else val = 0.0;
+
+        scoreInputs[stepIdx].value = val.toFixed(1);
+        recalculateStepMarks(qIdx, evalId, maxMarks);
+    }
+}
+
+// Toggle Strength Tag in Comment Box
+function toggleStrengthTag(evalId, tagText) {
+    const commentBox = document.getElementById(`manual_comment_${evalId}`);
+    if (!commentBox) return;
+    const curVal = commentBox.value.trim();
+    if (curVal.includes(`[+] ${tagText}`)) {
+        commentBox.value = curVal.replace(`[+] ${tagText}`, '').replace(/\n\n+/g, '\n').trim();
+    } else {
+        commentBox.value = curVal ? `${curVal}\n[+] ${tagText}` : `[+] ${tagText}`;
+    }
+}
+
+// Toggle Mistake / Deduction Tag in Comment Box
+function toggleMistakeTag(evalId, tagText) {
+    const commentBox = document.getElementById(`manual_comment_${evalId}`);
+    if (!commentBox) return;
+    const curVal = commentBox.value.trim();
+    if (curVal.includes(`[-] ${tagText}`)) {
+        commentBox.value = curVal.replace(`[-] ${tagText}`, '').replace(/\n\n+/g, '\n').trim();
+    } else {
+        commentBox.value = curVal ? `${curVal}\n[-] ${tagText}` : `[-] ${tagText}`;
     }
 }
 
@@ -674,6 +963,85 @@ function openAllPagesModal() {
 
 function closeAllPagesModal() {
     document.getElementById('allPagesModal').classList.add('hidden');
+}
+
+// Manual Teacher Grading Persistence (Marks, Comments, CO/PO, Step Breakdown)
+async function submitManualGrade(resultId, qIdx, isSilent = false) {
+    if (!resultId || resultId === 'None' || resultId === 'null') {
+        if (!isSilent) alert("Evaluation record ID not found for this question yet.");
+        return;
+    }
+
+    const overrideInput = document.getElementById(`override_input_${resultId}`);
+    const commentInput = document.getElementById(`manual_comment_${resultId}`);
+    const coInput = document.getElementById(`manual_co_${resultId}`);
+    const poInput = document.getElementById(`manual_po_${resultId}`);
+
+    const newMarks = overrideInput ? overrideInput.value : null;
+    const comments = commentInput ? commentInput.value : '';
+    const coVal = coInput ? coInput.value : '';
+    const poVal = poInput ? poInput.value : '';
+
+    // Collect customized step breakdown
+    const rows = document.querySelectorAll(`.step-row-${qIdx}`);
+    const stepsData = [];
+    rows.forEach((row, sIdx) => {
+        const descInput = row.querySelector(`.step-desc-input-${qIdx}`);
+        const scoreInput = row.querySelector(`.step-score-input-${qIdx}`);
+        const allocInput = row.querySelector(`.step-alloc-input-${qIdx}`);
+        stepsData.push({
+            step_num: sIdx + 1,
+            step_description: descInput ? descInput.value.trim() : `Step ${sIdx + 1}`,
+            allocated_marks: allocInput ? parseFloat(allocInput.value) || 0.0 : 0.0,
+            awarded_marks: scoreInput ? parseFloat(scoreInput.value) || 0.0 : 0.0,
+            comment: ''
+        });
+    });
+
+    const formData = new FormData();
+    formData.append('action', 'MANUAL');
+    if (newMarks !== null) formData.append('new_marks', newMarks);
+    if (comments) formData.append('comments', comments);
+    if (coVal) formData.append('co', coVal);
+    if (poVal) formData.append('po', poVal);
+    if (stepsData.length > 0) formData.append('rubric_breakdown', JSON.stringify(stepsData));
+
+    try {
+        const resp = await fetch(`/api/evaluation-result/${resultId}/review/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+
+        const data = await resp.json();
+        if (data.success) {
+            // 1. Update Right Panel Score Badge
+            const rightBadge = document.getElementById(`rightScoreBadge_${resultId}`);
+            if (rightBadge && questionData[qIdx]) {
+                rightBadge.innerText = `${data.new_obtained_marks} / ${questionData[qIdx].marks}`;
+            }
+
+            // 2. Update Top Tab Score Badge
+            if (questionData[qIdx]) {
+                const tabScore = document.getElementById(`tabScore_${questionData[qIdx].qId}`);
+                if (tabScore) tabScore.innerText = `${data.new_obtained_marks}/${questionData[qIdx].marks}`;
+            }
+
+            // 3. Update Aggregated Score in Top Header
+            const totalElem = document.getElementById('submissionTotal');
+            if (totalElem) {
+                totalElem.innerText = `${data.new_submission_total} / {{ submission.total_max_marks|default:"100.0" }} (${data.submission_percentage}%)`;
+            }
+
+            if (!isSilent) {
+                showToast(`✓ Saved manual grading for Q${questionData[qIdx].qNum} (${data.new_obtained_marks} marks)`);
+            }
+        } else {
+            if (!isSilent) alert('Error: ' + (data.error || 'Manual grade could not be saved.'));
+        }
+    } catch(err) {
+        if (!isSilent) alert('Action failed: ' + err.message);
+    }
 }
 
 // Teacher Review & Score Override Persistence
@@ -740,12 +1108,25 @@ async function submitReview(resultId, action, qIdx) {
 }
 
 async function finalizeSubmissionEvaluation(subId) {
+    // 1. Auto-save current active question before finalizing
+    const curQ = questionData[activeQuestionIndex];
+    if (curQ && curQ.evalId) {
+        await submitManualGrade(curQ.evalId, activeQuestionIndex, true);
+    }
+
     const curName = document.getElementById('displayStudentName') ? document.getElementById('displayStudentName').innerText.trim() : '';
     const curRoll = document.getElementById('displayStudentRoll') ? document.getElementById('displayStudentRoll').innerText.replace('Roll:', '').trim() : '';
     const finName = document.getElementById('finalizeStudentNameInput');
     const finRoll = document.getElementById('finalizeStudentRollInput');
     if (finName && curName) finName.value = curName;
     if (finRoll && curRoll) finRoll.value = (curRoll === 'N/A' ? '' : curRoll);
+
+    const totalElem = document.getElementById('submissionTotal');
+    const modalTotal = document.getElementById('modalAggregatedMarksDisplay');
+    if (modalTotal && totalElem) {
+        modalTotal.innerText = totalElem.innerText;
+    }
+
     document.getElementById('finalizeModal').classList.remove('hidden');
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
@@ -941,7 +1322,7 @@ async function executeFinalizeEvaluation(subId) {
 
             <div class="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-between text-xs font-bold">
                 <span class="theme-text-muted">Aggregated Marks:</span>
-                <span class="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks|default:"0.0" }} / {{ submission.total_max_marks|default:"0.0" }} ({{ submission.percentage|default:"0" }}%)</span>
+                <span id="modalAggregatedMarksDisplay" class="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">{{ submission.total_obtained_marks|default:"0.0" }} / {{ submission.total_max_marks|default:"0.0" }} ({{ submission.percentage|default:"0" }}%)</span>
             </div>
         </div>
 

@@ -1,106 +1,70 @@
-# IntelliGrade — Project Overview & Full Technical Audit Report
+# IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
-**Last Updated:** August 29, 2026  
-**Platform Version:** 3.5.0 (Enterprise Academic Edition)  
-**Target Institution Standard:** IUBAT (International University of Business Agriculture and Technology)  
-**Lead Auditor & Architect:** Principal Enterprise Systems Architect & Technical Documentation Specialist  
-**System Status:** Operational / Enterprise Ready (Django 5.2.x, Multi-Provider AI Failover, Real-time OBE Tabulation)
-
----
-
-## 1. Executive Summary
-
-**IntelliGrade** is an enterprise-grade, Outcome-Based Education (OBE) compliant, AI-powered academic evaluation and examination management SaaS platform built with Django, Python, and modern multimodal AI systems. The platform automates the end-to-end lifecycle of university examinations:
-1. **Academic Hierarchy & Governance**: Chief Exam Controller and Department Head administrative control across Colleges, Schools, Departments, Courses, Faculty, and Students.
-2. **AI Exam Routine Ingestion**: Automated multimodal OCR parsing of university examination schedules with 0ms local re-matching and bulk exam scheduling.
-3. **23-Section Question Paper & Academic Rubric Taxonomy**: Full IUBAT OBE classification including Course Outcomes (CO1–CO5), Program Outcomes (PO1–PO12), Knowledge Profiles (KP1–KP8), Complex Engineering Problems (CEP1–CEP7), Complex Engineering Activities (CEA1–CEA5), Bloom's Taxonomy, and extraction of Figures, Tables, and LaTeX mathematical formulas.
-4. **Multimodal Answer Script Processing Pipeline**: 300 DPI high-resolution normalization, noise filtering, hybrid PyTesseract/EasyOCR fallback, state-machine question boundary detection, and interactive page mapping.
-5. **AI Script Evaluation Engine (v3.0)**: Multi-provider task-aware failover orchestrator dynamically routing between Local Offline Vision (Moondream/Ollama), Groq (Llama-3.3 70B), OpenRouter, Google Gemini (2.5/2.0 Flash), and OpenAI (GPT-4o) with strict timeout budgets, cooldown registries, and JSON repair.
-6. **Split-Screen Teacher Grading Workbench**: Side-by-side synchronized view of original high-res script, extracted OCR text, rubric criteria, AI score breakdowns, confidence rating, teacher overrides, and audit trails.
-7. **Real-time OBE Course Tabulation & Bi-directional Excel/PDF Synchronization**: Automated aggregation of Class Tests (10%), Midterm (25%), Final Exam (50%), Assignments (10%), and Attendance (5%), generating 8-sheet OBE Excel workbooks (`HOME`, `ASSIGNMENT`, `CO_ATTAINMENT`, `PO_ATTAINMENT`, `CO_CLASS_ATTAINED`, `PO_CLASS_ATTAINED`, `CQI`) and stamped, certifiable evaluated student PDF scripts.
-8. **Student & Department Dashboards**: Role-tailored portals for students to view real-time grades, answer scripts, feedback, and certified PDF downloads, and for Department Heads to monitor departmental pass rates, course performance, and faculty workloads.
+**Document Reference:** `DOCS-UPDATE-4.0.0`  
+**Official System Title:** IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions  
+**Lead Architect & Auditor:** Md. Taher Bin Omar Hijbullah  
+**Audit Timestamp:** August 30, 2026  
+**System Health:** Production Ready — Zero System Check Errors (Django 5.2.x, SQLite/PostgreSQL, Multi-Provider AI Core)
 
 ---
 
-## 2. Core Architecture & Technology Stack
+## 1. Executive Summary & Core Milestones
 
-| Layer | Technologies & Libraries | Function / Purpose |
+**IntelliGrade** is an end-to-end outcome-based examination management and intelligent script evaluation ecosystem engineered specifically for higher education institutions aligned with IUBAT and BAETE accreditation standards. The platform eliminates manual examination management and grading friction by uniting central administrative governance, AI routine scheduling, 23-taxonomy OBE question blueprints, computer vision (PyMuPDF, PyTesseract, EasyOCR), structured rubric engines, multi-provider AI evaluation failovers (Local Ollama Moondream, Groq Llama-3.3 70B, Google Gemini, OpenRouter, OpenAI GPT-4o), interactive split-screen workbenches, and real-time OBE course tabulation with 8-sheet Excel reporting.
+
+### Core Architectural Capabilities Implemented:
+1. **Academic Hierarchy & Multi-Tier Governance**: Complete RBAC governance covering Chief Exam Controller (`ADMIN`), Department Head (`DEPT_HEAD`), Faculty Member / Examiner (`TEACHER`), and Student (`STUDENT`) with profile approval workflows.
+2. **AI Exam Routine Scanner**: Multi-page PDF/image ingestion with OCR parsing that auto-detects departments, course codes, exam dates, times, and batch-creates scheduled examinations.
+3. **23-Section Question Paper & Rubric Studio**: Full taxonomy ingestion capturing Bloom's Taxonomy, Course Outcomes (CO1-CO6), Program Outcomes (PO1-PO12), Knowledge Profiles (KP1-KP8), Complex Engineering Problems (CEP1-CEP7), Complex Engineering Activities (CEA1-CEA5), Figures, Tables, and LaTeX mathematical formulas.
+4. **Master Benchmark Solution Extraction**: OCR extraction and step-by-step mark distribution ingestion from teacher's golden benchmark solutions.
+5. **Universal Answer Script Processing**: Ingestion of multi-page PDFs, high-res photos, and nested ZIP archives with automatic 300 DPI image rendering, rotation management, and cached text normalization.
+6. **Dual Evaluation Pipelines**:
+   - **AI Answer Script Evaluation Wizard (v3.0)**: Automatic question heading detection, spatial region segmentation, multi-signal confidence matching, and automated AI scoring.
+   - **Manual Script Evaluation & Mapping Wizard**: 100% direct teacher marking with zero AI/OCR interference, fast PDF page slicing, manual question-to-page assignment, and split-screen teacher grading.
+7. **Multi-Provider AI Evaluation & Failover Core**: Resilient orchestrator with task routing, cooldown registries (429 handling), Local Ollama Moondream vision (800px LANCZOS downsampling, JPEG quality 75), Groq, OpenRouter, and Gemini providers.
+8. **Interactive Split-Screen Workbenches**: High-resolution script viewer, OCR overlay, bounding box visualizer, rubric criteria checklist, marks override, AI feedback editor, and live re-evaluation triggers.
+9. **OBE Course Tabulation & 8-Sheet Workbook Engine**: Real-time aggregation (CT 10%, Midterm 25%, Final 50%, Assignment 10%, Attendance 5%), CO/PO attainment matrices, Continuous Quality Improvement (CQI) triggers, and automated openpyxl Excel exports.
+10. **Institutional Email & Notification Service**: Asynchronous non-blocking multi-threaded email dispatch for account provisioning, OTP password resets, exam assignments, student result publication (with PDF attachments), and department tabulation summaries.
+
+---
+
+## 2. Recent Technical Enhancements & Surgical Optimizations
+
+### Phase 1 Optimization (Database Composite Indexes & Performance)
+- **Database Composite Indexes (`core/models.py`)**:
+  - `StudentSubmission`: Added `models.Index(fields=['examination', 'status'])`, `models.Index(fields=['student_roll_no'])`, `models.Index(fields=['is_finalized'])`.
+  - `EvaluationResult`: Added `models.Index(fields=['status', 'requires_manual_review'])`.
+  - `QuestionMapping`: Added `models.Index(fields=['submission', 'mapping_status'])`, `models.Index(fields=['submission', 'is_confirmed'])`.
+  - `StudentGradeRecord`: Added `models.Index(fields=['tabulation', 'student_id'])`, `models.Index(fields=['tabulation', 'overall_score'])`, `models.Index(fields=['is_manually_edited'])`.
+  - Applied cleanly via migration `0028_evaluationresult_core_evalua_status_1f634b_idx_and_more.py`.
+- **Elimination of N+1 Query Leaks**:
+  - `evaluation_workspace` view: Eager-loaded relations with `.select_related('question__rubric', 'page', 'evaluation_result').prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel')`.
+  - `course_tabulation_view`: Attached `.select_related('examination')` to `evaluated_subs` queryset.
+  - `sync_submission_to_tabulation`: Updated answer query to `.select_related('question__rubric', 'evaluation_result')`.
+- **Storage Lifecycle & Finalization Cleanup**:
+  - `FinalizationService._purge_temporary_artifacts`: Automatically purges obsolete working images (`media/submission_working/`), preview PDFs (`media/submission_preview/`), and OCR trace directories upon final certificate PDF creation.
+- **Local Ollama Vision Optimization**:
+  - `LocalOfflineVisionProvider`: Enforced 800px LANCZOS downsampling and JPEG `quality=75` compression pipeline prior to local inference dispatch (`/api/generate`).
+- **Wizard Endpoint & JavaScript Sanitization**:
+  - Resolved `SyntaxError: Invalid Unicode escape sequence` in `evaluation_wizard.html` by ordering filters as `truncatechars:80|escapejs`.
+  - Fixed PDF upload endpoint in `manual_evaluation_wizard.html` to use `api_wizard_upload_pdf`, ensuring pure page slicing without triggering unwanted AI evaluation in manual grading mode.
+
+---
+
+## 3. Ground Truth Verification Summary
+
+| Component | Status | Verification Detail |
 | :--- | :--- | :--- |
-| **Backend Framework** | Django 5.2.x (Python 3.11 / 3.13) | Monolithic MVC architecture, ORM, Auth, Template Engine, Session Management |
-| **Database** | SQLite3 (Dev/Local) / PostgreSQL (Production) | Relational persistence, JSONFields for dynamic rubrics, mappings, and OBE scores |
-| **Document & PDF Engine** | PyMuPDF (`fitz`), ReportLab, PyPDF2 | 300 DPI high-res page extraction, font glyph decoding, evaluated PDF watermarking |
-| **Computer Vision & Image Preprocessing** | OpenCV (`cv2`), NumPy, Pillow (`PIL`) | Deskewing, adaptive thresholding, noise removal, BBox coordinate cropping |
-| **OCR Engines** | PyTesseract, EasyOCR (PyTorch CPU fallback) | Multi-tier optical character recognition for printed & handwritten student scripts |
-| **AI Failover Orchestration** | `FailoverAIProvider`, `TaskRouter`, `ProviderHealthTracker` | Dynamic task-aware routing, cooldown registries (HTTP 429 backoff), timeout budgets |
-| **AI LLM & Vision Providers** | • Local Offline Vision (`Moondream2`, `Ollama`)<br>• Groq Cloud (`Llama-3.3-70b-versatile`)<br>• Google Gemini (`gemini-2.5-flash`, `gemini-2.0-flash`)<br>• OpenRouter API Gateway<br>• OpenAI API (`gpt-4o`, `gpt-4o-mini`) | Visual text extraction, rubric grading, Bloom classification, semantic re-evaluation |
-| **Tabulation & Spreadsheet Engine** | `openpyxl` | 8-sheet enterprise Excel workbook generation, formula compilation, bi-directional sync |
-| **Asynchronous Notifications** | `EmailService` (Python `threading.Thread`) | Non-blocking institutional email dispatch (`intelligrade@dsr.iubat.ac.bd`) |
-| **Frontend & UI Aesthetics** | Vanilla HTML5/CSS3, TailwindCSS, Inter/Google Fonts | Glassmorphism, dark/light themes, responsive modals, split-screen workbenches |
+| **Django Framework** | Active (5.2.x) | Zero configuration or linting errors via `python manage.py check`. |
+| **Database Migrations** | 28 Migrations Applied | Full schema synchronization across all 28 core migrations. |
+| **Multi-Provider AI** | Active & Resilient | Local Moondream, Groq, OpenRouter, Gemini, OpenAI with dynamic failover. |
+| **OBE Calculation** | Verified | Automatic calculation of CT, Mid, Final, Assignment, Attendance, CO/PO attainment. |
+| **Security & RBAC** | Enforced | Strict role-based route protection and OTP password recovery. |
 
 ---
 
-## 3. Comprehensive Actor Journey & Role Lifecycle
+## 4. Master Technical Specifications & Capacity Blueprints
 
-```mermaid
-graph TD
-    A[Landing Page /] --> B{Actor Selection}
-    B -->|Chief Exam Controller| C[Controller Login /controller/login/]
-    B -->|Teacher / Faculty| D[Teacher Login /teacher/login/]
-    B -->|Department Head| E[Dept Head Login /dept-head/login/]
-    B -->|Student| F[Student Login & Register /student/login/]
-
-    C --> G[Controller Dashboard /dashboard/exam-controller/]
-    G --> G1[Academic Structure Management]
-    G --> G2[Pending Student Approvals]
-    G --> G3[AI Provider Config /controller/ai-config/]
-    G --> G4[AI Routine Scanner /controller/scan-routine-ai/]
-
-    D --> H[Teacher Dashboard /dashboard/teacher/]
-    H --> H1[Question Paper & Rubric Studio /teacher/questions-rubric/]
-    H --> H2[Batch Script Upload /scripts/upload/]
-    H --> H3[Script Evaluation Wizard & Workspace /teacher/submission/id/workspace/]
-    H --> H4[OBE Course Tabulation /course/id/tabulation/]
-
-    E --> I[Dept Head Dashboard /dashboard/dept-head/]
-    I --> I1[Department OBE Performance]
-    I --> I2[Course Tabulation Review & Approval]
-    I --> I3[Faculty Workload & Exam Status]
-
-    F --> J[Student Dashboard /dashboard/student/]
-    J --> J1[Live Semester Routine Results]
-    J --> J2[Official OBE Tabulation & Grade Breakdown]
-    J --> J3[Evaluated PDF Script Download]
-```
-
----
-
-## 4. Key Subsystem Implementations & Verifications
-
-### 4.1 Question Paper & Academic Rubric Taxonomy Builder
-- **23-Section Academic Metadata**: Implemented in `core/models.py` (`Question`, `Rubric`, `QuestionFigure`, `QuestionTable`, `QuestionFormula`, `DocumentDOM`).
-- **LaTeX Backslash Repair**: Regex sanitize layer (`re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', text)`) guarantees mathematical matrix equations (`$$\begin{bmatrix}...$$`) parse seamlessly without JSON syntax crashes.
-- **Multimodal Visual Component Extraction**: Bounding box coordinates extracted and saved for diagrams, figures, data tables, and matrices with page-level associations.
-
-### 4.2 Script Ingestion, Working Copy & Boundary Engine
-- **Working Copy Generation**: 300 DPI high-resolution rendering with unique version tracking (`SubmissionImage`, `SubmissionPage`).
-- **Hybrid OCR Engine**: PyMuPDF font extraction $\rightarrow$ PyTesseract $\rightarrow$ EasyOCR fallback with confidence rating per line/word.
-- **Question Boundary Detection**: Strict full-sentence header detection regex (`Question 1: Explain...` vs `Ans to Q1`), page propagation, and interactive visual crop confirmation modal.
-
-### 4.3 Production AI Evaluation Engine (v3.0)
-- **TaskRouter**: Routes tasks by type (`ANSWER_VISUAL_READ`, `ANSWER_GRADING`, `ROUTINE_PARSE`, `OCR_TEXT`) and payload size.
-- **Failover Chain**: Primary Provider $\rightarrow$ Local Offline Vision $\rightarrow$ Ollama $\rightarrow$ Groq $\rightarrow$ OpenRouter $\rightarrow$ Gemini $\rightarrow$ OpenAI.
-- **HTTP 429 Cooldown Registry**: Exponential backoff with non-transient error isolation preventing cascading API lockups.
-- **Audit Trails**: Every teacher score override, prompt modification, and evaluation history is logged in `TeacherReview`, `EvaluationHistory`, `EvaluationAuditLog`, and `PromptHistory`.
-
-### 4.4 OBE Course Tabulation & Spreadsheet Sync
-- **Standardized Assessment Weightage**: Class Test (10%), Midterm (25%), Final Exam (50%), Assignment (10%), Attendance (5%).
-- **Bi-directional Live Sync**: Edits made in the web tabulation modal instantly update `StudentGradeRecord`, `StudentSubmission`, downloadable 8-sheet Excel files, and the student's personal dashboard.
-- **Full OBE Matrix Generation**: Exports 8 detailed sheets including CO/PO attainment, class averages, and Continuous Quality Improvement (CQI) reports.
-
----
-
-## 5. System Health & Verification Summary
-
-- **Django Check**: `python manage.py check` $\rightarrow$ **0 issues identified (System healthy)**.
-- **Unit & Integration Tests**: 100% pass on teacher grade editing, attendance calculations, Excel workbook formula generation, and student dashboard live sync.
-- **Git Branch Synchronization**: All codebase features verified and committed to `origin/dev`.
+1. [`docs/HARDWARE_API_BENCHMARK_SPEC.md`](file:///f:/Hijbullah/IntelliGrade/docs/HARDWARE_API_BENCHMARK_SPEC.md): Comprehensive deep-dive diagnostic on OCR and AI evaluation latencies, hardware specifications (RTX 4090/L4 GPU, EPYC CPUs), Cloud Tier 1 RPM/TPM benchmarks, cost matrices, and hybrid deployment blueprints.
+2. [`docs/MASTER_SYSTEM_REPORT.md`](file:///f:/Hijbullah/IntelliGrade/docs/MASTER_SYSTEM_REPORT.md): Complete architectural blueprint, end-to-end actor manuals, full relational database schema with composite indexes, and complete REST/AJAX API catalog.
+3. [`docs/SYSTEM_IMPROVEMENT_ROADMAP.md`](file:///f:/Hijbullah/IntelliGrade/docs/SYSTEM_IMPROVEMENT_ROADMAP.md): Architectural roadmap detailing Celery/Redis distributed workers, INT8 quantization, token bucket rate limiters, and pgvector RAG for historical teacher mark calibration.

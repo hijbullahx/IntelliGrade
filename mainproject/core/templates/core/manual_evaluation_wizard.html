@@ -1,0 +1,833 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual Script Grading Wizard - {{ exam.title }} | IntelliGrade{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6 px-4 py-6">
+
+    <!-- Header Navigation -->
+    <div class="flex items-center justify-between glass-card p-6 rounded-2xl">
+        <div>
+            <div class="flex items-center gap-2 text-xs theme-text-muted">
+                <a href="{% url 'evaluate_answer_scripts_list' exam.id %}" class="font-bold text-brand-500 hover:underline">&larr; Evaluation Hub</a>
+                <span>/</span>
+                <span>{{ exam.course.code }}</span>
+            </div>
+            <h1 class="text-2xl font-black theme-text-primary mt-1">✍️ Manual Answer Script Evaluation Wizard</h1>
+            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ questions.count }}</strong> | Mode: <strong class="text-indigo-400 font-bold">100% Direct Teacher Marking — No AI / OCR</strong></p>
+        </div>
+        <div class="px-3.5 py-1.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold flex items-center gap-1.5">
+            <i data-lucide="edit-3" class="w-4 h-4"></i> Manual Grading Mode
+        </div>
+    </div>
+
+    <!-- Wizard Multi-Step Container -->
+    <div class="glass-card p-8 rounded-2xl space-y-8 shadow-2xl">
+
+        <!-- Wizard Progress Bar Header -->
+        <div class="grid grid-cols-3 gap-4 border-b border-slate-200 dark:border-slate-800 pb-6 text-center text-xs font-bold">
+            <div id="stepHeader1" class="text-brand-500 font-extrabold flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-extrabold shadow-md shadow-brand-500/30">1</span>
+                <span>Submission Type &amp; Files</span>
+            </div>
+            <div id="stepHeader2" class="theme-text-muted flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted flex items-center justify-center text-xs font-bold">2</span>
+                <span>Submission Builder &amp; PDF</span>
+            </div>
+            <div id="stepHeader3" class="theme-text-muted flex items-center justify-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted flex items-center justify-center text-xs font-bold">3</span>
+                <span>Question Mapping &amp; Grade</span>
+            </div>
+        </div>
+
+        <!-- STEP 1: Submission Type Selection & File Upload -->
+        <div id="step1Content" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Student Name (Optional)</label>
+                    <input type="text" id="studentName" value="" autocomplete="off" placeholder="Enter student name" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID (Optional)</label>
+                    <input type="text" id="studentRoll" value="" autocomplete="off" placeholder="Enter Roll / ID (e.g. 21103001)" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold theme-text-muted mb-2">Select Upload Mode</label>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label class="p-4 rounded-xl border-2 border-brand-500 bg-brand-500/5 cursor-pointer space-y-1 block">
+                        <input type="radio" name="uploadType" value="images" checked onchange="toggleUploadMode()" class="mr-2">
+                        <span class="font-bold text-xs theme-text-primary">📸 Multiple Page Images / Photos</span>
+                        <p class="text-[11px] theme-text-muted">Drag &amp; drop pages, mobile camera photos, or JPEG/PNG gallery files.</p>
+                    </label>
+                    <label class="p-4 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-900/50 cursor-pointer space-y-1 block">
+                        <input type="radio" name="uploadType" value="pdf" onchange="toggleUploadMode()" class="mr-2">
+                        <span class="font-bold text-xs theme-text-primary">📄 Single PDF Document</span>
+                        <p class="text-[11px] theme-text-muted">Upload a pre-scanned student answer script PDF.</p>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Image Upload Dropzone -->
+            <div id="imageDropzone" class="border-2 border-dashed border-brand-500/40 hover:border-brand-500 rounded-2xl p-8 text-center bg-brand-500/5 transition-all"
+                 ondragover="event.preventDefault(); this.classList.add('border-brand-500','bg-brand-500/10');"
+                 ondragleave="this.classList.remove('border-brand-500','bg-brand-500/10');"
+                 ondrop="event.preventDefault(); this.classList.remove('border-brand-500','bg-brand-500/10'); handleDroppedFiles(event.dataTransfer.files);">
+                <i data-lucide="camera" class="w-10 h-10 text-brand-500 mx-auto mb-2"></i>
+                <h4 class="font-extrabold text-sm theme-text-primary">Upload or Photograph Student Answer Pages</h4>
+                <p class="text-xs theme-text-muted mt-1">Select multiple images, drag and drop files, or use your mobile device camera directly.</p>
+                <input type="file" id="imageInput" multiple accept="image/*" capture="environment" class="hidden" onchange="handleImageSelection(this)">
+                <div class="flex items-center justify-center gap-3 mt-4">
+                    <button type="button" onclick="document.getElementById('imageInput').click()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                        <i data-lucide="upload" class="w-4 h-4"></i> Browse Files / Camera
+                    </button>
+                    <button type="button" id="uploadSelectedBtn" onclick="uploadRawImages()" class="hidden px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                        <i data-lucide="cloud-upload" class="w-4 h-4"></i> Upload Selected Photos Now
+                    </button>
+                </div>
+            </div>
+
+            <!-- PDF Upload Dropzone -->
+            <div id="pdfDropzone" class="hidden border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 text-center bg-slate-100/60 dark:bg-slate-900/50">
+                <i data-lucide="file-text" class="w-10 h-10 text-slate-400 mx-auto mb-2"></i>
+                <h4 class="font-extrabold text-sm theme-text-primary">Upload Answer Script PDF</h4>
+                <input type="file" id="pdfInput" accept=".pdf" class="hidden" onchange="handlePdfSelection(this)">
+                <button type="button" onclick="document.getElementById('pdfInput').click()" class="mt-4 px-5 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 theme-text-primary font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    <i data-lucide="file" class="w-4 h-4"></i> Select PDF File
+                </button>
+            </div>
+
+            <div id="uploadStatusText" class="hidden text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center"></div>
+
+            <div class="flex justify-end pt-4">
+                <button type="button" onclick="handleStep1Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all inline-flex items-center gap-2">
+                    Next: Submission Builder &rarr;
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 2: Submission Builder & Page Management -->
+        <div id="step2Content" class="hidden space-y-6">
+            <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-brand-500"></i> Submission Page Builder (Reorder, Rotate, Preview)
+                </h3>
+                <div class="flex items-center gap-3">
+                    <span id="pageCounter" class="text-xs font-bold text-brand-500">0 Pages Uploaded</span>
+                    <button type="button" onclick="removeAllPages()" class="px-3 py-1 bg-rose-600/20 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Remove All Pages
+                    </button>
+                </div>
+            </div>
+
+            <!-- Page Grid Thumbnails -->
+            <div id="thumbnailContainer" class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-[50vh] overflow-y-auto p-2 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40">
+                <div class="col-span-full text-center py-12 theme-text-muted text-xs font-medium">No page images uploaded yet in Step 1.</div>
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(1)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Files</button>
+                <div class="flex items-center gap-3">
+                    <button type="button" onclick="compileAndPreviewPdf()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
+                        <i data-lucide="eye" class="w-4 h-4"></i> Preview PDF Script
+                    </button>
+                    <button type="button" onclick="handleStep2Next()" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-xl shadow-lg inline-flex items-center gap-2">
+                        Next: Question Mapping &rarr;
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 3: Manual Question Mapping -->
+        <div id="step3Content" class="hidden space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+                <h3 class="font-extrabold text-sm theme-text-primary flex items-center gap-2">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-indigo-400"></i> Map Each Question to Script Page Number(s)
+                </h3>
+                <button type="button" onclick="compileAndPreviewPdf()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-300 font-extrabold text-xs rounded-xl border border-indigo-500/30 shadow-sm inline-flex items-center gap-1.5">
+                    <i data-lucide="eye" class="w-4 h-4"></i> Preview Full Script
+                </button>
+            </div>
+
+            <!-- Student Info Verification -->
+            <div class="p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <span class="text-xs font-extrabold theme-text-primary flex items-center gap-1.5">
+                    <i data-lucide="user-check" class="w-4 h-4 text-brand-500"></i> Student Information Verification
+                </span>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold theme-text-muted mb-1">Student Full Name</label>
+                        <input type="text" id="confirmStudentName" value="" placeholder="Student Name" class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold theme-text-muted mb-1">Roll / Student ID</label>
+                        <input type="text" id="confirmStudentRoll" value="" placeholder="Roll / ID" class="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs font-bold theme-text-primary focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Questions Mapping Grid -->
+            <div class="space-y-3 max-h-[55vh] overflow-y-auto pr-1" id="questionsMappingList">
+                {% for q in questions %}
+                <div class="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 hover:border-indigo-500/40 transition-all" id="q_card_{{ forloop.counter0 }}">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-black text-xs">
+                                {{ q.formatted_number|default:q.question_number }}
+                            </span>
+                            <span class="text-xs font-bold theme-text-muted">Max: {{ q.max_marks }} Marks</span>
+                        </div>
+                        <span class="text-[11px] font-bold text-indigo-400" id="q_mapped_label_{{ forloop.counter0 }}">Mapped: Pg 1</span>
+                    </div>
+                    <div class="text-xs theme-text-secondary line-clamp-2" title="{{ q.prompt_text|default:q.text }}">
+                        {{ q.prompt_text|default:q.text|truncatechars:120 }}
+                    </div>
+                    <!-- Page Selector Checkboxes (populated by JS) -->
+                    <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-2" id="q_pages_selector_{{ forloop.counter0 }}">
+                        <span class="text-[11px] font-bold theme-text-muted mr-1">Select Page(s):</span>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="p-8 text-center text-xs theme-text-muted">No examination questions configured yet.</div>
+                {% endfor %}
+            </div>
+
+            <div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button type="button" onclick="goToStep(2)" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold theme-text-primary">&larr; Back to Builder</button>
+                <button type="button" id="launchWorkbenchBtn" onclick="confirmMappingAndOpenWorkbench()" class="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-xl transition-all inline-flex items-center gap-2">
+                    <i data-lucide="play" class="w-4 h-4"></i> Confirm Mapping &amp; Open Manual Grading Workbench &rarr;
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Full-Page Zoom & Inspection Overlay -->
+<div id="pagePreviewModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex flex-col hidden">
+    <div class="flex items-center justify-between px-6 py-4 bg-slate-900/90 border-b border-slate-800 shadow-xl">
+        <div class="flex items-center gap-3">
+            <span id="previewPageBadge" class="px-3 py-1 bg-brand-500/20 text-brand-400 border border-brand-500/30 rounded-full font-bold text-xs">Page 1 of 1</span>
+            <span id="previewPageFileName" class="text-xs font-mono theme-text-muted hidden md:inline">filename.png</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <button type="button" onclick="modalRotatePage()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2">
+                <i data-lucide="rotate-cw" class="w-4 h-4"></i> Rotate 90°
+            </button>
+            <button type="button" onclick="modalDeletePage()" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> Delete Page
+            </button>
+            <div class="h-6 w-px bg-slate-800 mx-1"></div>
+            <button type="button" onclick="modalNavPage(-1)" id="prevPageBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl">&larr; Prev</button>
+            <button type="button" onclick="modalNavPage(1)" id="nextPageBtn" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl">Next &rarr;</button>
+            <button type="button" onclick="closePagePreviewModal()" class="ml-4 px-3.5 py-2 bg-slate-800 hover:bg-rose-900/50 hover:text-rose-400 text-slate-300 font-extrabold text-sm rounded-xl">&times; Close</button>
+        </div>
+    </div>
+    <div class="flex-1 overflow-auto p-8 flex items-center justify-center bg-slate-950">
+        <img id="previewModalImg" class="max-h-[85vh] max-w-full object-contain rounded-xl shadow-2xl transition-transform duration-300">
+    </div>
+</div>
+
+<script>
+// =========================================================
+// STATE
+// =========================================================
+let currentSubmissionId = null;
+let uploadedFiles = [];
+let pageRotationAngles = [];
+let isUploading = false;
+let currentPreviewIndex = 0;
+let manualMappingData = [];
+
+const EXAM_QUESTIONS = [
+    {% for q in questions %}
+    {
+        question_id: {{ q.id }},
+        question_number: "{{ q.formatted_number|default:q.question_number }}",
+        max_marks: {{ q.max_marks|default:10 }},
+        page_numbers: [1]
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
+// =========================================================
+// STEP NAVIGATION  (same pattern as AI wizard)
+// =========================================================
+function goToStep(stepNum) {
+    ['step1Content','step2Content','step3Content'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+
+    const target = document.getElementById('step' + stepNum + 'Content');
+    if (target) target.classList.remove('hidden');
+
+    for (let i = 1; i <= 3; i++) {
+        const header = document.getElementById('stepHeader' + i);
+        if (!header) continue;
+        const circle = header.querySelector('span:first-child');
+        if (i === stepNum) {
+            header.className = "text-brand-500 font-extrabold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs font-extrabold shadow-md shadow-brand-500/30";
+        } else if (i < stepNum) {
+            header.className = "text-emerald-500 font-bold flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold";
+        } else {
+            header.className = "theme-text-muted flex items-center justify-center gap-2";
+            if (circle) circle.className = "w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 theme-text-muted flex items-center justify-center text-xs font-bold";
+        }
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.lucide) lucide.createIcons();
+}
+
+// =========================================================
+// UPLOAD MODE TOGGLE
+// =========================================================
+function toggleUploadMode() {
+    const val = document.querySelector('input[name="uploadType"]:checked').value;
+    document.getElementById('imageDropzone').classList.toggle('hidden', val !== 'images');
+    document.getElementById('pdfDropzone').classList.toggle('hidden', val !== 'pdf');
+}
+
+// =========================================================
+// FILE SELECTION HANDLERS
+// =========================================================
+function handleDroppedFiles(fileList) {
+    if (!fileList || fileList.length === 0) return;
+    const images = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    if (images.length === 0) return alert('Please drop image files only.');
+    uploadedFiles = images;
+    _showFileSelectedStatus(images.length);
+    uploadRawImages();
+}
+
+function handleImageSelection(input) {
+    if (!input.files || input.files.length === 0) return;
+    uploadedFiles = Array.from(input.files);
+    _showFileSelectedStatus(uploadedFiles.length);
+    uploadRawImages();
+}
+
+function _showFileSelectedStatus(count) {
+    const statusDiv = document.getElementById('uploadStatusText');
+    statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+    statusDiv.innerText = `Selected ${count} photo file(s). Uploading to Submission Builder...`;
+    statusDiv.classList.remove('hidden');
+}
+
+function handlePdfSelection(input) {
+    if (input.files && input.files.length > 0) uploadSinglePdf(input.files[0]);
+}
+
+// =========================================================
+// STEP 1 NEXT
+// =========================================================
+async function handleStep1Next() {
+    const val = document.querySelector('input[name="uploadType"]:checked').value;
+    if (val === 'images') {
+        const hasPending = uploadedFiles.some(f => f instanceof File || f instanceof Blob);
+        if (hasPending) {
+            await uploadRawImages();
+        } else if (!currentSubmissionId) {
+            alert("Please select or photograph answer page files first.");
+            return;
+        } else {
+            goToStep(2);
+        }
+    } else {
+        const pdfInput = document.getElementById('pdfInput');
+        if (pdfInput && pdfInput.files && pdfInput.files.length > 0 && !currentSubmissionId) {
+            await uploadSinglePdf(pdfInput.files[0]);
+        } else if (!currentSubmissionId) {
+            alert("Please select a PDF file first.");
+            return;
+        } else {
+            goToStep(2);
+        }
+    }
+}
+
+// =========================================================
+// STEP 2 NEXT
+// =========================================================
+async function handleStep2Next() {
+    if (!uploadedFiles || uploadedFiles.length === 0) {
+        alert("Please upload answer script pages first.");
+        return;
+    }
+    await syncUpdatedPagesToServer();
+    setupMappingTable();
+    goToStep(3);
+}
+
+// =========================================================
+// RAW IMAGE UPLOAD  (identical flow to AI wizard)
+// =========================================================
+async function uploadRawImages() {
+    if (isUploading) return;
+    if (!uploadedFiles || uploadedFiles.length === 0) {
+        return alert("Please select photo files first.");
+    }
+
+    const newFilesOnly = uploadedFiles.filter(f => f instanceof File || f instanceof Blob);
+    if (newFilesOnly.length === 0 && currentSubmissionId) {
+        renderThumbnails();
+        goToStep(2);
+        return;
+    }
+
+    isUploading = true;
+    const btn = document.getElementById('uploadSelectedBtn');
+    if (btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+
+    const statusDiv = document.getElementById('uploadStatusText');
+    statusDiv.classList.remove('hidden');
+    statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+    statusDiv.innerText = `Uploading ${newFilesOnly.length} page image(s)...`;
+
+    const formData = new FormData();
+    formData.append('student_name', document.getElementById('studentName').value);
+    formData.append('roll_no', document.getElementById('studentRoll').value);
+    if (currentSubmissionId) formData.append('submission_id', currentSubmissionId);
+    newFilesOnly.forEach(f => formData.append('images', f));
+
+    try {
+        const resp = await fetch("{% url 'api_upload_raw_images' exam.id %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if (data.success) {
+            currentSubmissionId = data.submission_id;
+            sessionStorage.setItem('ig_manual_sub_id_{{ exam.id }}', data.submission_id);
+            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
+            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count} page images to Submission Builder!`;
+            renderThumbnails();
+            goToStep(2);
+        } else {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+            statusDiv.innerText = "Upload Error: " + data.error;
+        }
+    } catch (err) {
+        const statusDiv2 = document.getElementById('uploadStatusText');
+        statusDiv2.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+        statusDiv2.innerText = "Upload Exception: " + err.message;
+    } finally {
+        isUploading = false;
+        if (btn) { btn.disabled = false; btn.innerText = 'Upload Selected Photos Now'; }
+    }
+}
+
+// =========================================================
+// PDF UPLOAD
+// =========================================================
+async function uploadSinglePdf(file) {
+    const statusDiv = document.getElementById('uploadStatusText');
+    statusDiv.className = "text-xs p-3 rounded-xl bg-brand-500/10 text-brand-500 font-bold text-center mt-3";
+    statusDiv.innerText = "Uploading & extracting answer script PDF pages...";
+    statusDiv.classList.remove('hidden');
+
+    const formData = new FormData();
+    formData.append('student_name', document.getElementById('studentName').value);
+    formData.append('roll_no', document.getElementById('studentRoll').value);
+    formData.append('script_file', file);
+
+    try {
+        const resp = await fetch("{% url 'api_wizard_upload_pdf' exam.id %}", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if (data.success) {
+            currentSubmissionId = data.submission_id;
+            sessionStorage.setItem('ig_manual_sub_id_{{ exam.id }}', data.submission_id);
+            if (data.images && data.images.length > 0) {
+                uploadedFiles = data.images;
+                pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
+            }
+            if (data.student_name && data.student_name !== 'Pending OCR Extraction') {
+                document.getElementById('studentName').value = data.student_name;
+            }
+            if (data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
+            statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
+            statusDiv.innerText = `✓ Successfully extracted ${data.page_count || uploadedFiles.length} page(s) from PDF!`;
+            renderThumbnails();
+            goToStep(2);
+        } else {
+            statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+            statusDiv.innerText = "PDF Upload Error: " + data.error;
+        }
+    } catch (err) {
+        statusDiv.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
+        statusDiv.innerText = "PDF Upload Exception: " + err.message;
+    }
+}
+
+// =========================================================
+// IMAGE URL HELPERS
+// =========================================================
+function getImageUrl(item) {
+    if (!item) return '';
+    if (item instanceof File || item instanceof Blob) return URL.createObjectURL(item);
+    if (typeof item === 'string') return item;
+    if (item.url) return item.url;
+    return '';
+}
+
+function getImageName(item, idx) {
+    if (!item) return `Page ${idx + 1}`;
+    if (item.name) return item.name;
+    if (item.file_name) return item.file_name;
+    return `Page ${idx + 1}`;
+}
+
+// =========================================================
+// DOMCONTENTLOADED  (restore saved session)
+// =========================================================
+document.addEventListener('DOMContentLoaded', async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('new') === '1') {
+        sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
+        document.getElementById('studentName').value = '';
+        document.getElementById('studentRoll').value = '';
+        currentSubmissionId = null;
+        return;
+    }
+
+    const savedSubId = sessionStorage.getItem('ig_manual_sub_id_{{ exam.id }}');
+    if (savedSubId) {
+        try {
+            const resp = await fetch(`/api/submission/${savedSubId}/images/`);
+            const data = await resp.json();
+            if (data.success && data.images && data.images.length > 0
+                && !['AI_EVALUATED', 'UNDER_REVIEW', 'REVIEWED', 'FINALIZED'].includes(data.status)) {
+                currentSubmissionId = parseInt(savedSubId);
+                uploadedFiles = data.images;
+                pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
+                if (data.student_name && data.student_name !== 'Pending OCR Extraction')
+                    document.getElementById('studentName').value = data.student_name;
+                if (data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
+                renderThumbnails();
+                goToStep(2);
+            } else {
+                sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
+                currentSubmissionId = null;
+            }
+        } catch (e) {
+            console.warn("Failed restoring submission images:", e);
+            sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
+        }
+    }
+});
+
+// =========================================================
+// REMOVE ALL PAGES
+// =========================================================
+async function removeAllPages() {
+    if (!confirm("Are you sure you want to remove ALL uploaded page images?")) return;
+    if (currentSubmissionId) {
+        try { await fetch(`/api/submission/${currentSubmissionId}/delete-all-images/`); }
+        catch (e) { console.warn("Error deleting backend images:", e); }
+    }
+    sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
+    uploadedFiles = [];
+    pageRotationAngles = [];
+    currentSubmissionId = null;
+    const statusDiv = document.getElementById('uploadStatusText');
+    if (statusDiv) statusDiv.classList.add('hidden');
+    const uploadBtn = document.getElementById('uploadSelectedBtn');
+    if (uploadBtn) uploadBtn.classList.add('hidden');
+    renderThumbnails();
+    goToStep(1);
+}
+
+// =========================================================
+// RENDER THUMBNAILS
+// =========================================================
+function renderThumbnails() {
+    const container = document.getElementById('thumbnailContainer');
+    container.innerHTML = '';
+    document.getElementById('pageCounter').innerText = `${uploadedFiles.length} Pages Uploaded`;
+
+    if (pageRotationAngles.length !== uploadedFiles.length) {
+        pageRotationAngles = new Array(uploadedFiles.length).fill(0);
+    }
+
+    if (uploadedFiles.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 theme-text-muted text-xs font-medium">No page images uploaded yet in Step 1.</div>`;
+        return;
+    }
+
+    uploadedFiles.forEach((file, idx) => {
+        const url = getImageUrl(file);
+        const card = document.createElement('div');
+        card.className = "border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-white dark:bg-slate-900/90 space-y-2 text-center relative group shadow-lg";
+        card.innerHTML = `
+            <div class="relative overflow-hidden rounded-lg bg-slate-100 dark:bg-black/40 h-36 flex items-center justify-center cursor-pointer" onclick="previewPageModal(${idx})">
+                <img id="page_img_${idx}" src="${url}" class="max-h-full max-w-full object-contain transition-transform duration-300" style="transform: rotate(${pageRotationAngles[idx]}deg)">
+                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button type="button" onclick="event.stopPropagation(); previewPageModal(${idx})" class="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg backdrop-blur" title="Zoom Preview">
+                        <i data-lucide="zoom-in" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" onclick="event.stopPropagation(); rotatePage(${idx})" class="p-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg backdrop-blur" title="Rotate 90°">
+                        <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                    </button>
+                    <button type="button" onclick="event.stopPropagation(); deletePage(${idx})" class="p-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg backdrop-blur" title="Delete Page">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center justify-between px-1">
+                <button type="button" onclick="movePageLeft(${idx})" ${idx === 0 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Left">
+                    &larr; Left
+                </button>
+                <span class="text-[11px] font-bold text-brand-500 dark:text-brand-400">Page ${idx + 1}</span>
+                <button type="button" onclick="movePageRight(${idx})" ${idx === uploadedFiles.length - 1 ? 'disabled class="opacity-30 cursor-not-allowed text-xs px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded"' : 'class="px-2 py-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded text-xs font-bold text-slate-800 dark:text-white"'} title="Move Right">
+                    Right &rarr;
+                </button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function movePageLeft(idx) {
+    if (idx <= 0) return;
+    [uploadedFiles[idx], uploadedFiles[idx - 1]] = [uploadedFiles[idx - 1], uploadedFiles[idx]];
+    [pageRotationAngles[idx], pageRotationAngles[idx - 1]] = [pageRotationAngles[idx - 1], pageRotationAngles[idx]];
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function movePageRight(idx) {
+    if (idx >= uploadedFiles.length - 1) return;
+    [uploadedFiles[idx], uploadedFiles[idx + 1]] = [uploadedFiles[idx + 1], uploadedFiles[idx]];
+    [pageRotationAngles[idx], pageRotationAngles[idx + 1]] = [pageRotationAngles[idx + 1], pageRotationAngles[idx]];
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function rotatePage(idx) {
+    pageRotationAngles[idx] = (pageRotationAngles[idx] + 90) % 360;
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+function deletePage(idx) {
+    if (!confirm(`Delete Page ${idx + 1}?`)) return;
+    uploadedFiles.splice(idx, 1);
+    pageRotationAngles.splice(idx, 1);
+    renderThumbnails();
+    syncUpdatedPagesToServer();
+}
+
+// =========================================================
+// SYNC PAGES TO SERVER
+// =========================================================
+async function syncUpdatedPagesToServer() {
+    if (!currentSubmissionId || !uploadedFiles || uploadedFiles.length === 0) return;
+
+    const pageOrders = uploadedFiles.map((img, idx) => ({
+        id: img.id || null,
+        sequence_order: idx + 1,
+        rotation_angle: pageRotationAngles[idx] || 0
+    })).filter(item => item.id !== null);
+
+    if (pageOrders.length > 0) {
+        try {
+            await fetch(`/api/submission/${currentSubmissionId}/reorder-pages/`, {
+                method: 'POST',
+                body: JSON.stringify({ page_orders: pageOrders }),
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+        } catch (err) {
+            console.warn("[PAGE REORDER WARNING]", err);
+        }
+    }
+}
+
+// =========================================================
+// PAGE PREVIEW MODAL
+// =========================================================
+function previewPageModal(idx) {
+    if (idx < 0 || idx >= uploadedFiles.length) return;
+    currentPreviewIndex = idx;
+    const file = uploadedFiles[idx];
+    if (!file) return;
+
+    document.getElementById('previewPageBadge').innerText = `Page ${idx + 1} of ${uploadedFiles.length}`;
+    document.getElementById('previewPageFileName').innerText = getImageName(file, idx);
+    const modalImg = document.getElementById('previewModalImg');
+    modalImg.src = getImageUrl(file);
+    modalImg.style.transform = `rotate(${pageRotationAngles[idx] || 0}deg)`;
+    document.getElementById('prevPageBtn').disabled = (idx === 0);
+    document.getElementById('nextPageBtn').disabled = (idx === uploadedFiles.length - 1);
+    document.getElementById('pagePreviewModal').classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+}
+
+function modalRotatePage() { rotatePage(currentPreviewIndex); previewPageModal(currentPreviewIndex); }
+function modalDeletePage() {
+    const idx = currentPreviewIndex;
+    deletePage(idx);
+    if (uploadedFiles.length === 0) closePagePreviewModal();
+    else previewPageModal(Math.min(idx, uploadedFiles.length - 1));
+}
+function modalNavPage(delta) {
+    const t = currentPreviewIndex + delta;
+    if (t >= 0 && t < uploadedFiles.length) previewPageModal(t);
+}
+function closePagePreviewModal() { document.getElementById('pagePreviewModal').classList.add('hidden'); }
+
+// =========================================================
+// COMPILE & PREVIEW PDF
+// =========================================================
+async function compileAndPreviewPdf() {
+    if (!currentSubmissionId) return alert("Please upload answer script pages first.");
+    const newTab = window.open('', '_blank');
+    if (newTab) {
+        newTab.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loading PDF...</title>
+        <style>body{background:#0b0f19;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+        .c{text-align:center;background:#1e293b;padding:32px 40px;border-radius:16px;border:1px solid #334155}
+        .sp{border:3px solid rgba(255,255,255,.1);border-top:3px solid #6366f1;border-radius:50%;width:36px;height:36px;animation:spin .8s linear infinite;margin:0 auto 16px}
+        @keyframes spin{to{transform:rotate(360deg)}}h3{color:#fff;margin:0 0 8px 0;font-size:16px;font-family:sans-serif}
+        p{margin:0;color:#64748b;font-size:13px;font-family:sans-serif}</style></head>
+        <body><div class="c"><div class="sp"></div><h3>Compiling Answer Script PDF...</h3><p>Applying page orientations...</p></div></body></html>`);
+    }
+    try {
+        await syncUpdatedPagesToServer();
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/create-pdf/`, {
+            method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if (data.success && data.pdf_url) {
+            if (newTab) newTab.location.href = data.pdf_url;
+            else window.open(data.pdf_url, '_blank');
+        } else {
+            if (newTab) newTab.close();
+            alert("PDF Generation Failed: " + (data.error || "Unknown error"));
+        }
+    } catch (err) {
+        if (newTab) newTab.close();
+        alert("Exception compiling PDF: " + err.message);
+    }
+}
+
+// =========================================================
+// QUESTION MAPPING TABLE (Step 3)
+// =========================================================
+function setupMappingTable() {
+    const totalPages = uploadedFiles.length || 1;
+    manualMappingData = JSON.parse(JSON.stringify(EXAM_QUESTIONS));
+
+    const nameVal = document.getElementById('studentName').value;
+    const rollVal = document.getElementById('studentRoll').value;
+    if (nameVal) document.getElementById('confirmStudentName').value = nameVal;
+    if (rollVal) document.getElementById('confirmStudentRoll').value = rollVal;
+
+    manualMappingData.forEach((m, idx) => {
+        m.page_numbers = totalPages === 1 ? [1] : (idx + 1 <= totalPages ? [idx + 1] : [1]);
+
+        const selectorContainer = document.getElementById(`q_pages_selector_${idx}`);
+        if (!selectorContainer) return;
+
+        let pillsHtml = '<span class="text-[11px] font-bold theme-text-muted mr-1">Select Page(s):</span>';
+        for (let p = 1; p <= totalPages; p++) {
+            const isChecked = m.page_numbers.includes(p);
+            pillsHtml += `
+                <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}" id="lbl_q_${idx}_p_${p}">
+                    <input type="checkbox" onchange="toggleQuestionPage(${idx}, ${p}, this.checked)" ${isChecked ? 'checked' : ''} class="text-indigo-600 rounded"> Pg ${p}
+                </label>`;
+        }
+        selectorContainer.innerHTML = pillsHtml;
+        updateMappedLabel(idx);
+    });
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function toggleQuestionPage(qIdx, pageNum, isChecked) {
+    if (!manualMappingData[qIdx]) return;
+    const pgSet = new Set(manualMappingData[qIdx].page_numbers || []);
+    isChecked ? pgSet.add(pageNum) : pgSet.delete(pageNum);
+    manualMappingData[qIdx].page_numbers = Array.from(pgSet).sort((a, b) => a - b);
+    const lbl = document.getElementById(`lbl_q_${qIdx}_p_${pageNum}`);
+    if (lbl) {
+        lbl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}`;
+    }
+    updateMappedLabel(qIdx);
+}
+
+function updateMappedLabel(qIdx) {
+    const lbl = document.getElementById(`q_mapped_label_${qIdx}`);
+    if (!lbl || !manualMappingData[qIdx]) return;
+    const pgs = manualMappingData[qIdx].page_numbers;
+    if (pgs.length === 0) {
+        lbl.innerText = "Skipped / Unmapped";
+        lbl.className = "text-[11px] font-bold text-slate-500";
+    } else {
+        lbl.innerText = pgs.length === 1 ? `Mapped: Pg ${pgs[0]}` : `Mapped: Pg ${pgs.join(', ')}`;
+        lbl.className = "text-[11px] font-bold text-indigo-400";
+    }
+}
+
+// =========================================================
+// CONFIRM MAPPING & OPEN MANUAL WORKBENCH
+// =========================================================
+async function confirmMappingAndOpenWorkbench() {
+    if (!currentSubmissionId) return alert("Submission ID not found. Please upload answer script pages first.");
+
+    const btn = document.getElementById('launchWorkbenchBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Initializing Grading Workbench...`;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    const confirmedMappings = manualMappingData.map(m => ({
+        question_id: m.question_id,
+        page_numbers: m.page_numbers
+    }));
+
+    const options = {
+        student_name: document.getElementById('confirmStudentName').value || document.getElementById('studentName').value || 'Student',
+        roll_no: document.getElementById('confirmStudentRoll').value || document.getElementById('studentRoll').value || '',
+        eval_mode: 'Manual',
+        mode: 'manual'
+    };
+
+    try {
+        const resp = await fetch(`/api/submission/${currentSubmissionId}/confirm-mapping/`, {
+            method: 'POST',
+            body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options, mode: 'manual' }),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        const data = await resp.json();
+        if (data.success) {
+            sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
+            window.location.href = data.workspace_url || `/teacher/submission/${currentSubmissionId}/workspace/?mode=manual`;
+        } else {
+            alert("Error initializing manual workbench: " + data.error);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Mapping &amp; Open Manual Grading Workbench &rarr;`;
+                if (window.lucide) lucide.createIcons();
+            }
+        }
+    } catch (err) {
+        alert("Exception: " + err.message);
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="play" class="w-4 h-4"></i> Confirm Mapping &amp; Open Manual Grading Workbench &rarr;`;
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+}
+</script>
+{% endblock %}

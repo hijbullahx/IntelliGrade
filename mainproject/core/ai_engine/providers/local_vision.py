@@ -69,7 +69,7 @@ class LocalOfflineVisionProvider(BaseAIProvider):
                     import io
                     from PIL import Image
                     img = Image.open(io.BytesIO(processed_bytes))
-                    if img.mode in ("RGBA", "P"):
+                    if img.mode != "RGB":
                         img = img.convert("RGB")
                     
                     max_dim = 800
@@ -78,7 +78,8 @@ class LocalOfflineVisionProvider(BaseAIProvider):
                         scale = max_dim / float(max(w, h))
                         new_w = max(1, int(w * scale))
                         new_h = max(1, int(h * scale))
-                        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                        resample_filter = getattr(getattr(Image, 'Resampling', Image), 'LANCZOS', getattr(Image, 'LANCZOS', 1))
+                        img = img.resize((new_w, new_h), resample_filter)
                     
                     out_buffer = io.BytesIO()
                     img.save(out_buffer, format="JPEG", quality=75, optimize=True)

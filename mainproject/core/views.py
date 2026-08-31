@@ -3784,13 +3784,13 @@ def upload_student_submission(request, exam_id):
 
 
 def evaluation_workspace(request, submission_id):
-    """Interactive side-by-side Evaluation Workspace for Teacher Review & Overrides."""
+    """Interactive side-by-side Evaluation Workspace for Teacher Review & Overrides (AI or Manual mode)."""
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
     exam = submission.examination
-    answers = submission.answers.select_related('question', 'page', 'evaluation_result').all()
+    answers = submission.answers.select_related('question__rubric', 'page', 'evaluation_result').prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel').all()
 
     # Ensure working copy images exist on disk for all pages (self-healing)
     from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
@@ -3824,16 +3824,35 @@ def evaluation_workspace(request, submission_id):
     mcq_detected_results = {}
     answer_key = {}
 
-    for ans in answers:
+    for idx_ans, ans in enumerate(answers):
         q_dto = QuestionAccessor.to_dto(ans.question)
         eval_res = getattr(ans, 'evaluation_result', None)
         
-        # Resolve mapped pages for this question (fallback to all_pages if unmapped so image is never blank)
+        # Resolve mapped pages for this question (fallback to all_pages ONLY if unmapped)
         qm = q_mappings.get(ans.question.id)
-        pg_nums = qm.page_numbers_json if (qm and qm.page_numbers_json) else ([ans.page.page_number] if ans.page else [])
+        if qm and qm.page_numbers_json:
+            pg_nums = [int(p) for p in qm.page_numbers_json if str(p).isdigit()]
+        elif ans.page:
+            pg_nums = [ans.page.page_number]
+        else:
+            # Self-healing fallback for unmapped questions
+            auto_pg = (idx_ans + 1) if (idx_ans + 1) in pages_by_num else 1
+            pg_nums = [auto_pg] if auto_pg in pages_by_num else []
+
         mapped_pages = [pages_by_num[p] for p in pg_nums if p in pages_by_num]
         if not mapped_pages and all_pages:
             mapped_pages = all_pages
+
+        raw_master_steps = getattr(ans.question, 'master_solution_steps', None) or getattr(q_dto, 'master_solution_steps', None) or []
+        master_steps = []
+        if isinstance(raw_master_steps, list):
+            for s_idx, s in enumerate(raw_master_steps, 1):
+                if isinstance(s, dict):
+                    master_steps.append({
+                        'step_num': str(s.get('step') or s_idx),
+                        'description': str(s.get('description') or s.get('desc') or ''),
+                        'marks': float(s.get('marks') or 0.0)
+                    })
 
         # Extract and normalize structured rubric / step breakdown
         rubric_breakdown = []
@@ -3860,7 +3879,6 @@ def evaluation_workspace(request, submission_id):
                         'grounding_evidence': '',
                         'comment': 'Evaluated criterion'
                     })
-
         raw_master_steps = getattr(ans.question, 'master_solution_steps', None) or getattr(q_dto, 'master_solution_steps', None) or []
         master_steps = []
         if isinstance(raw_master_steps, list):
@@ -3871,6 +3889,41 @@ def evaluation_workspace(request, submission_id):
                         'description': str(s.get('description') or s.get('desc') or ''),
                         'marks': float(s.get('marks') or 0.0)
                     })
+
+        if not rubric_breakdown:
+            if master_steps:
+                for idx_step, s in enumerate(master_steps, 1):
+                    rubric_breakdown.append({
+                        'step_num': idx_step,
+                        'description': s['description'] or f"Step {idx_step}",
+                        'allocated': float(s['marks']),
+                        'awarded': 0.0,
+                        'grounding_evidence': '',
+                        'comment': ''
+                    })
+            else:
+                # Generate default structured rubric steps based on total question marks
+                q_max = float(q_dto.marks or 10.0)
+                if q_max <= 2:
+                    rubric_breakdown = [
+                        {'step_num': 1, 'description': 'Complete & Correct Answer', 'allocated': q_max, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''}
+                    ]
+                elif q_max <= 5:
+                    step1_m = round(q_max * 0.5, 1)
+                    step2_m = round(q_max - step1_m, 1)
+                    rubric_breakdown = [
+                        {'step_num': 1, 'description': 'Concept & Method Setup', 'allocated': step1_m, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''},
+                        {'step_num': 2, 'description': 'Derivation & Final Result', 'allocated': step2_m, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''}
+                    ]
+                else:
+                    step1_m = round(q_max * 0.35, 1)
+                    step2_m = round(q_max * 0.45, 1)
+                    step3_m = round(q_max - step1_m - step2_m, 1)
+                    rubric_breakdown = [
+                        {'step_num': 1, 'description': 'Concept Formulation & Formula/Setup', 'allocated': step1_m, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''},
+                        {'step_num': 2, 'description': 'Detailed Working & Intermediate Steps', 'allocated': step2_m, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''},
+                        {'step_num': 3, 'description': 'Accuracy, Units & Final Result', 'allocated': step3_m, 'awarded': 0.0, 'grounding_evidence': '', 'comment': ''}
+                    ]
 
         master_text = ans.question.master_solution_text or q_dto.master_solution_text or (ans.question.rubric.ideal_answer if hasattr(ans.question, 'rubric') else '')
 
@@ -3955,6 +4008,13 @@ def evaluation_workspace(request, submission_id):
                 "max_marks": q_item["max_marks"]
             })
 
+    # Detect manual grading mode from query param or submission evaluation_mode field
+    is_manual = (
+        request.GET.get('mode') == 'manual'
+        or getattr(submission, 'evaluation_mode', None) == 'MANUAL'
+        or getattr(submission, 'evaluation_mode', None) == 'Manual'
+    )
+
     return render(request, 'core/evaluation_workspace.html', {
         'submission': submission,
         'exam': exam,
@@ -3964,7 +4024,8 @@ def evaluation_workspace(request, submission_id):
         'master_solution_file_url': exam.master_solution_file.url if exam.master_solution_file else None,
         'is_mcq': is_mcq,
         'mcq_summary': mcq_summary,
-        'mcq_breakdown': mcq_breakdown
+        'mcq_breakdown': mcq_breakdown,
+        'is_manual': is_manual,
     })
 
 
@@ -3998,7 +4059,7 @@ def review_evaluation_answer(request, result_id):
                     review_comments=comments or 'Approved by teacher.'
                 )
 
-            elif action == 'OVERRIDE':
+            elif action in ['OVERRIDE', 'MANUAL']:
                 try:
                     new_m = float(new_marks_val)
                     new_m = min(float(eval_result.maximum_marks), max(0.0, new_m))
@@ -4009,7 +4070,31 @@ def review_evaluation_answer(request, result_id):
                 eval_result.percentage = round((new_m / float(max(1.0, float(eval_result.maximum_marks)))) * 100.0, 2)
                 eval_result.status = EvaluationResult.ReviewStatus.OVERRIDDEN
                 eval_result.requires_manual_review = False
+                if comments:
+                    eval_result.feedback_text = comments
+
+                rubric_breakdown_raw = request.POST.get('rubric_breakdown')
+                if rubric_breakdown_raw:
+                    try:
+                        eval_result.rubric_breakdown_json = json.loads(rubric_breakdown_raw)
+                    except Exception:
+                        pass
+
                 eval_result.save()
+
+                # Also update question CO / PO if teacher provided them
+                co_val = request.POST.get('co', '').strip()
+                po_val = request.POST.get('po', '').strip()
+                q_obj = eval_result.submission_answer.question
+                q_changed = False
+                if co_val:
+                    q_obj.co_mapping = co_val
+                    q_changed = True
+                if po_val:
+                    q_obj.po_mapping = [p.strip() for p in po_val.split(',') if p.strip()]
+                    q_changed = True
+                if q_changed:
+                    q_obj.save()
 
                 TeacherReview.objects.create(
                     evaluation_result=eval_result,
@@ -4017,14 +4102,14 @@ def review_evaluation_answer(request, result_id):
                     action=TeacherReview.Action.OVERRIDE,
                     previous_marks=old_marks,
                     new_marks=new_m,
-                    review_comments=comments
+                    review_comments=comments or 'Manual grading score update'
                 )
                 EvaluationHistory.objects.create(
                     evaluation_result=eval_result,
                     modified_by=request.user,
                     old_marks=old_marks,
                     new_marks=new_m,
-                    reason=comments or 'Teacher score override'
+                    reason=comments or 'Manual teacher grading score'
                 )
 
             elif action == 'RE_EVALUATE':
@@ -4133,8 +4218,29 @@ def evaluation_wizard(request, exam_id):
         messages.error(request, f"No examination found for ID #{exam_id}.")
         return redirect('teacher_dashboard')
 
+    mode = request.GET.get('mode', 'ai').strip().lower()
+    is_manual = (mode == 'manual')
+
     return render(request, 'core/evaluation_wizard.html', {
-        'exam': exam
+        'exam': exam,
+        'mode': mode,
+        'is_manual': is_manual
+    })
+
+
+def manual_evaluation_wizard(request, exam_id):
+    """Multi-Step Manual Script Grading & Page Mapping Wizard."""
+    if not request.user.is_authenticated:
+        return redirect('teacher_login')
+
+    exam = _get_examination_or_fallback(exam_id)
+    if not exam:
+        messages.error(request, f"No examination found for ID #{exam_id}.")
+        return redirect('teacher_dashboard')
+
+    return render(request, 'core/manual_evaluation_wizard.html', {
+        'exam': exam,
+        'questions': exam.questions.all().order_by('question_number')
     })
 
 
@@ -4211,6 +4317,72 @@ def api_upload_raw_images(request, exam_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+def api_wizard_upload_pdf(request, exam_id):
+    """Ingests a multi-page student answer script PDF or ZIP for the Evaluation Wizard, renders pages to images, and prepares Submission without immediate AI LLM scoring."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+
+    exam = get_object_or_404(Examination, id=exam_id)
+
+    if request.method == 'POST':
+        student_name = request.POST.get('student_name', '').strip()
+        roll_no = request.POST.get('roll_no', '').strip()
+        script_file = request.FILES.get('script_file')
+
+        if not script_file:
+            return JsonResponse({'success': False, 'error': 'No PDF file provided.'}, status=400)
+
+        if not student_name or student_name.lower() == 'student':
+            if roll_no:
+                student_name = f"Student ({roll_no})"
+            else:
+                student_name = "Pending OCR Extraction"
+
+        try:
+            from core.ai_engine.services.submission_processor import SubmissionProcessor
+            submissions = SubmissionProcessor.process_uploaded_file(
+                examination=exam,
+                uploaded_file=script_file,
+                student_name=student_name,
+                roll_no=roll_no,
+                user=request.user,
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            if not submissions:
+                return JsonResponse({'success': False, 'error': 'Failed extracting pages from PDF.'}, status=400)
+
+            sub = submissions[0]
+            pages = sub.pages.all().order_by('page_number')
+            images_data = []
+            for p in pages:
+                img_obj, _ = SubmissionImage.objects.get_or_create(
+                    submission=sub,
+                    sequence_order=p.page_number,
+                    defaults={'original_file': p.page_image}
+                )
+                images_data.append({
+                    'id': img_obj.id or p.id,
+                    'url': p.page_image.url if p.page_image else '',
+                    'file_name': f"Page {p.page_number}",
+                    'sequence_order': p.page_number,
+                    'rotation_angle': 0
+                })
+
+            return JsonResponse({
+                'success': True,
+                'submission_id': sub.id,
+                'page_count': len(images_data),
+                'images': images_data,
+                'student_name': sub.student_name,
+                'roll_no': sub.student_roll_no,
+                'message': f'Successfully extracted {len(images_data)} page(s) from PDF.'
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+    return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
+
+
 def api_get_submission_images(request, submission_id):
     """Returns list of raw page images for a submission."""
     if not request.user.is_authenticated:
@@ -4218,13 +4390,24 @@ def api_get_submission_images(request, submission_id):
 
     submission = get_object_or_404(StudentSubmission, id=submission_id)
     raw_images = submission.raw_images.filter(is_deleted=False).order_by('sequence_order')
-    data = [{
-        'id': r.id,
-        'url': r.original_file.url if r.original_file else '',
-        'file_name': os.path.basename(r.original_file.name) if r.original_file else f"Page {r.sequence_order}",
-        'sequence_order': r.sequence_order,
-        'rotation_angle': r.rotation_angle
-    } for r in raw_images]
+    if raw_images.exists():
+        data = [{
+            'id': r.id,
+            'url': r.original_file.url if r.original_file else '',
+            'file_name': os.path.basename(r.original_file.name) if r.original_file else f"Page {r.sequence_order}",
+            'sequence_order': r.sequence_order,
+            'rotation_angle': r.rotation_angle
+        } for r in raw_images]
+    else:
+        pages = submission.pages.all().order_by('page_number')
+        data = [{
+            'id': p.id,
+            'url': p.page_image.url if p.page_image else '',
+            'file_name': f"Page {p.page_number}",
+            'sequence_order': p.page_number,
+            'rotation_angle': 0
+        } for p in pages]
+
     return JsonResponse({
         'success': True,
         'images': data,
@@ -4528,16 +4711,32 @@ def api_confirm_question_mapping(request, submission_id):
 
         confirmed_mappings = body_data.get('confirmed_mappings', [])
         options = body_data.get('options', {})
+        is_manual = (
+            str(options.get('eval_mode', '')).lower() == 'manual' or
+            str(body_data.get('mode', '')).lower() == 'manual' or
+            str(options.get('mode', '')).lower() == 'manual'
+        )
 
         try:
-            # Phase 3: Evaluate mapped answers using cached OCR & confirmed mappings (NO redundant preprocessing)
-            evaluated_sub = AIScriptEvaluator.evaluate_mapped_answers(
-                submission_id=submission.id,
-                confirmed_mappings=confirmed_mappings,
-                options=options,
-                user=request.user,
-                ip_address=request.META.get('REMOTE_ADDR')
-            )
+            if is_manual:
+                evaluated_sub = AIScriptEvaluator.initialize_manual_evaluation(
+                    submission_id=submission.id,
+                    confirmed_mappings=confirmed_mappings,
+                    options=options,
+                    user=request.user,
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                msg = 'Manual grading workbench initialized successfully.'
+            else:
+                # Phase 3: Evaluate mapped answers using cached OCR & confirmed mappings (NO redundant preprocessing)
+                evaluated_sub = AIScriptEvaluator.evaluate_mapped_answers(
+                    submission_id=submission.id,
+                    confirmed_mappings=confirmed_mappings,
+                    options=options,
+                    user=request.user,
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                msg = 'Question mapping confirmed & AI Evaluation completed successfully.'
 
             try:
                 from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
@@ -4548,12 +4747,12 @@ def api_confirm_question_mapping(request, submission_id):
             return JsonResponse({
                 'success': True,
                 'submission_id': evaluated_sub.id,
-                'total_obtained': float(evaluated_sub.total_obtained_marks),
-                'total_max': float(evaluated_sub.total_max_marks),
-                'percentage': evaluated_sub.percentage,
+                'total_obtained': float(evaluated_sub.total_obtained_marks or 0.0),
+                'total_max': float(evaluated_sub.total_max_marks or 0.0),
+                'percentage': evaluated_sub.percentage or 0.0,
                 'requires_manual_review': evaluated_sub.requires_manual_review,
-                'workspace_url': f"/teacher/submission/{evaluated_sub.id}/workspace/",
-                'message': 'Question mapping confirmed & AI Evaluation completed successfully.'
+                'workspace_url': f"/teacher/submission/{evaluated_sub.id}/workspace/?mode=manual" if is_manual else f"/teacher/submission/{evaluated_sub.id}/workspace/",
+                'message': msg
             })
 
         except Exception as e_eval:
@@ -5424,7 +5623,7 @@ def course_tabulation_view(request, course_id):
     from core.services.tabulation_service import sync_submission_to_tabulation
     evaluated_subs = StudentSubmission.objects.filter(
         examination__course=course
-    )
+    ).select_related('examination')
 
     # 1. Clean up obsolete ghost records with outdated IDs
     active_ids = set()

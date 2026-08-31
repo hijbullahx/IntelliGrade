@@ -170,13 +170,27 @@ class QuestionAccessor:
     def get_co(cls, question: Any) -> str:
         """Retrieves Course Outcome (CO) mapping."""
         val = safe_getattr(question, ['co_mapping', 'co', 'course_outcome'], default="CO1")
-        return str(val).strip()
+        if isinstance(val, (list, tuple, set)):
+            return ", ".join(str(c).strip(" '\"[]") for c in val if str(c).strip())
+        val_str = str(val).strip()
+        if val_str.startswith('[') and val_str.endswith(']'):
+            import re
+            cleaned = re.sub(r"[\[\]'\"\(\)]", "", val_str)
+            return ", ".join(c.strip() for c in cleaned.split(',') if c.strip())
+        return val_str
 
     @classmethod
     def get_po(cls, question: Any) -> str:
         """Retrieves Program Outcome (PO) mapping."""
         val = safe_getattr(question, ['po_mapping', 'po', 'program_outcome'], default="PO1")
-        return str(val).strip()
+        if isinstance(val, (list, tuple, set)):
+            return ", ".join(str(p).strip(" '\"[]") for p in val if str(p).strip())
+        val_str = str(val).strip()
+        if val_str.startswith('[') and val_str.endswith(']'):
+            import re
+            cleaned = re.sub(r"[\[\]'\"\(\)]", "", val_str)
+            return ", ".join(p.strip() for p in cleaned.split(',') if p.strip())
+        return val_str
 
     @classmethod
     def get_bloom(cls, question: Any) -> str:

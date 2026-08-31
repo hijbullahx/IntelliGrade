@@ -1,18 +1,18 @@
-# IntelliGrade — Comprehensive Project Proposal & System Blueprint
+# IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions
 
-**Project Title:** IntelliGrade — AI-Powered Outcome-Based Education (OBE) Examination Evaluation, Grading & Academic Management Platform  
-**Document Version:** 3.5.0 (Enterprise Academic Release)  
+**Official Project Title:** IntelliGrade: An End-to-End Outcome-Based Examination Management and Intelligent Script Evaluation Ecosystem for Higher Education Institutions  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
 **Lead Architect & Developer:** Md. Taher Bin Omar Hijbullah  
 **Target Institutional Standard:** International University of Business Agriculture and Technology (IUBAT) & BAETE OBE Accreditation Standards  
-**Date:** August 29, 2026  
+**Last Updated:** August 30, 2026  
 
 ---
 
 ## 1. Executive Summary & Vision
 
-**IntelliGrade** is an enterprise academic SaaS ecosystem engineered to transform the manual, labor-intensive, and subjective nature of university examinations. Higher education institutions face significant bottlenecks during examination cycles: instructors spend hundreds of hours manually reading handwriting, grading descriptive scripts, matching answers against complex multi-criteria rubrics, and calculating Course Outcome (CO) and Program Outcome (PO) attainments for accreditation.
+**IntelliGrade** is an enterprise academic SaaS platform and comprehensive evaluation ecosystem engineered to unify and automate the complete university examination lifecycle. Higher education institutions face significant challenges across the examination spectrum: manual routine scheduling, disconnected question paper and rubric authoring, laborious handwriting deciphering, grading fatigue, complex Course Outcome (CO) and Program Outcome (PO) weighted mathematics, and delayed student feedback.
 
-IntelliGrade solves these challenges by deploying a **Human-in-the-Loop, AI-Augmented Evaluation Pipeline**. The system automates routine ingestion, question paper digitizing, 23-section IUBAT OBE taxonomy mapping, 300 DPI high-resolution script preprocessing, optical character recognition (OCR), question boundary segmentation, multi-provider AI evaluation, split-screen teacher verification workbenches, and real-time OBE tabulation with 8-sheet Excel workbook export.
+IntelliGrade resolves these institutional challenges through a **Human-in-the-Loop, AI-Augmented Evaluation Pipeline**. The platform provides centralized administrative governance, AI exam routine parsing, 23-section IUBAT OBE taxonomy mapping, 300 DPI high-resolution script preprocessing, optical character recognition (OCR), question boundary segmentation, dual evaluation workbenches (Multi-Provider AI & Fast-Track Manual), split-screen teacher verification, and real-time OBE tabulation with 8-sheet Excel workbook export.
 
 ---
 
@@ -40,11 +40,11 @@ graph TD
 
     subgraph Question & Rubric Studio
         E[Faculty / Examiner] -->|Uploads / Builds| F[23-Section Question Paper & Golden Rubric]
-        F -->|Extracts| G[CO, PO, Bloom's, KP, CEP, CEA, Figures, Tables, Formulas]
+        F -->|Extracts| G[CO, PO, Bloom, KP, CEP, CEA, Figures, Tables, Formulas]
     end
 
     subgraph Script Ingestion & Boundary Engine
-        H[Student Answer Scripts] -->|Batch Upload| I[300 DPI Image Normalization & Preprocessing]
+        H[Student Answer Scripts] -->|Batch Upload / PDF / Images| I[300 DPI Image Normalization & Preprocessing]
         I -->|Hybrid OCR| J[PyMuPDF Font Map + PyTesseract + EasyOCR]
         J -->|Boundary State Machine| K[Question Number Detector & Page Mapping]
         K -->|Teacher Confirmation Modal| L[Confirmed Answer Regions]
@@ -52,7 +52,7 @@ graph TD
 
     subgraph AI Evaluation & Failover Core
         L -->|TaskRouter| M{Failover AI Provider}
-        M -->|1. Local Offline Vision| N1[Moondream2 / Ollama]
+        M -->|1. Local Offline Vision| N1[Moondream2 / Ollama (800px LANCZOS)]
         M -->|2. Fast Cloud LLM| N2[Groq Llama-3.3 70B]
         M -->|3. Cloud Aggregator| N3[OpenRouter API]
         M -->|4. Vision & Reasoning| N4[Gemini 2.5 Flash / OpenAI GPT-4o]
@@ -63,6 +63,7 @@ graph TD
         O --> P[Split-Screen Teacher Grading Workbench]
         E -->|Review / Override / Approve| P
         P -->|Finalize & Certify| Q[Certified Stamped PDF Script]
+        Q -->|Automatic Cleanup| Q2[Purge Obsolete Working Images]
     end
 
     subgraph OBE Tabulation & Dissemination
@@ -89,37 +90,14 @@ graph TD
 - **Faculty Workload Management**: Monitor script evaluation progress across assigned department examiners.
 
 ### 4.3 Faculty Member / Examiner (`/dashboard/teacher/`)
-- **Question Paper & Rubric Studio**: Build or scan exam papers with 23-section taxonomy (CO/PO, Bloom's levels, figures, data tables, LaTeX matrices).
-- **Batch Script Upload**: Ingest student PDF/image answer scripts with automated 300 DPI normalization.
-- **Interactive Question Mapping**: Auto-detect question boundaries with manual visual crop override before AI grading.
+- **Question Paper & Rubric Studio**: Build or scan exam papers with 23-section taxonomy (CO/PO, Bloom levels, figures, data tables, LaTeX matrices).
+- **Master Benchmark Solution Studio**: Upload teacher solution scripts and extract step-by-step mark distribution.
+- **Dual Evaluation Wizards**:
+  - *AI Wizard (v3.0)*: Multi-image/PDF upload, automatic OCR boundary detection, confidence review, and AI grading.
+  - *Manual Wizard*: Fast PDF page slicing, pure manual question-to-page assignment, and split-screen teacher grading without AI interference.
 - **Split-Screen Grading Workbench**: Side-by-side verification of scanned scripts, OCR text, rubric benchmarks, AI scores, and feedback.
 - **OBE Course Tabulation**: Manage course grade sheets (CT, Mid, Final, Assignment, Attendance 5%) with live bi-directional Excel export and student sync.
 
 ### 4.4 Student (`/dashboard/student/`)
 - **Self-Service Portal**: Secure registration, login, and password reset via 6-digit OTP email.
-- **Real-Time Grade Dashboard**: View official course tabulation grades, GPA ($4.00$ scale), and component breakdowns.
-- **Answer Script Transparency**: View question-by-question marks, rubric criteria feedback, strengths, and mistakes.
-- **Certified PDF Download**: One-click download of teacher-certified, watermarked answer scripts.
-
----
-
-## 5. Scope & Deliverables Matrix
-
-```text
-========================================================================================
-DELIVERABLE CATEGORY    SCOPE DESCRIPTION                                      STATUS
-========================================================================================
-Core Platform           Django 5.2.x MVC Architecture, SQLite/PostgreSQL       Delivered
-RBAC Portals            Admin, Controller, Dept Head, Teacher, Student         Delivered
-AI Routine Scanner      OCR multi-page routine parser & course mapper          Delivered
-23-Section Taxonomy     IUBAT OBE (CO/PO/KP/CEP/CEA), Figures, LaTeX Tables    Delivered
-Document & OCR Engine   PyMuPDF (300 DPI), PyTesseract, EasyOCR fallback       Delivered
-Boundary Engine         Regex state machine, multi-page answer propagation     Delivered
-AI Engine v3.0          Failover: Local Moondream -> Groq -> OpenRouter ->     Delivered
-                        Gemini -> OpenAI with 429 cooldowns & timeout budgets  
-Grading Workbench       Split-screen review, score overrides, audit history    Delivered
-OBE Tabulation          5% Attendance, 8-sheet Excel export, live sync         Delivered
-Email Pipeline          Asynchronous threading email service with attachments  Delivered
-Security & Compliance   CSRF protection, Argon2 hashing, atomic transactions   Delivered
-========================================================================================
-```
+- **Real-Time Grade Dashboard**: View official course tabulation grades, GPA (4.00 scale), component breakdowns, and download certified evaluated PDF scripts.

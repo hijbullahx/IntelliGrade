@@ -1,7 +1,7 @@
 # IntelliGrade — Non-Functional Requirements Specification (NFRS)
 
-**Document Version:** 3.5.0 (Enterprise Academic Edition)  
-**Last Updated:** August 29, 2026  
+**Document Version:** 4.0.0 (Enterprise Academic Release)  
+**Last Updated:** August 30, 2026  
 **Auditor:** Principal Enterprise Systems Architect  
 
 ---
@@ -42,5 +42,9 @@ NFR-14    Email Reliability    Institutional email dispatches SHALL execute asyn
                                so that slow SMTP handshake latency never blocks user HTTP responses.
 NFR-15    Usability (UI/UX)    The web UI SHALL support full responsive design, dark/light theme switching,
                                and split-screen synchronized PDF viewing on standard desktop screens.
+NFR-16    DB Query Efficiency  The database query layer SHALL utilize composite B-tree indexes and eager-loaded
+                               select_related / prefetch_related queries to maintain O(1) query complexity.
+NFR-17    Storage Cleanliness  Temporary working draft images SHALL be automatically purged upon finalization
+                               to conserve institutional disk storage and maintain compliance.
 ====================================================================================================
 ```

@@ -9,10 +9,10 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-2xl">
         <div>
             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold mb-2">
-                <i data-lucide="user-check" class="w-3.5 h-3.5"></i> Student Workspace
+                <i data-lucide="user-check" class="w-3.5 h-3.5"></i> Academic Assessment Progress &amp; Certified Script Archive
             </div>
             <h1 class="text-2xl font-bold theme-text-primary tracking-tight">Welcome back, {{ stats.student_name|default:request.user.get_full_name|default:request.user.username }} 👋</h1>
-            <p class="theme-text-muted text-sm mt-1">Student &bull; <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ stats.dept_name }}</span></p>
+            <p class="theme-text-muted text-sm mt-1">Student &bull; <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ stats.dept_name }}</span> &bull; Outcome-Based Results, Question Criteria Feedback &amp; Graded Scripts</p>
         </div>
         <div class="flex items-center gap-3">
             <span class="px-4 py-2 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs theme-text-secondary font-mono">

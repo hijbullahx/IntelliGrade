@@ -87,35 +87,57 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
             exam_type_key = 'final'
 
         q_breakdown = {}
+        q_metadata = {}
         total_sub_obtained = 0.0
         total_sub_max = 0.0
 
-        answers = sub.answers.all().select_related('question', 'evaluation_result')
+        answers = sub.answers.all().select_related('question__rubric', 'evaluation_result').order_by('question_id', 'id')
         if answers.exists():
-            for sa in answers:
+            import re
+            for idx, sa in enumerate(answers, start=1):
                 q = sa.question
                 er = getattr(sa, 'evaluation_result', None)
-                marks = float(er.obtained_marks or 0.0) if er else 0.0
-                max_m = float(er.maximum_marks or 10.0) if er else float(q.max_marks or 10.0)
+                marks = float(er.obtained_marks if (er and er.obtained_marks is not None) else 0.0)
+                max_m = float(er.maximum_marks if (er and er.maximum_marks is not None) else (getattr(q, 'max_marks', None) or getattr(q, 'marks', None) or 10.0))
 
                 total_sub_obtained += marks
                 total_sub_max += max_m
 
-                q_num = q.question_number or f"Q{q.id}"
-                q_breakdown[q_num] = marks
+                raw_q_num = str(getattr(q, 'question_number', '') or getattr(q, 'number', '') or f"{idx}").strip()
+                num_match = re.search(r'\d+', raw_q_num)
+                q_num_int = int(num_match.group()) if num_match else idx
+
+                # Store by multiple access keys for bulletproof retrieval
+                q_breakdown[str(q_num_int)] = marks
+                q_breakdown[f"Q{q_num_int}"] = marks
+                q_breakdown[str(idx)] = marks
+                q_breakdown[raw_q_num] = marks
 
                 # CO Mapping
                 co_tag = (getattr(q, 'co_mapping', None) or getattr(q, 'co', None) or getattr(q, 'co_mapped', None) or 'CO1')
-                co_tag = str(co_tag).upper().strip()
+                if isinstance(co_tag, (list, tuple, set)):
+                    co_tag = ", ".join(str(c).strip(" '\"[]") for c in co_tag if str(c).strip())
+                co_tag = str(co_tag).upper().strip().replace("'", "").replace("[", "").replace("]", "")
                 co_scores[co_tag] = round(co_scores.get(co_tag, 0.0) + marks, 2)
 
                 # PO Mapping
                 po_tags = getattr(q, 'po_mapping', None) or getattr(q, 'po', None) or getattr(q, 'po_mapped', None) or ['PO1']
                 if not isinstance(po_tags, list):
                     po_tags = [po_tags]
+                clean_po_list = []
                 for p_item in po_tags:
-                    p_tag = str(p_item).upper().strip()
-                    po_scores[p_tag] = round(po_scores.get(p_tag, 0.0) + marks, 2)
+                    p_tag = str(p_item).upper().strip().replace("'", "").replace("[", "").replace("]", "")
+                    if p_tag:
+                        clean_po_list.append(p_tag)
+                        po_scores[p_tag] = round(po_scores.get(p_tag, 0.0) + marks, 2)
+
+                q_metadata[str(q_num_int)] = {
+                    'num': q_num_int,
+                    'obtained': marks,
+                    'max_marks': max_m,
+                    'co': co_tag,
+                    'po': clean_po_list
+                }
 
         if total_sub_max <= 0:
             total_sub_obtained = float(sub.total_obtained_marks or 0.0)
@@ -131,7 +153,8 @@ def sync_submission_to_tabulation(submission_or_id: Union[StudentSubmission, int
             'obtained': total_sub_obtained,
             'max_marks': total_sub_max,
             'percentage': sub_pct,
-            'breakdown': q_breakdown
+            'breakdown': q_breakdown,
+            'q_metadata': q_metadata
         }
 
     # 4. Get or Create StudentGradeRecord

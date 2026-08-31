@@ -75,6 +75,53 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
     return response
 
 
+def _populate_question_marks(ws, r_idx, exam_info, col_letters):
+    """
+    Populates exact, evaluated marks for each individual question into its corresponding column.
+    Never assumes or averages marks. Unanswered/unscanned questions receive 0.0.
+    """
+    if not exam_info or not isinstance(exam_info, dict):
+        for col in col_letters:
+            ws[f"{col}{r_idx}"] = 0.0
+        return
+
+    breakdown = exam_info.get('breakdown', {})
+    for i, col in enumerate(col_letters, start=1):
+        val = None
+        if str(i) in breakdown:
+            val = breakdown[str(i)]
+        elif f"Q{i}" in breakdown:
+            val = breakdown[f"Q{i}"]
+        elif i in breakdown:
+            val = breakdown[i]
+
+        if val is not None:
+            try:
+                ws[f"{col}{r_idx}"] = float(val)
+            except (ValueError, TypeError):
+                ws[f"{col}{r_idx}"] = 0.0
+        else:
+            ws[f"{col}{r_idx}"] = 0.0
+
+
+def _update_exam_header_metadata(ws, exam_info, col_letters):
+    """Updates Row 8 (PO), Row 9 (CO), and Row 10 (Question Max Marks) strictly from actual question config."""
+    if not exam_info or not isinstance(exam_info, dict):
+        return
+    q_meta = exam_info.get('q_metadata', {})
+    for i, col in enumerate(col_letters, start=1):
+        m_info = q_meta.get(str(i), q_meta.get(f"Q{i}", None))
+        if m_info:
+            if 'po' in m_info and m_info['po']:
+                po_val = m_info['po']
+                po_text = ", ".join(po_val) if isinstance(po_val, list) else str(po_val)
+                ws[f"{col}8"] = po_text
+            if 'co' in m_info and m_info['co']:
+                ws[f"{col}9"] = str(m_info['co'])
+            if 'max_marks' in m_info and m_info['max_marks']:
+                ws[f"{col}10"] = float(m_info['max_marks'])
+
+
 def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
     """Populates strictly real student records and scanned marks, clearing unused template rows."""
     num_students = len(grade_records)
@@ -86,6 +133,22 @@ def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
         # Course Metadata update
         if ws_home["C5"].value:
             ws_home["C5"] = f"Course: {course.code} - {course.title} ({tabulation.semester} Sec {tabulation.section})"
+
+        # If there are student records, update exam question header metadata from first available record
+        if grade_records:
+            sample_ex_scores = grade_records[0].exam_scores or {}
+            for ex_info in sample_ex_scores.values():
+                if isinstance(ex_info, dict):
+                    c_type = str(ex_info.get('category') or ex_info.get('exam_type') or '').lower()
+                    e_title = str(ex_info.get('exam_title') or '').lower()
+                    if 'class' in c_type or 'quiz' in c_type or 'ct' in c_type or 'test' in c_type or '1st' in e_title:
+                        _update_exam_header_metadata(ws_home, ex_info, ['D', 'E', 'F', 'G', 'H', 'I'])
+                    elif 'mid' in c_type or 'mid' in e_title:
+                        _update_exam_header_metadata(ws_home, ex_info, ['L', 'M', 'N', 'O', 'P', 'Q'])
+                    elif '2nd' in c_type or 'interim' in c_type or '2nd' in e_title:
+                        _update_exam_header_metadata(ws_home, ex_info, ['T', 'U', 'V', 'W', 'X', 'Y'])
+                    elif 'final' in c_type or 'final' in e_title:
+                        _update_exam_header_metadata(ws_home, ex_info, ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM'])
 
         # Rows 11 to 60 (standard 50 student template capacity)
         for r_idx in range(11, 61):
@@ -122,53 +185,22 @@ def _populate_real_data_into_workbook(wb, course, tabulation, grade_records):
                                 final_exam = ex_info
 
                 # Extract categories
-                ct_data = gr.class_test_data
-                mid_data = gr.midterm_data
-                final_data = gr.final_data
                 assign_data = gr.assignment_data
 
-                # CT Q1..Q6 (Cols D:I) - Active: Q1..Q4 (25 marks each = 100 max)
-                if ct_data:
-                    ct_pct = float(ct_data.get('percentage', 0.0))
-                    q_val = round(ct_pct * 0.25, 2)
-                    for col in ['D', 'E', 'F', 'G']:
-                        ws_home[f"{col}{r_idx}"] = q_val
-                    for col in ['H', 'I']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
-                else:
-                    for col in ['D', 'E', 'F', 'G', 'H', 'I']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
+                # CT Q1..Q6 (Cols D:I) - Exact evaluated marks per question
+                _populate_question_marks(ws_home, r_idx, ct_exam, ['D', 'E', 'F', 'G', 'H', 'I'])
 
-                # Mid Q1..Q6 (Cols L:Q) - Active: Q1..Q4 (25 marks each = 100 max)
-                if mid_data:
-                    mid_pct = float(mid_data.get('percentage', 0.0))
-                    q_val = round(mid_pct * 0.25, 2)
-                    for col in ['L', 'M', 'N', 'O']:
-                        ws_home[f"{col}{r_idx}"] = q_val
-                    for col in ['P', 'Q']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
-                else:
-                    for col in ['L', 'M', 'N', 'O', 'P', 'Q']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
+                # Mid Q1..Q6 (Cols L:Q) - Exact evaluated marks per question
+                _populate_question_marks(ws_home, r_idx, mid_exam, ['L', 'M', 'N', 'O', 'P', 'Q'])
 
-                # 2nd Interim Q1..Q6 (Cols T:Y)
-                for col in ['T', 'U', 'V', 'W', 'X', 'Y']:
-                    ws_home[f"{col}{r_idx}"] = 0.0
+                # 2nd Interim Q1..Q6 (Cols T:Y) - Exact evaluated marks per question
+                _populate_question_marks(ws_home, r_idx, interim2_exam, ['T', 'U', 'V', 'W', 'X', 'Y'])
 
-                # Final Exam Q1..Q12 (Cols AB:AM) - Active: Q1..Q10 (10 marks each = 100 max)
-                if final_data:
-                    fn_pct = float(final_data.get('percentage', 0.0))
-                    q_val = round(fn_pct * 0.10, 2)
-                    for col in ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK']:
-                        ws_home[f"{col}{r_idx}"] = q_val
-                    for col in ['AL', 'AM']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
-                else:
-                    for col in ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM']:
-                        ws_home[f"{col}{r_idx}"] = 0.0
+                # Final Exam Q1..Q12 (Cols AB:AM) - Exact evaluated marks per question
+                _populate_question_marks(ws_home, r_idx, final_exam, ['AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM'])
 
                 # Assignment (Col AP)
-                as_val = float(assign_data.get('percentage', 0.0)) if assign_data else 0.0
+                as_val = float(assign_data.get('obtained', assign_data.get('percentage', 0.0))) if assign_data else 0.0
                 ws_home[f"AP{r_idx}"] = as_val
 
                 # Formula for total with Attendance (Col AQ)
