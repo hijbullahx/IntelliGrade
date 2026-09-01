@@ -36,6 +36,7 @@ def clean_faculty_name(name_str: str) -> str:
 
     cleaned = re.sub(r'[\r\n\t]+', ' ', cleaned)
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    cleaned = re.sub(r'^[\:\-\.\,\s\d]+', '', cleaned).strip()
     return cleaned
 
 
@@ -128,11 +129,11 @@ Return ONLY a valid JSON object matching this schema format:
         # 1. First try single-line tabular regex
         row_pattern = re.compile(
             r'(?P<date>\d{4}-\d{2}-\d{2})\s*(?:\([A-Za-z]+\))?\s+'
-            r'(?P<time>\d{1,2}:\d{2}\s*(?:am|pm|AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s+'
+            r'(?P<time>\d{1,2}:\d{2}\s*(?:am|pm|AM|PM)?\s*-\s*\d{1,2}:\d{2}\s*(?:am|pm|AM|PM))\s+'
             r'(?P<code>[A-Z]{2,5}\s*\d{3,4})\s+'
             r'(?P<section>[A-Z0-9]+)\s+'
-            r'(?P<room>[^\t\n\r]+?)\s{2,}'
-            r'(?P<faculty>[A-Za-z\s\.\,\-]+)$'
+            r'(?P<room>[^\t\n\r]+?)\s+'
+            r'(?P<faculty>[A-Za-z\s\.\,\-\(\)]+)$'
         )
 
         for line in doc_str.splitlines():

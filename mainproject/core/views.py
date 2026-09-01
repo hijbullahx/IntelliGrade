@@ -1359,6 +1359,71 @@ from django.conf import settings
 from core.ai_engine.providers.factory import AIProviderFactory
 from core.ai_engine.ocr.engine import OCREngineManager
 
+def match_faculty_user(f_name: str, teachers_list: list):
+    """Robust faculty name matching supporting titles (Dr, Engr, Prof, Md), partial names, and token sets."""
+    if not f_name or not str(f_name).strip():
+        return None
+
+    clean_target = str(f_name).lower().strip()
+    title_regex = r'\b(?:dr|prof|professor|engr|engineer|mr|mrs|ms|md|mohammad|muhammad|dr\.|engr\.|prof\.|md\.)\b'
+    norm_target = re.sub(title_regex, ' ', clean_target, flags=re.IGNORECASE).strip()
+    norm_target = re.sub(r'[\(\)\[\]\,\.\-\:]+', ' ', norm_target).strip()
+    norm_target = re.sub(r'\s+', ' ', norm_target).strip()
+    target_tokens = set(re.findall(r'\w+', norm_target))
+
+    best_match = None
+    best_score = 0
+
+    for prof in teachers_list:
+        u = prof.user
+        full_n = (u.get_full_name() or u.username).lower().strip()
+        username = u.username.lower().strip()
+
+        norm_full = re.sub(title_regex, ' ', full_n, flags=re.IGNORECASE).strip()
+        norm_full = re.sub(r'[\(\)\[\]\,\.\-\:]+', ' ', norm_full).strip()
+        norm_full = re.sub(r'\s+', ' ', norm_full).strip()
+        user_tokens = set(re.findall(r'\w+', norm_full))
+
+        # 1. Exact match on raw or normalized name or username
+        if clean_target == full_n or (norm_target and norm_target == norm_full) or clean_target == username:
+            return u
+
+        # 2. Direct Substring matches (both directions)
+        if norm_target and len(norm_target) >= 3:
+            if norm_target in norm_full or norm_full in norm_target:
+                score = 100 + len(norm_target)
+                if score > best_score:
+                    best_score = score
+                    best_match = u
+                    continue
+
+        # 3. Token set overlap (e.g., "Nazir Ahmed" matching "Engr. Nazir Ahmed" or "Md. Nazir Ahmed")
+        if target_tokens and user_tokens:
+            common = target_tokens.intersection(user_tokens)
+            if common:
+                if common == target_tokens or common == user_tokens:
+                    score = 90 + len(common) * 10
+                    if score > best_score:
+                        best_score = score
+                        best_match = u
+                        continue
+                elif len(common) >= 1 and (len(target_tokens) <= 2 or len(user_tokens) <= 2):
+                    score = 60 + len(common) * 10
+                    if score > best_score:
+                        best_score = score
+                        best_match = u
+                        continue
+
+        # 4. Username matching
+        if username and (username in clean_target or clean_target in username):
+            score = 50
+            if score > best_score:
+                best_score = score
+                best_match = u
+
+    return best_match
+
+
 def scan_routine_ai(request):
     """AI Routine Auto-Reader: Scans uploaded/pasted exam routine text/file using active AI Provider (Gemini/OpenAI/Mock) and matches DB."""
     if not request.user.is_authenticated:
@@ -1463,7 +1528,7 @@ def scan_routine_ai(request):
 
     # Process & DB Match Each Extracted Routine Item
     routine_items = []
-    all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user'))
+    all_teachers = list(Profile.objects.filter(role=Profile.Role.TEACHER).select_related('user', 'department'))
 
     for item in extracted_schedule:
         c_code = item.get('course_code')
@@ -1478,17 +1543,15 @@ def scan_routine_ai(request):
         course_obj = None
         if c_code:
             course_obj = Course.objects.filter(code__iexact=c_code.strip()).first()
+            if not course_obj:
+                # Try normalized code without space (e.g. CSE411 vs CSE 411)
+                norm_c = c_code.replace(' ', '').strip()
+                course_obj = Course.objects.filter(code__iregex=f"^{norm_c[:3]}\s*{norm_c[3:]}$").first()
         if not course_obj and c_title:
             course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
 
-        # Match Faculty in DB (Strictly without overwriting f_name)
-        faculty_user = None
-        if f_name:
-            for prof in all_teachers:
-                full_n = prof.user.get_full_name() or prof.user.username
-                if f_name.lower().strip() in full_n.lower() or prof.user.username.lower() in f_name.lower():
-                    faculty_user = prof.user
-                    break
+        # Match Faculty in DB using intelligent matcher
+        faculty_user = match_faculty_user(f_name, all_teachers)
 
         # Check if an exam for this course is ALREADY published in the database
         is_published = False
@@ -1500,6 +1563,8 @@ def scan_routine_ai(request):
                 is_published = True
                 published_exam_id = existing_exam.id
                 published_exam_title = existing_exam.title
+                if not faculty_user and existing_exam.assigned_faculty:
+                    faculty_user = existing_exam.assigned_faculty
 
         routine_items.append({
             'course_code': c_code or (course_obj.code if course_obj else 'Unknown Course'),
@@ -1512,6 +1577,7 @@ def scan_routine_ai(request):
             'course_id': course_obj.id if course_obj else None,
             'faculty_found': bool(faculty_user),
             'faculty_id': faculty_user.id if faculty_user else None,
+            'matched_faculty_name': faculty_user.get_full_name() or faculty_user.username if faculty_user else None,
             'is_published': is_published,
             'published_exam_id': published_exam_id,
             'published_exam_title': published_exam_title,
@@ -1519,10 +1585,31 @@ def scan_routine_ai(request):
 
     first_item = routine_items[0] if routine_items else {}
 
+    all_teachers_data = [
+        {
+            'id': prof.user.id,
+            'name': prof.user.get_full_name() or prof.user.username,
+            'username': prof.user.username,
+            'dept_code': prof.department.code if prof.department else ''
+        }
+        for prof in all_teachers
+    ]
+    all_courses_data = [
+        {
+            'id': c.id,
+            'code': c.code,
+            'title': c.title,
+            'dept_name': c.department.name if c.department else ''
+        }
+        for c in Course.objects.select_related('department').all()
+    ]
+
     response_payload = {
         'success': True,
         'raw_extracted_text': display_raw_text or "Exam Routine Document Scanned",
         'routine_items': routine_items,
+        'available_faculty': all_teachers_data,
+        'available_courses': all_courses_data,
         'gemini_used': ai_used,
         'ai_error': ai_error,
         'provider_name': provider.__class__.__name__,
@@ -2222,13 +2309,13 @@ def api_publish_exam(request):
         title = request.POST.get('title', '').strip()
 
         course = Course.objects.filter(id=course_id).first()
-        faculty_user = User.objects.filter(id=faculty_id).first()
+        faculty_user = User.objects.filter(id=faculty_id).first() if faculty_id else None
 
         if not course:
             return JsonResponse({'error': 'Invalid Course selected.'}, status=400)
 
         exam_title = title if title else f"{course.code} Examination"
-        date_val = exam_date if (exam_date and exam_date != 'N/A') else '2026-08-15'
+        date_val = exam_date if (exam_date and exam_date != 'N/A' and exam_date != 'null') else '2026-08-15'
 
         exam = Examination.objects.filter(course=course).order_by('-created_at').first()
         if exam:
@@ -2236,8 +2323,7 @@ def api_publish_exam(request):
             exam.exam_date = date_val
             exam.total_marks = float(total_marks) if total_marks else 100.0
             exam.status = Examination.Status.PUBLISHED
-            if faculty_user:
-                exam.assigned_faculty = faculty_user
+            exam.assigned_faculty = faculty_user
             exam.save()
         else:
             exam = Examination.objects.create(
@@ -2250,9 +2336,8 @@ def api_publish_exam(request):
                 created_by=request.user
             )
 
-        faculty_name = faculty_user.get_full_name() or faculty_user.username if faculty_user else "Examiner"
-
         if faculty_user:
+            course.instructors.add(faculty_user)
             try:
                 from core.services.email_service import EmailService
                 EmailService.send_exam_assigned_to_teacher_notification(
@@ -2267,10 +2352,16 @@ def api_publish_exam(request):
             except Exception as _e:
                 pass
 
+        faculty_name = (faculty_user.get_full_name() or faculty_user.username) if faculty_user else "Unassigned"
+
         return JsonResponse({
             'success': True,
             'exam_id': exam.id,
-            'message': f"Examination '{exam.title}' published successfully for {course.code} and assigned to {faculty_name}!"
+            'course_id': course.id,
+            'course_code': course.code,
+            'faculty_name': faculty_name,
+            'faculty_id': faculty_user.id if faculty_user else None,
+            'message': f"Examination for {course.code} saved & assigned to {faculty_name} successfully!"
         })
 
 
