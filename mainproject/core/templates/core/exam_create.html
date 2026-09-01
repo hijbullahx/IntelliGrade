@@ -717,6 +717,29 @@ function runAIRoutineScan() {
     openAIRoutineModal();
 }
 
+// Global cache of courses & faculty
+window.availableFacultyList = [
+    {% for prof in faculty_members %}
+    {
+        id: {{ prof.user.id }},
+        name: "{{ prof.user.get_full_name|default:prof.user.username|escapejs }}",
+        username: "{{ prof.user.username|escapejs }}",
+        dept_code: "{{ prof.department.code|default:''|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
+window.availableCoursesList = [
+    {% for c in courses %}
+    {
+        id: {{ c.id }},
+        code: "{{ c.code|escapejs }}",
+        title: "{{ c.title|escapejs }}",
+        dept_name: "{{ c.department.name|default:''|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
 // ============================================================================
 // Render Extracted Routine Table (Main Page View)
 // ============================================================================
@@ -724,6 +747,13 @@ function renderExtractedRoutineTable(data) {
     const resultBox = document.getElementById('aiScanResult');
     if (!resultBox) return;
     resultBox.classList.remove('hidden');
+
+    if (data.available_faculty && Array.isArray(data.available_faculty) && data.available_faculty.length > 0) {
+        window.availableFacultyList = data.available_faculty;
+    }
+    if (data.available_courses && Array.isArray(data.available_courses) && data.available_courses.length > 0) {
+        window.availableCoursesList = data.available_courses;
+    }
 
     let html = `<div class="space-y-4">`;
     let statusHeader = `<div class="flex items-center gap-2">
@@ -753,10 +783,10 @@ function renderExtractedRoutineTable(data) {
                 <table class="w-full text-left text-xs">
                     <thead class="bg-slate-100 dark:bg-slate-900/80 theme-text-muted font-bold border-b border-slate-200 dark:border-slate-800">
                         <tr>
-                            <th class="px-4 py-2.5">Course Code & Title</th>
-                            <th class="px-4 py-2.5">Faculty Examiner</th>
+                            <th class="px-4 py-2.5">Course Module</th>
+                            <th class="px-4 py-2.5 min-w-[220px]">Assigned Faculty Examiner</th>
                             <th class="px-4 py-2.5">Exam Date & Time</th>
-                            <th class="px-4 py-2.5 text-right">System DB Match & Actions</th>
+                            <th class="px-4 py-2.5 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 dark:divide-slate-800 font-medium">`;
@@ -769,54 +799,100 @@ function renderExtractedRoutineTable(data) {
             let safeTime = (item.exam_time || '').replace(/'/g, "\\'");
 
             let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}`;
-            
             let rawFaculty = item.faculty_name ? item.faculty_name.trim() : '';
             let isUnassigned = !rawFaculty || rawFaculty.toLowerCase() === 'unassigned' || rawFaculty.toLowerCase() === 'assigned examiner';
-            let facultyLabel = isUnassigned ? 'New Faculty' : rawFaculty;
             let addFacultyUrl = `{% url 'add_faculty' %}` + (isUnassigned ? '' : `?name=${encodeURIComponent(rawFaculty)}`);
 
-            let actionCellContent = '';
+            // Course Selector or Badge
+            let courseCellContent = '';
+            if (item.course_found && item.course_id) {
+                courseCellContent = `
+                <div class="space-y-1">
+                    <input type="hidden" id="row-course-${index}" value="${item.course_id}">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-mono font-bold text-[11px]">${item.course_code || 'N/A'}</span>
+                        <span class="font-bold theme-text-primary text-xs">${item.course_title || ''}</span>
+                    </div>
+                </div>`;
+            } else {
+                let courseOptions = `<option value="">-- Select Course --</option>`;
+                (window.availableCoursesList || []).forEach(c => {
+                    courseOptions += `<option value="${c.id}">${c.code} - ${c.title}</option>`;
+                });
+                courseCellContent = `
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-1">
+                        <span class="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[10px] font-mono font-bold">${item.course_code}</span>
+                        <a href="${addCourseUrl}" target="_blank" class="text-[10px] text-rose-500 hover:underline font-bold">+ Create Course</a>
+                    </div>
+                    <select id="row-course-${index}" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs theme-text-primary outline-none focus:ring-1 focus:ring-purple-500">
+                        ${courseOptions}
+                    </select>
+                </div>`;
+            }
+
+            // Faculty Selector (Interactive dropdown for ALL available faculties with pre-selection)
+            let facultyOptions = `<option value="">-- Select Faculty / Examiner --</option>`;
+            let matchedFound = false;
+
+            (window.availableFacultyList || []).forEach(f => {
+                let isSelected = false;
+                if (item.faculty_id && String(f.id) === String(item.faculty_id)) {
+                    isSelected = true;
+                    matchedFound = true;
+                }
+                facultyOptions += `<option value="${f.id}" ${isSelected ? 'selected' : ''}>${f.name} (${f.username})${f.dept_code ? ' - ' + f.dept_code : ''}</option>`;
+            });
+
+            let facultyTag = '';
+            if (rawFaculty && !isUnassigned) {
+                facultyTag = `<div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                    <span class="truncate max-w-[180px]" title="Detected from Routine">Routine: <strong class="text-purple-400">${rawFaculty}</strong></span>
+                    ${!matchedFound ? `<a href="${addFacultyUrl}" target="_blank" class="text-amber-400 hover:underline ml-1 font-bold shrink-0">+ Add to DB</a>` : `<span class="text-emerald-400 font-bold shrink-0">✓ Matched</span>`}
+                </div>`;
+            }
+
+            let facultyCellContent = `
+            <div class="space-y-1">
+                <select id="row-faculty-${index}" onchange="syncRowWithMainForm(${index})" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-semibold theme-text-primary outline-none focus:ring-2 focus:ring-purple-500 shadow-sm">
+                    ${facultyOptions}
+                </select>
+                ${facultyTag}
+            </div>`;
+
+            // Action Button
+            let actionBtn = `
+            <button type="button" id="row-btn-${index}" onclick="publishExamFromRowDirect(${index}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition-all inline-flex items-center gap-1.5 whitespace-nowrap">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i> ${item.is_published ? 'Update Assignment' : 'Assign & Publish'}
+            </button>`;
 
             if (item.is_published) {
-                actionCellContent = `<span class="px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1">
-                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
-                </span>`;
-            } else if (item.course_found && item.faculty_found) {
-                actionCellContent = `<button type="button" onclick="publishExamFromRow(this, ${item.course_id}, ${item.faculty_id}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all inline-flex items-center gap-1.5">
-                    <i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam
-                </button>`;
-            } else {
-                let courseBadge = item.course_found ? 
-                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
-                    `<a href="${addCourseUrl}" target="_blank" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${item.course_code}'</a>`;
-
-                let facultyBadge = item.faculty_found ?
-                    `<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-[10px]">🟢 Matched</span>` :
-                    `<a href="${addFacultyUrl}" target="_blank" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] inline-flex items-center gap-1 shadow">+ Add '${facultyLabel}'</a>`;
-
-                actionCellContent = `<div class="flex items-center justify-end gap-2">${courseBadge} ${facultyBadge}</div>`;
+                actionBtn = `
+                <div class="flex items-center justify-end gap-2">
+                    <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
+                    </span>
+                    <button type="button" id="row-btn-${index}" onclick="publishExamFromRowDirect(${index}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded-lg border border-slate-700 transition-all" title="Change Faculty and Update">
+                        Reassign
+                    </button>
+                </div>`;
             }
 
             html += `<tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
-                <td class="px-4 py-3 font-bold theme-text-primary">
-                    <div class="flex items-center gap-2">
-                        <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-mono text-[11px]">${item.course_code || 'N/A'}</span>
-                        <span>${item.course_title || ''}</span>
-                    </div>
+                <td class="px-4 py-3">
+                    ${courseCellContent}
                 </td>
-                <td class="px-4 py-3 theme-text-secondary font-semibold">
-                    <div class="flex items-center gap-2">
-                        <span><i data-lucide="user-check" class="w-3.5 h-3.5 inline text-brand-500 mr-1"></i>${item.faculty_name || 'Unassigned'}</span>
-                    </div>
+                <td class="px-4 py-3">
+                    ${facultyCellContent}
                 </td>
-                <td class="px-4 py-3 theme-text-secondary">
+                <td class="px-4 py-3 theme-text-secondary whitespace-nowrap">
                     <div class="flex flex-col">
                         <span class="font-bold text-slate-700 dark:text-slate-300"><i data-lucide="calendar" class="w-3 h-3 inline text-purple-500 mr-1"></i>${item.exam_date || 'N/A'}</span>
                         <span class="text-[11px] theme-text-muted"><i data-lucide="clock" class="w-3 h-3 inline text-amber-500 mr-1"></i>${item.exam_time || '10:00 AM - 01:00 PM'}</span>
                     </div>
                 </td>
                 <td class="px-4 py-3 text-right" id="action-cell-${index}">
-                    ${actionCellContent}
+                    ${actionBtn}
                 </td>
             </tr>`;
         });
@@ -854,38 +930,71 @@ function renderExtractedRoutineTable(data) {
     lucide.createIcons();
 }
 
+// Sync selection in scanned row to main form
+function syncRowWithMainForm(rowIndex) {
+    const courseEl = document.getElementById(`row-course-${rowIndex}`);
+    const facultyEl = document.getElementById(`row-faculty-${rowIndex}`);
+    if (courseEl && courseEl.value && document.getElementById('courseSelect')) {
+        document.getElementById('courseSelect').value = courseEl.value;
+    }
+    if (facultyEl && facultyEl.value && document.getElementById('facultySelect')) {
+        document.getElementById('facultySelect').value = facultyEl.value;
+    }
+}
+
 // ============================================================================
-// One-Click Exam Publishing from Scanned Row
+// One-Click Exam Publishing / Assigning from Scanned Row
 // ============================================================================
-function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMarks, courseCode) {
-    btnElement.disabled = true;
-    btnElement.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Publishing...`;
-    lucide.createIcons();
+function publishExamFromRowDirect(rowIndex, examDate, totalMarks, defaultCourseCode) {
+    const courseEl = document.getElementById(`row-course-${rowIndex}`);
+    const facultyEl = document.getElementById(`row-faculty-${rowIndex}`);
+    const btnElement = document.getElementById(`row-btn-${rowIndex}`);
+
+    const courseId = courseEl ? courseEl.value : null;
+    const facultyId = facultyEl ? facultyEl.value : null;
+
+    if (!courseId) {
+        alert('Please select a course for this routine item.');
+        return;
+    }
+
+    if (btnElement) {
+        btnElement.disabled = true;
+        btnElement.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i> Saving...`;
+        lucide.createIcons();
+    }
 
     const formData = new FormData();
     formData.append('course_id', courseId);
-    formData.append('faculty_id', facultyId);
-    formData.append('exam_date', examDate);
-    formData.append('total_marks', totalMarks);
-    formData.append('title', `${courseCode} Examination`);
+    if (facultyId) formData.append('faculty_id', facultyId);
+    formData.append('exam_date', (examDate && examDate !== 'N/A' && examDate !== 'null') ? examDate : '2026-08-15');
+    formData.append('total_marks', totalMarks || 100.0);
+    formData.append('title', `${defaultCourseCode || 'Course'} Examination`);
 
     fetch("{% url 'api_publish_exam' %}", {
         method: 'POST',
-        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        headers: { 'X-CSRFToken': getCsrfToken() },
         body: formData
     })
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            btnElement.outerHTML = `<span class="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1.5">
-                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
-            </span>`;
-
-            // Mark item published in window memory
-            if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items) {
-                const matchedItem = window.lastAIRoutineScanResult.routine_items.find(i => i.course_id == courseId);
-                if (matchedItem) matchedItem.is_published = true;
+            const actionCell = document.getElementById(`action-cell-${rowIndex}`);
+            if (actionCell) {
+                actionCell.innerHTML = `
+                <div class="flex items-center justify-end gap-2">
+                    <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Assigned & Published
+                    </span>
+                    <button type="button" id="row-btn-${rowIndex}" onclick="publishExamFromRowDirect(${rowIndex}, '${examDate}', '${totalMarks}', '${defaultCourseCode}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded-lg border border-slate-700 transition-all" title="Click to change faculty and update">
+                        Reassign
+                    </button>
+                </div>`;
             }
+
+            // Sync main form
+            if (document.getElementById('courseSelect')) document.getElementById('courseSelect').value = courseId;
+            if (facultyId && document.getElementById('facultySelect')) document.getElementById('facultySelect').value = facultyId;
 
             // Show floating toast alert without leaving the page
             const alertBox = document.createElement('div');
@@ -897,17 +1006,26 @@ function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMark
             setTimeout(() => { alertBox.remove(); }, 4000);
         } else {
             alert(data.error || 'Publishing failed.');
-            btnElement.disabled = false;
-            btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam`;
-            lucide.createIcons();
+            if (btnElement) {
+                btnElement.disabled = false;
+                btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Assign & Publish`;
+                lucide.createIcons();
+            }
         }
     })
     .catch(err => {
-        alert('Server error while publishing exam.');
-        btnElement.disabled = false;
-        btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Publish Exam`;
-        lucide.createIcons();
+        alert('Server error while saving exam assignment.');
+        if (btnElement) {
+            btnElement.disabled = false;
+            btnElement.innerHTML = `<i data-lucide="send" class="w-3.5 h-3.5"></i> Assign & Publish`;
+            lucide.createIcons();
+        }
     });
+}
+
+// Backward compatibility function
+function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMarks, courseCode) {
+    publishExamFromRowDirect(0, examDate, totalMarks, courseCode);
 }
 
 // ============================================================================
@@ -920,27 +1038,34 @@ function syncDropdownsAndRescanRoutine() {
         const courses = data.courses || [];
         const faculty = data.faculty || [];
 
+        window.availableCoursesList = courses;
+        window.availableFacultyList = faculty;
+
         // Update Course Dropdown
         const courseSelect = document.getElementById('courseSelect');
-        const currCourse = courseSelect.value;
-        let cOptions = `<option value="">Select Course...</option>`;
-        courses.forEach(c => {
-            cOptions += `<option value="${c.id}" data-code="${c.code}">${c.code} - ${c.title} (${c.department__name || ''})</option>`;
-        });
-        courseSelect.innerHTML = cOptions;
-        if (currCourse) courseSelect.value = currCourse;
+        if (courseSelect) {
+            const currCourse = courseSelect.value;
+            let cOptions = `<option value="">Select Course...</option>`;
+            courses.forEach(c => {
+                cOptions += `<option value="${c.id}" data-code="${c.code}">${c.code} - ${c.title} (${c.department__name || ''})</option>`;
+            });
+            courseSelect.innerHTML = cOptions;
+            if (currCourse) courseSelect.value = currCourse;
+        }
 
         // Update Faculty Dropdown
         const facultySelect = document.getElementById('facultySelect');
-        const currFaculty = facultySelect.value;
-        let fOptions = `<option value="">Select Assigned Examiner...</option>`;
-        faculty.forEach(f => {
-            fOptions += `<option value="${f.id}" data-name="${f.name}">${f.name} (${f.username}) - ${f.dept_code}</option>`;
-        });
-        facultySelect.innerHTML = fOptions;
-        if (currFaculty) facultySelect.value = currFaculty;
+        if (facultySelect) {
+            const currFaculty = facultySelect.value;
+            let fOptions = `<option value="">Select Assigned Examiner...</option>`;
+            faculty.forEach(f => {
+                fOptions += `<option value="${f.id}" data-name="${f.name}">${f.name} (${f.username}) - ${f.dept_code}</option>`;
+            });
+            facultySelect.innerHTML = fOptions;
+            if (currFaculty) facultySelect.value = currFaculty;
+        }
 
-        // INSTANT 0ms local re-matching without re-scanning or re-uploading file!
+        // INSTANT local re-matching without re-scanning
         if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items) {
             window.lastAIRoutineScanResult.routine_items.forEach(item => {
                 const normCourseCode = (item.course_code || '').replace(/\s+/g, '').toUpperCase();
@@ -962,7 +1087,6 @@ function syncDropdownsAndRescanRoutine() {
                 }
             });
 
-            // Re-render table instantly with updated 0ms local matches
             renderExtractedRoutineTable(window.lastAIRoutineScanResult);
         }
     })

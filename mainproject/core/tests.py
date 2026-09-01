@@ -65,6 +65,50 @@ class RoutineScanUITestCase(TestCase):
         self.assertTrue(data.get('success'))
         self.assertEqual(len(data.get('routine_items', [])), 2)
 
+    @patch('core.ai_engine.routine_parser.routine_parser.RoutineParser.parse_routine')
+    def test_scan_routine_ai_nazir_ahmed_fuzzy_matching_and_reassign(self, mock_parse):
+        # Create a teacher named 'Nazir Ahmed'
+        nazir_user = User.objects.create_user(
+            username='nazir_ahmed',
+            password='testpassword123',
+            first_name='Nazir',
+            last_name='Ahmed'
+        )
+        Profile.objects.create(user=nazir_user, role=Profile.Role.TEACHER, department=self.dept)
+
+        # Mock routine parser with title prefixed faculty name 'Engr. Nazir Ahmed'
+        mock_parse.return_value = {
+            'routine_schedule': [
+                {
+                    'course_code': 'CSE 411',
+                    'course_title': 'Software Engineering',
+                    'exam_date': '2026-08-15',
+                    'exam_time': '10:00 AM - 01:00 PM',
+                    'faculty_name': 'Engr. Nazir Ahmed'
+                }
+            ]
+        }
+        self.client.login(username='controller_admin', password='testpassword123')
+        response = self.client.post(reverse('scan_routine_ai'), {'routine_text': 'CSE 411 Software Engineering Engr. Nazir Ahmed'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        item = data['routine_items'][0]
+        self.assertTrue(item['faculty_found'])
+        self.assertEqual(item['faculty_id'], nazir_user.id)
+
+        # Test assigning and publishing with custom faculty selection
+        publish_res = self.client.post(reverse('api_publish_exam'), {
+            'course_id': self.course.id,
+            'faculty_id': nazir_user.id,
+            'exam_date': '2026-08-15',
+            'total_marks': 100.0,
+            'title': 'CSE 411 Final Exam'
+        })
+        self.assertEqual(publish_res.status_code, 200)
+        pub_data = publish_res.json()
+        self.assertTrue(pub_data['success'])
+        self.assertEqual(pub_data['faculty_id'], nazir_user.id)
+
     def test_question_rubric_manage_renders_modal(self):
         from core.models import Examination
         from django.utils import timezone
