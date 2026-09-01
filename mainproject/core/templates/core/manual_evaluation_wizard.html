@@ -350,6 +350,38 @@ async function handleStep1Next() {
 }
 
 // =========================================================
+// HELPER FUNCTIONS & UTILITIES
+// =========================================================
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+async function safeFetchJson(resp) {
+    const text = await resp.text();
+    let data;
+    try {
+        data = JSON.parse(text);
+    } catch (e) {
+        if (!resp.ok) {
+            throw new Error(`Server returned HTTP ${resp.status}: Upload size may be too large or session expired.`);
+        }
+        throw new Error(`Server returned non-JSON response: ${text.substring(0, 150)}`);
+    }
+    return data;
+}
+
+// =========================================================
 // STEP 2 NEXT
 // =========================================================
 async function handleStep2Next() {
@@ -394,17 +426,37 @@ async function uploadRawImages() {
     newFilesOnly.forEach(f => formData.append('images', f));
 
     try {
+        const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
         const resp = await fetch("{% url 'api_upload_raw_images' exam.id %}", {
             method: 'POST',
             body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: { 'X-CSRFToken': csrf }
         });
-        const data = await resp.json();
+        const data = await safeFetchJson(resp);
         if (data.success) {
             currentSubmissionId = data.submission_id;
             sessionStorage.setItem('ig_manual_sub_id_{{ exam.id }}', data.submission_id);
+            if (data.images && data.images.length > 0) {
+                uploadedFiles = data.images;
+                pageRotationAngles = data.images.map(img => img.rotation_angle || 0);
+            } else {
+                try {
+                    const imgResp = await fetch(`/api/submission/${data.submission_id}/images/`);
+                    const imgData = await safeFetchJson(imgResp);
+                    if (imgData.success && imgData.images && imgData.images.length > 0) {
+                        uploadedFiles = imgData.images;
+                        pageRotationAngles = imgData.images.map(img => img.rotation_angle || 0);
+                    }
+                } catch (e) {
+                    console.warn("Could not reload persisted submission images:", e);
+                }
+            }
+            if (data.student_name && data.student_name !== 'Pending OCR Extraction') {
+                document.getElementById('studentName').value = data.student_name;
+            }
+            if (data.roll_no) document.getElementById('studentRoll').value = data.roll_no;
             statusDiv.className = "text-xs p-3 rounded-xl bg-emerald-500/10 text-emerald-500 font-bold text-center mt-3";
-            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count} page images to Submission Builder!`;
+            statusDiv.innerText = `✓ Successfully uploaded ${data.image_count || uploadedFiles.length} page image(s) to Submission Builder!`;
             renderThumbnails();
             goToStep(2);
         } else {
@@ -414,7 +466,7 @@ async function uploadRawImages() {
     } catch (err) {
         const statusDiv2 = document.getElementById('uploadStatusText');
         statusDiv2.className = "text-xs p-3 rounded-xl bg-rose-500/10 text-rose-500 font-bold text-center mt-3";
-        statusDiv2.innerText = "Upload Exception: " + err.message;
+        statusDiv2.innerText = "Upload Error: " + err.message;
     } finally {
         isUploading = false;
         if (btn) { btn.disabled = false; btn.innerText = 'Upload Selected Photos Now'; }
@@ -436,12 +488,13 @@ async function uploadSinglePdf(file) {
     formData.append('script_file', file);
 
     try {
+        const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
         const resp = await fetch("{% url 'api_wizard_upload_pdf' exam.id %}", {
             method: 'POST',
             body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: { 'X-CSRFToken': csrf }
         });
-        const data = await resp.json();
+        const data = await safeFetchJson(resp);
         if (data.success) {
             currentSubmissionId = data.submission_id;
             sessionStorage.setItem('ig_manual_sub_id_{{ exam.id }}', data.submission_id);
@@ -502,7 +555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (savedSubId) {
         try {
             const resp = await fetch(`/api/submission/${savedSubId}/images/`);
-            const data = await resp.json();
+            const data = await safeFetchJson(resp);
             if (data.success && data.images && data.images.length > 0
                 && !['AI_EVALUATED', 'UNDER_REVIEW', 'REVIEWED', 'FINALIZED'].includes(data.status)) {
                 currentSubmissionId = parseInt(savedSubId);
@@ -530,7 +583,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function removeAllPages() {
     if (!confirm("Are you sure you want to remove ALL uploaded page images?")) return;
     if (currentSubmissionId) {
-        try { await fetch(`/api/submission/${currentSubmissionId}/delete-all-images/`); }
+        try { 
+            const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
+            await fetch(`/api/submission/${currentSubmissionId}/delete-all-images/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf }
+            }); 
+        }
         catch (e) { console.warn("Error deleting backend images:", e); }
     }
     sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
@@ -641,10 +700,11 @@ async function syncUpdatedPagesToServer() {
 
     if (pageOrders.length > 0) {
         try {
+            const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
             await fetch(`/api/submission/${currentSubmissionId}/reorder-pages/`, {
                 method: 'POST',
                 body: JSON.stringify({ page_orders: pageOrders }),
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }
             });
         } catch (err) {
             console.warn("[PAGE REORDER WARNING]", err);
@@ -702,10 +762,11 @@ async function compileAndPreviewPdf() {
     }
     try {
         await syncUpdatedPagesToServer();
+        const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
         const resp = await fetch(`/api/submission/${currentSubmissionId}/create-pdf/`, {
-            method: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            method: 'POST', headers: { 'X-CSRFToken': csrf }
         });
-        const data = await resp.json();
+        const data = await safeFetchJson(resp);
         if (data.success && data.pdf_url) {
             if (newTab) newTab.location.href = data.pdf_url;
             else window.open(data.pdf_url, '_blank');
@@ -732,24 +793,66 @@ function setupMappingTable() {
     if (rollVal) document.getElementById('confirmStudentRoll').value = rollVal;
 
     manualMappingData.forEach((m, idx) => {
-        m.page_numbers = totalPages === 1 ? [1] : (idx + 1 <= totalPages ? [idx + 1] : [1]);
+        // Multi-page default setup: initialize cleanly
+        if (!m.page_numbers || m.page_numbers.length === 0) {
+            m.page_numbers = totalPages === 1 ? [1] : (idx + 1 <= totalPages ? [idx + 1] : [1]);
+        }
 
         const selectorContainer = document.getElementById(`q_pages_selector_${idx}`);
         if (!selectorContainer) return;
 
-        let pillsHtml = '<span class="text-[11px] font-bold theme-text-muted mr-1">Select Page(s):</span>';
+        let pillsHtml = '<div class="flex flex-wrap items-center gap-1.5 w-full">';
+        pillsHtml += '<span class="text-[11px] font-bold theme-text-muted mr-1">Select Page(s):</span>';
+        
+        // Quick helpers for teacher speed
+        pillsHtml += `
+            <button type="button" onclick="selectAllQuestionPages(${idx}, ${totalPages})" class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300 transition-all mr-1">All (${totalPages})</button>
+            <button type="button" onclick="clearQuestionPages(${idx})" class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-[10px] font-bold text-slate-700 dark:text-slate-300 transition-all mr-2">Clear</button>
+        `;
+
         for (let p = 1; p <= totalPages; p++) {
             const isChecked = m.page_numbers.includes(p);
             pillsHtml += `
-                <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}" id="lbl_q_${idx}_p_${p}">
-                    <input type="checkbox" onchange="toggleQuestionPage(${idx}, ${p}, this.checked)" ${isChecked ? 'checked' : ''} class="text-indigo-600 rounded"> Pg ${p}
+                <label class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}" id="lbl_q_${idx}_p_${p}">
+                    <input type="checkbox" onchange="toggleQuestionPage(${idx}, ${p}, this.checked)" ${isChecked ? 'checked' : ''} class="text-indigo-600 rounded focus:ring-0"> Pg ${p}
                 </label>`;
         }
+        pillsHtml += '</div>';
         selectorContainer.innerHTML = pillsHtml;
         updateMappedLabel(idx);
     });
 
     if (window.lucide) lucide.createIcons();
+}
+
+function selectAllQuestionPages(qIdx, totalPages) {
+    if (!manualMappingData[qIdx]) return;
+    const allPgs = [];
+    for (let p = 1; p <= totalPages; p++) {
+        allPgs.push(p);
+        const lbl = document.getElementById(`lbl_q_${qIdx}_p_${p}`);
+        if (lbl) {
+            lbl.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm';
+            const chk = lbl.querySelector('input[type="checkbox"]');
+            if (chk) chk.checked = true;
+        }
+    }
+    manualMappingData[qIdx].page_numbers = allPgs;
+    updateMappedLabel(qIdx);
+}
+
+function clearQuestionPages(qIdx) {
+    if (!manualMappingData[qIdx]) return;
+    manualMappingData[qIdx].page_numbers = [];
+    const selectorContainer = document.getElementById(`q_pages_selector_${qIdx}`);
+    if (selectorContainer) {
+        selectorContainer.querySelectorAll('label').forEach(lbl => {
+            lbl.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700';
+            const chk = lbl.querySelector('input[type="checkbox"]');
+            if (chk) chk.checked = false;
+        });
+    }
+    updateMappedLabel(qIdx);
 }
 
 function toggleQuestionPage(qIdx, pageNum, isChecked) {
@@ -759,7 +862,7 @@ function toggleQuestionPage(qIdx, pageNum, isChecked) {
     manualMappingData[qIdx].page_numbers = Array.from(pgSet).sort((a, b) => a - b);
     const lbl = document.getElementById(`lbl_q_${qIdx}_p_${pageNum}`);
     if (lbl) {
-        lbl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}`;
+        lbl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold cursor-pointer transition-all ${isChecked ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'}`;
     }
     updateMappedLabel(qIdx);
 }
@@ -803,12 +906,13 @@ async function confirmMappingAndOpenWorkbench() {
     };
 
     try {
+        const csrf = getCookie('csrftoken') || '{{ csrf_token }}';
         const resp = await fetch(`/api/submission/${currentSubmissionId}/confirm-mapping/`, {
             method: 'POST',
             body: JSON.stringify({ confirmed_mappings: confirmedMappings, options: options, mode: 'manual' }),
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }
         });
-        const data = await resp.json();
+        const data = await safeFetchJson(resp);
         if (data.success) {
             sessionStorage.removeItem('ig_manual_sub_id_{{ exam.id }}');
             window.location.href = data.workspace_url || `/teacher/submission/${currentSubmissionId}/workspace/?mode=manual`;

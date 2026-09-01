@@ -3704,6 +3704,7 @@ def evaluate_answer_scripts_list(request, exam_id):
     })
 
 
+@csrf_exempt
 def upload_student_submission(request, exam_id):
     """Handles Single Image, Multi-page PDF, or Batch ZIP upload for student answer scripts."""
     if not request.user.is_authenticated:
@@ -3792,14 +3793,43 @@ def evaluation_workspace(request, submission_id):
     exam = submission.examination
     answers = submission.answers.select_related('question__rubric', 'page', 'evaluation_result').prefetch_related('question__figures_rel', 'question__tables_rel', 'question__formulas_rel').all()
 
+    # Self-heal SubmissionPage records from raw_images if pages are empty or missing page_image
+    raw_images_list = list(submission.raw_images.filter(is_deleted=False).order_by('sequence_order'))
+    if raw_images_list:
+        for r_img in raw_images_list:
+            sp, _ = SubmissionPage.objects.get_or_create(
+                submission=submission,
+                page_number=r_img.sequence_order
+            )
+            if not sp.page_image and r_img.original_file:
+                sp.page_image = r_img.original_file
+                sp.save(update_fields=['page_image'])
+
     # Ensure working copy images exist on disk for all pages (self-healing)
     from core.ai_engine.preprocessing.working_copy_manager import WorkingCopyManager
-    WorkingCopyManager.ensure_working_copies(submission.id)
+    try:
+        WorkingCopyManager.ensure_working_copies(submission.id)
+    except Exception as e_wc:
+        print(f"[WORKSPACE ENSURE WORKING COPIES WARNING] {e_wc}")
 
     # Prefetch QuestionMappings and SubmissionPages for question-scoped visual binding
     from core.models import QuestionMapping
     q_mappings = {qm.question_id: qm for qm in QuestionMapping.objects.filter(submission=submission)}
     all_pages = list(submission.pages.all().order_by('page_number'))
+    
+    # If all_pages is still empty but submission has raw_images, build all_pages objects dynamically
+    if not all_pages and raw_images_list:
+        for r_img in raw_images_list:
+            sp, _ = SubmissionPage.objects.get_or_create(
+                submission=submission,
+                page_number=r_img.sequence_order,
+                defaults={'page_image': r_img.original_file}
+            )
+            if not sp.page_image and r_img.original_file:
+                sp.page_image = r_img.original_file
+                sp.save(update_fields=['page_image'])
+            all_pages.append(sp)
+
     for p in all_pages:
         p_img_url = None
         try:
@@ -3814,6 +3844,17 @@ def evaluation_workspace(request, submission_id):
                 p_img_url = f"{settings.MEDIA_URL.rstrip('/')}/{rel_path.lstrip('/')}"
             except Exception:
                 p_img_url = None
+
+        if not p_img_url:
+            r_match = submission.raw_images.filter(sequence_order=p.page_number, is_deleted=False).first()
+            if r_match and r_match.original_file:
+                try:
+                    p_img_url = r_match.original_file.url
+                    if not p.page_image:
+                        p.page_image = r_match.original_file
+                        p.save(update_fields=['page_image'])
+                except Exception:
+                    pass
         
         p.resolved_image_url = p_img_url
 
@@ -3828,10 +3869,10 @@ def evaluation_workspace(request, submission_id):
         q_dto = QuestionAccessor.to_dto(ans.question)
         eval_res = getattr(ans, 'evaluation_result', None)
         
-        # Resolve mapped pages for this question (fallback to all_pages ONLY if unmapped)
+        # Resolve mapped pages for this question (support multi-page answers)
         qm = q_mappings.get(ans.question.id)
         if qm and qm.page_numbers_json:
-            pg_nums = [int(p) for p in qm.page_numbers_json if str(p).isdigit()]
+            pg_nums = [int(p) for p in qm.page_numbers_json if str(p).isdigit() or isinstance(p, (int, float))]
         elif ans.page:
             pg_nums = [ans.page.page_number]
         else:
@@ -4244,6 +4285,7 @@ def manual_evaluation_wizard(request, exam_id):
     })
 
 
+@csrf_exempt
 def api_upload_raw_images(request, exam_id):
     """Ingests raw student script page images for Submission Builder."""
     if not request.user.is_authenticated:
@@ -4286,6 +4328,7 @@ def api_upload_raw_images(request, exam_id):
                 WorkingCopyManager.flush_submission_pipeline_cache(sub.id)
                 # Clear old raw images if re-uploading
                 sub.raw_images.all().delete()
+                sub.pages.all().delete()
             except StudentSubmission.DoesNotExist:
                 sub = StudentSubmission.objects.create(examination=exam, student_name=student_name, student_roll_no=roll_no)
         else:
@@ -4296,12 +4339,30 @@ def api_upload_raw_images(request, exam_id):
             )
 
         file_logs = []
+        images_data = []
         for seq, img_file in enumerate(image_files, 1):
-            SubmissionImage.objects.create(
+            sub_img = SubmissionImage.objects.create(
                 submission=sub,
                 original_file=img_file,
                 sequence_order=seq
             )
+            # Create/sync SubmissionPage immediately
+            sp, _ = SubmissionPage.objects.get_or_create(
+                submission=sub,
+                page_number=seq,
+                defaults={'page_image': sub_img.original_file}
+            )
+            if not sp.page_image and sub_img.original_file:
+                sp.page_image = sub_img.original_file
+                sp.save(update_fields=['page_image'])
+
+            images_data.append({
+                'id': sub_img.id,
+                'url': sub_img.original_file.url if sub_img.original_file else '',
+                'file_name': os.path.basename(sub_img.original_file.name) if sub_img.original_file else f"Page {seq}",
+                'sequence_order': seq,
+                'rotation_angle': 0
+            })
             file_logs.append(f"{img_file.name} ({img_file.size} bytes)")
 
         with open(trace_file, 'a', encoding='utf-8') as f:
@@ -4311,12 +4372,16 @@ def api_upload_raw_images(request, exam_id):
             'success': True,
             'submission_id': sub.id,
             'image_count': len(image_files),
+            'images': images_data,
+            'student_name': sub.student_name,
+            'roll_no': sub.student_roll_no,
             'message': f'Successfully uploaded {len(image_files)} page images.'
         })
 
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+@csrf_exempt
 def api_wizard_upload_pdf(request, exam_id):
     """Ingests a multi-page student answer script PDF or ZIP for the Evaluation Wizard, renders pages to images, and prepares Submission without immediate AI LLM scoring."""
     if not request.user.is_authenticated:
@@ -4383,6 +4448,7 @@ def api_wizard_upload_pdf(request, exam_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+@csrf_exempt
 def api_get_submission_images(request, submission_id):
     """Returns list of raw page images for a submission."""
     if not request.user.is_authenticated:
@@ -4417,6 +4483,7 @@ def api_get_submission_images(request, submission_id):
     })
 
 
+@csrf_exempt
 def api_delete_all_submission_images(request, submission_id):
     """Deletes all raw page images for a submission and flushes pipeline cache."""
     if not request.user.is_authenticated:
@@ -4429,6 +4496,7 @@ def api_delete_all_submission_images(request, submission_id):
     return JsonResponse({'success': True, 'message': 'All page images and cached pipeline states removed.'})
 
 
+@csrf_exempt
 def api_reorder_submission_pages(request, submission_id):
     """Updates sequence order and rotation angles for existing raw submission pages and flushes pipeline cache."""
     if not request.user.is_authenticated:
@@ -4457,6 +4525,7 @@ def api_reorder_submission_pages(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request method required.'}, status=405)
 
 
+@csrf_exempt
 def api_create_submission_pdf(request, submission_id):
     """Compiles uploaded/reordered raw images or pages into submission_original.pdf and returns preview URL."""
     if not request.user.is_authenticated:
@@ -4529,6 +4598,7 @@ def api_create_submission_pdf(request, submission_id):
         return JsonResponse({'success': False, 'error': f'Failed compiling PDF: {str(e)}'}, status=500)
 
 
+@csrf_exempt
 def api_run_evaluation_v3(request, submission_id):
     """Executes Version 3.0 Computer Vision preprocessing, OCR, segmentation, and LLM evaluation."""
     if not request.user.is_authenticated:
@@ -4588,6 +4658,7 @@ def api_run_evaluation_v3(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
 
 
+@csrf_exempt
 def api_reevaluate_v3(request, submission_id):
     """Re-evaluates a submission with new custom prompt / strictness settings without re-uploading."""
     if not request.user.is_authenticated:
@@ -4628,6 +4699,7 @@ def api_reevaluate_v3(request, submission_id):
     return JsonResponse({'success': False, 'error': 'POST request required'}, status=405)
 
 
+@csrf_exempt
 def api_download_evaluated_pdf(request, submission_id):
     """Generates and serves evaluated script PDF with page-by-page mark distribution overlays."""
     if not request.user.is_authenticated:
@@ -4661,6 +4733,7 @@ def api_download_evaluated_pdf(request, submission_id):
         return JsonResponse({'success': False, 'error': f'Failed generating evaluated PDF: {str(e)}'}, status=500)
 
 
+@csrf_exempt
 def api_analyze_question_mapping(request, submission_id):
     """Executes OCR question detection & semantic matching to build draft question-to-page mappings."""
     if not request.user.is_authenticated:
@@ -4696,6 +4769,7 @@ def api_analyze_question_mapping(request, submission_id):
         return JsonResponse({'success': False, 'error': f'Mapping analysis failed: {str(e)}'}, status=500)
 
 
+@csrf_exempt
 def api_confirm_question_mapping(request, submission_id):
     """Saves teacher confirmed page-to-question mappings and triggers AI Evaluation pipeline."""
     if not request.user.is_authenticated:
@@ -5659,7 +5733,7 @@ def export_course_tabulation(request, course_id):
     Triggers openpyxl Excel exporter for official course tabulation sheet.
     """
     if not request.user.is_authenticated:
-        return JsonResponse({'success': False, 'error': 'Authentication required.'}, status=401)
+        return redirect(f"/teacher/login/?next={request.get_full_path()}")
 
     from core.services.tabulation_exporter import export_course_tabulation_excel
     semester = request.GET.get('semester', 'Spring 2026')

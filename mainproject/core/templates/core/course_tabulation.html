@@ -19,7 +19,7 @@
             <p class="text-xs theme-text-muted mt-1">Course: <strong>{{ course.code }} - {{ course.title }}</strong> | Semester: <strong>{{ tabulation.semester }}</strong> | Section: <strong>{{ tabulation.section }}</strong></p>
         </div>
         <div class="flex items-center gap-2">
-            <a href="{% url 'export_course_tabulation' course.id %}?semester={{ tabulation.semester }}&section={{ tabulation.section }}" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2">
+            <a href="{% url 'export_course_tabulation' course.id %}?semester={{ tabulation.semester }}&section={{ tabulation.section }}" download class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all flex items-center gap-2">
                 <i data-lucide="file-down" class="w-4 h-4"></i> 📥 Download Official OBE Tabulation Sheet (.xlsx)
             </a>
         </div>

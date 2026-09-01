@@ -66,7 +66,10 @@ def export_course_tabulation_excel(course_id: int, semester: str = "Spring 2026"
     wb.save(output)
     output.seek(0)
 
-    filename = f"Tabulation-{semester.replace(' ', '-')}-{course.code}-{section}.xlsx"
+    clean_course_code = str(course.code).replace(' ', '_').replace('/', '_')
+    clean_semester = str(semester).replace(' ', '_')
+    clean_section = str(section).replace(' ', '_')
+    filename = f"Tabulation_{clean_semester}_{clean_course_code}_{clean_section}.xlsx"
     response = HttpResponse(
         output.getvalue(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
