@@ -12,7 +12,6 @@ mainproject/Tabulation-Spring-26-CSC-4383-C.xlsx
 Tabulation-*.xlsx
 *.xlsx
 
-materials
 # ==========================================
 # Scratch & Local Verification Test Scripts
 # ==========================================
@@ -64,7 +63,6 @@ generate_test_student_sheet.py
 .DS_Store
 Thumbs.db
 OCR and HTR
-Materials
 
 # ==========================================
 # Agent & Debug Artifacts
