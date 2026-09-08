@@ -21,7 +21,7 @@ This document covers the functional, behavioral, performance, security, and data
 - AI Multimodal Examination Routine scanning and bulk scheduling.
 - 23-Section IUBAT OBE Question Paper and Rubric authoring.
 - 300 DPI high-resolution answer script preprocessing, hybrid OCR, and boundary segmentation.
-- Dual Evaluation Pipelines: AI Evaluation Wizard (v3.0) and 100% Direct Manual Grading Wizard.
+- Dual Evaluation Pipelines: AI Evaluation Wizard and 100% Direct Manual Grading Wizard.
 - Resilient multi-provider AI evaluation engine with 429 rate limit backoff and Local Moondream 800px LANCZOS preprocessing.
 - Split-screen human-in-the-loop grading workbench with eager-loaded relations (N+1 query free).
 - Real-time Course OBE Tabulation, 8-sheet Excel workbook export (`openpyxl`), and student portal synchronization.
@@ -84,7 +84,7 @@ graph TD
 - Provides an interactive visual mapping modal for teachers to adjust bounding boxes before AI evaluation.
 
 ### 3.5 Dual Evaluation Pipelines & Failover Core (`FR-21` to `FR-25`, `FR-34`)
-- **AI Evaluation Wizard (v3.0)**: Automatic question mapping, confidence ratings, strengths, and mistakes.
+- **AI Evaluation Wizard**: Automatic question mapping, confidence ratings, strengths, and mistakes.
 - **Manual Script Grading Wizard**: Pure PDF page slicing and direct teacher assignment without AI evaluation interference.
 - **Failover Chain**: Local Offline Vision (Moondream2 800px LANCZOS) $\rightarrow$ Groq (Llama-3.3 70B) $\rightarrow$ OpenRouter $\rightarrow$ Gemini (2.5/2.0 Flash) $\rightarrow$ OpenAI (GPT-4o).
 - Enforces 45-second timeout budgets per evaluation and 120-second non-transient cooldowns for HTTP 429 rate limits.

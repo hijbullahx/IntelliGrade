@@ -64,7 +64,7 @@
 
 ### US-07: Faculty Member — Dual Evaluation Wizards (AI vs Direct Manual)
 - **As a** Faculty Examiner,
-- **I want to** choose between AI Evaluation Wizard (v3.0) and Direct Manual Grading Wizard,
+- **I want to** choose between AI Evaluation Wizard and Direct Manual Grading Wizard,
 - **So that** I can either run automated AI grading or grade manually by assigning pages without OCR/AI interference.
 - **Acceptance Criteria**:
   - *Given* the Evaluation Hub,

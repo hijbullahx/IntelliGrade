@@ -1,5 +1,5 @@
 """
-IntelliGrade Global Configuration System v3.0
+IntelliGrade Global Configuration System
 =============================================
 Centralized architecture for environment variables, AI providers, OCR engines,
 document scanner parameters, evaluation prompts, and deployment path resolution.

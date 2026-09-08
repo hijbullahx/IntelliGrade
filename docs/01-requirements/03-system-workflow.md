@@ -33,7 +33,7 @@ sequenceDiagram
     System->>Teacher: Confirmed Question Paper & Rubric Configuration
 
     %% Phase 3: Script Ingestion & Boundary Mapping
-    alt Mode: AI Evaluation Wizard (v3.0)
+    alt Mode: AI Evaluation Wizard
         Teacher->>System: Batch Upload Student Answer Scripts (PDF/Images/ZIP)
         System->>OCR: Render 300 DPI Images + Hybrid OCR (Tesseract / EasyOCR)
         OCR-->>System: Word/Line Coordinates & Raw Text

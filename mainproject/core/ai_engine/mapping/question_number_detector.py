@@ -1,5 +1,5 @@
 """
-IntelliGrade Strict Student Question Header Detection Engine v3.0.
+IntelliGrade Strict Student Question Header Detection Engine.
 Rebuilds question boundary detection into a deterministic, multi-stage classifier.
 
 ABSOLUTE RULES:

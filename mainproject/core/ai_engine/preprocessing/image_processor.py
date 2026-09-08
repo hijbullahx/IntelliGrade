@@ -10,7 +10,7 @@ from django.core.files.base import ContentFile
 
 class ImagePreprocessingService:
     """
-    Production Image Preprocessing & PDF Compilation Engine for IntelliGrade (v3.0).
+    Production Image Preprocessing & PDF Compilation Engine for IntelliGrade.
     Performs Computer Vision pipeline: Ink Color Filtering, Orientation Detection,
     Deskewing, Perspective Correction, Shadow Removal, Background Whitening,
     Contrast Enhancement, and Multi-Image PDF Compilation.

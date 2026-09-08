@@ -34,7 +34,7 @@ graph TD
     end
 
     subgraph Dual Evaluation Pipelines
-        M13[MOD-13: AI Evaluation Wizard v3.0]
+        M13[MOD-13: AI Evaluation Wizard]
         M14[MOD-14: Manual Script Grading Wizard]
         M15[MOD-15: AI Provider Failover Orchestrator]
         M16[MOD-16: TaskRouter & Cooldown Health Tracker]
@@ -133,7 +133,7 @@ graph TD
   - State-machine page propagation assigning consecutive pages to active questions until new headers appear.
   - Teacher confirmation interactive matrix supporting page re-assignments.
 
-### MOD-13: AI Evaluation Wizard (v3.0)
+### MOD-13: AI Evaluation Wizard
 - **Files**: `core/templates/core/evaluation_wizard.html`, `core/views.py` (`api_run_evaluation_v3`)
 - **Key Functions**:
   - Multi-step automated pipeline: Image/PDF upload -> Page Builder -> Computer Vision Preprocessing -> Live OCR Scanner Terminal -> Question Mapping Review -> Automated AI Evaluation.

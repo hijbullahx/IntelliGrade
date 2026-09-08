@@ -263,7 +263,7 @@ class EvaluatedScriptPDFService:
         )
         summary_page.insert_text(
             fitz.Point(35, 125),
-            f"Evaluation Mode: AI Script Engine v3.0  |  Status: {submission.status}  |  Manual Review Needed: {submission.requires_manual_review}",
+            f"Evaluation Mode: AI Script Engine  |  Status: {submission.status}  |  Manual Review Needed: {submission.requires_manual_review}",
             fontsize=8,
             color=(0.3, 0.3, 0.3),
             fontname="helv"
@@ -303,5 +303,5 @@ class EvaluatedScriptPDFService:
             y += 22
 
         summary_page.draw_rect(fitz.Rect(20, h - 60, w - 20, h - 20), color=(0.9, 0.9, 0.9), fill=(0.97, 0.97, 0.98))
-        summary_page.insert_text(fitz.Point(30, h - 40), "Verified by IntelliGrade AI Engine v3.0 & Academic Evaluator", fontsize=8, color=(0.4, 0.4, 0.4), fontname="helv")
+        summary_page.insert_text(fitz.Point(30, h - 40), "Verified by IntelliGrade AI Engine & Academic Evaluator", fontsize=8, color=(0.4, 0.4, 0.4), fontname="helv")
         summary_page.insert_text(fitz.Point(w - 210, h - 40), "Teacher Signature: __________________", fontsize=8, color=(0.3, 0.3, 0.3), fontname="helv")

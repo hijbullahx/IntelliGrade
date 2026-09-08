@@ -103,7 +103,7 @@ graph TD
 - **Question Paper & Rubric Studio**: Build or scan exam papers with 23-section taxonomy (CO/PO, Bloom levels, figures, data tables, LaTeX matrices).
 - **Master Benchmark Solution Studio**: Upload teacher solution scripts and extract step-by-step mark distribution.
 - **Dual Evaluation Wizards**:
-  - *AI Wizard (v3.0)*: Multi-image/PDF upload, automatic OCR boundary detection, confidence review, and AI grading.
+  - *AI Wizard*: Multi-image/PDF upload, automatic OCR boundary detection, confidence review, and AI grading.
   - *Manual Wizard*: Fast PDF page slicing, pure manual question-to-page assignment, and split-screen teacher grading without AI interference.
 - **Split-Screen Grading Workbench**: Side-by-side verification of scanned scripts, OCR text, rubric benchmarks, AI scores, and feedback.
 - **OBE Course Tabulation**: Manage course grade sheets (CT, Mid, Final, Assignment, Attendance 5%) with live bi-directional Excel export and student sync.

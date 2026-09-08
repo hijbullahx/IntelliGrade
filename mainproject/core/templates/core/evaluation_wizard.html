@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Evaluation Wizard (v3.0) - {{ exam.title }} | IntelliGrade{% endblock %}
+{% block title %}Evaluation Wizard - {{ exam.title }} | IntelliGrade{% endblock %}
 
 {% block content %}
 <div class="max-w-6xl mx-auto space-y-6 px-4 py-6">
@@ -13,11 +13,11 @@
                 <span>/</span>
                 <span>{{ exam.course.code }}</span>
             </div>
-            <h1 class="text-2xl font-black theme-text-primary mt-1">{% if is_manual %}✍️ Manual Script Evaluation & Mapping Wizard{% else %}AI Answer Script Evaluation Wizard (v3.0){% endif %}</h1>
-            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ exam.questions.count }}</strong> | Mode: <strong class="{% if is_manual %}text-brand-500{% else %}text-emerald-500{% endif %}">{% if is_manual %}✍️ Manual Teacher Grading{% else %}🚀 AI Engine v3.0{% endif %}</strong></p>
+            <h1 class="text-2xl font-black theme-text-primary mt-1">{% if is_manual %}✍️ Manual Script Evaluation & Mapping Wizard{% else %}AI Answer Script Evaluation Wizard{% endif %}</h1>
+            <p class="text-xs theme-text-muted">Examination: <strong>{{ exam.title }}</strong> | Questions: <strong>{{ exam.questions.count }}</strong> | Mode: <strong class="{% if is_manual %}text-brand-500{% else %}text-emerald-500{% endif %}">{% if is_manual %}✍️ Manual Teacher Grading{% else %}🚀 AI Engine{% endif %}</strong></p>
         </div>
-        <div class="px-3.5 py-1.5 rounded-full {% if is_manual %}bg-brand-500/10 text-brand-500 border border-brand-500/20{% else %}bg-emerald-500/10 text-emerald-500 border border-emerald-500/20{% endif %} text-xs font-bold flex items-center gap-1.5">
-            <i data-lucide="{% if is_manual %}edit-3{% else %}shield-check{% endif %}" class="w-4 h-4"></i> {% if is_manual %}Manual Grading Mode{% else %}Production Engine v3.0{% endif %}
+        <div class="px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-2 {% if is_manual %}bg-brand-500/10 text-brand-600 border-brand-500/20{% else %}bg-emerald-500/10 text-emerald-600 border-emerald-500/20{% endif %}">
+            <i data-lucide="{% if is_manual %}edit-3{% else %}shield-check{% endif %}" class="w-4 h-4"></i> {% if is_manual %}Manual Grading Mode{% else %}Production Engine{% endif %}
         </div>
     </div>
 
@@ -420,7 +420,7 @@
         </div>
 
         <div id="evalTerminalLog" class="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-[11px] text-emerald-400 h-48 overflow-y-auto space-y-1">
-            <div>[PIPELINE STARTED] AI Script Evaluator v3.0 Initialized.</div>
+            <div>[PIPELINE STARTED] AI Script Evaluator Initialized.</div>
         </div>
 
         <div class="flex justify-end border-t border-slate-800 pt-3 hidden" id="evalModalCloseRow">

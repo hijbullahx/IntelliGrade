@@ -47,7 +47,7 @@ graph TD
     end
 
     subgraph Dual Evaluation Pipelines
-        D5 -->|Pipeline A: AI Wizard v3.0| E1{Failover AI Orchestrator}
+        D5 -->|Pipeline A: AI Wizard| E1{Failover AI Orchestrator}
         E1 -->|1. Local Offline Vision| E2[Moondream2 / Ollama (800px LANCZOS)]
         E1 -->|2. High-Speed Cloud LLM| E3[Groq Llama-3.3 70B]
         E1 -->|3. Cloud Gateway| E4[OpenRouter API]
@@ -159,7 +159,7 @@ journey
       Author Question Paper with 23 OBE Fields: 5: Teacher
       Upload Master Benchmark Solution: 4: Teacher
     section Script Ingestion & Evaluation
-      Select Evaluation Pipeline (AI v3.0 or Manual): 5: Teacher
+      Select Evaluation Pipeline (AI Wizard or Manual): 5: Teacher
       Upload Multi-Page Script PDF / Images / ZIP: 5: Teacher
       Confirm Question Boundary Page Mappings: 5: Teacher
       Execute Multi-Provider AI Scoring: 5: Teacher
@@ -177,7 +177,7 @@ journey
    - Maps 23 OBE fields: Bloom's Level = `Apply (C3)`, CO = `CO2`, PO = `[PO1, PO2]`, KP = `[KP3]`, CEP = `[CEP1]`, CEA = `[CEA2]`.
    - Adds Rubric criteria: 4 marks for vector decomposition, 4 marks for cross product matrix representation, 2 marks for final simplified matrix.
 2. **Dual Evaluation Pipelines**:
-   - **Pipeline A: AI Answer Script Evaluation Wizard (v3.0)** (`/teacher/exam/3/evaluation-wizard/?new=1`):
+   - **Pipeline A: AI Answer Script Evaluation Wizard** (`/teacher/exam/3/evaluation-wizard/?new=1`):
      - Uploads `Student_22303142_Script.pdf`.
      - Wizard extracts 300 DPI page images, runs OCR, detects `"Answer to the Question No. 1"`, and maps it to pages 1-2.
      - Teacher confirms mapping -> System dispatches to TaskRouter (Moondream/Groq/Gemini).

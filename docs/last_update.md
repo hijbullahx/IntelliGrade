@@ -19,7 +19,7 @@
 4. **Master Benchmark Solution Extraction**: OCR extraction and step-by-step mark distribution ingestion from teacher's golden benchmark solutions.
 5. **Universal Answer Script Processing**: Ingestion of multi-page PDFs, high-res photos, and nested ZIP archives with automatic 300 DPI image rendering, rotation management, and cached text normalization.
 6. **Dual Evaluation Pipelines**:
-   - **AI Answer Script Evaluation Wizard (v3.0)**: Automatic question heading detection, spatial region segmentation, multi-signal confidence matching, and automated AI scoring.
+   - **AI Answer Script Evaluation Wizard**: Automatic question heading detection, spatial region segmentation, multi-signal confidence matching, and automated AI scoring.
    - **Manual Script Evaluation & Mapping Wizard**: 100% direct teacher marking with zero AI/OCR interference, fast PDF page slicing, manual question-to-page assignment, and split-screen teacher grading.
 7. **Multi-Provider AI Evaluation & Failover Core**: Resilient orchestrator with task routing, cooldown registries (429 handling), Local Ollama Moondream vision (800px LANCZOS downsampling, JPEG quality 75), Groq, OpenRouter, and Gemini providers.
 8. **Interactive Split-Screen Workbenches**: High-resolution script viewer, OCR overlay, bounding box visualizer, rubric criteria checklist, marks override, AI feedback editor, and live re-evaluation triggers.

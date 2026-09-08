@@ -33,7 +33,7 @@ Unlike generic AI grading tools, IntelliGrade is custom-tailored to the institut
 - **Specific Objectives**:
   1. Reduce answer script grading time by up to 70% through automated OCR and AI-suggested marks.
   2. Implement complete 23-section IUBAT OBE taxonomy metadata across all examination questions.
-  3. Provide dual evaluation workflows: Automated AI Evaluation Wizard (v3.0) and 100% Direct Manual Grading Wizard.
+  3. Provide dual evaluation workflows: Automated AI Evaluation Wizard and 100% Direct Manual Grading Wizard.
   4. Provide a split-screen teacher grading workbench with 1-click override and approval mechanisms.
   5. Implement real-time Course OBE Tabulation with bi-directional 8-sheet Excel workbook export (`openpyxl`).
   6. Provide role-based access control (RBAC) portals for Chief Exam Controller, Department Head, Teacher, and Student.

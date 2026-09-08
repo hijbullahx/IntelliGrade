@@ -78,7 +78,7 @@ FR-32     Institutional Email Service The system SHALL dispatch non-blocking bac
                                       intelligrade@dsr.iubat.ac.bd for results, credentials, and OTPs.
 FR-33     Student Dashboard           The system SHALL display real-time course grades, cumulative GPA (4.00 scale),
                                       question-wise score feedback, and certified PDF download links.
-FR-34     Dual Evaluation Wizards     The system SHALL provide both AI Wizard (v3.0) and Manual Script Grading Wizard
+FR-34     Dual Evaluation Wizards     The system SHALL provide both AI Wizard and Manual Script Grading Wizard
                                       allowing pure page slicing and direct teacher assignment without AI scoring.
 FR-35     Finalization Storage Purge  The system SHALL automatically delete unneeded draft working images from
                                       media/submission_working/ upon certified PDF creation.

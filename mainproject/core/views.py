@@ -4341,7 +4341,7 @@ def export_evaluation_report(request, exam_id):
 
 
 def evaluation_wizard(request, exam_id):
-    """Multi-Step Submission & Evaluation Wizard (v3.0)."""
+    """Multi-Step Submission & Evaluation Wizard."""
     if not request.user.is_authenticated:
         return redirect('teacher_login')
 

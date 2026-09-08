@@ -40,7 +40,7 @@ def get_authoritative_answer_key(question) -> str:
 
 class AIScriptEvaluator:
     """
-    Production AI Answer Script Evaluation Engine (v3.0) for IntelliGrade.
+    Production AI Answer Script Evaluation Engine for IntelliGrade.
     Fully refactored to use canonical QuestionAccessor and QuestionDTO across all steps.
     Includes automated LLM JSON validation, auto-retry, raw response logging, and robust fallback.
     """
