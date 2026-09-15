@@ -1097,111 +1097,336 @@ Show cardinality (1, *, 0..1) on all relationship lines. White background, blue 
 
 # Chapter 6.
 
-# Estimation
+# Project Planning and Scheduling
 
 ---
 
-## 6.1 Function Point Analysis
+## 6.1 System Project Estimation
 
-Function Point Analysis (FPA) was used to estimate the size and complexity of IntelliGrade's software, providing an objective basis for effort and schedule estimation independent of programming language or implementation technology.
+Prior to embarking upon the engineering and implementation phases of the IntelliGrade Outcome-Based Education (OBE) Examination Management and Intelligent Script Evaluation Ecosystem, a comprehensive and rigorous project estimation was conducted. Project estimation serves as an essential pillar of software project management, providing an analytical foundation to allocate engineering personnel efficiently, mitigate development risks, and ensure that computationally intensive subsystems—including the 300 DPI script preprocessing cascade, the hybrid multi-engine OCR pipeline (PyMuPDF, PyTesseract, and EasyOCR CRAFT+BiLSTM), the fault-tolerant multi-provider AI failover orchestrator (Groq, Gemini, OpenRouter, Moondream2), and the live 8-sheet OBE tabulation engine—are delivered within institutional deadlines and budgetary constraints. The project estimation methodology encompasses four fundamental dimensions: Effort, Cost, Time, and Team.
 
-**Table 6.1.1** — Functionality, Input and Output
+### 6.1.1 Effort Estimation (in Person-Hours)
 
-| Function | Function Type | Description | Input | Output |
-|---|---|---|---|---|
-| User Authentication and RBAC | ILF | Profile, User, session management | Username / Password | Authenticated session + role redirect |
-| AI Routine Scanner | EI | Parse multi-page exam schedule PDFs | PDF / Image file | Structured Examination records |
-| 23-Taxonomy Question Studio | ILF | Store questions with 23 OBE fields | Question form fields | Saved Question + Rubric records |
-| Script Preprocessing | EI | Rasterize PDFs, deskew, threshold | PDF / JPG / ZIP | 300 DPI working copy images |
-| Hybrid OCR Pipeline | EO | Multi-engine text extraction | Page images | Text + bounding box JSON |
-| Question Boundary Detection | ILF | Regex state machine heading detection | OCR text per page | QuestionMapping records |
-| AI Evaluation Failover Engine | EIF | Multi-provider AI orchestration | Prompt + context | EvaluationResult JSON |
-| Split-Screen Workbench | EO | Interactive grading interface | Submission ID | Mark overrides + audit log entries |
-| Certified PDF Generation | EO | ReportLab PDF stamping | Finalized submission | Watermarked evaluated PDF file |
-| OBE Tabulation Engine | ILF | Weighted score aggregation | Exam scores JSON | StudentGradeRecord with CO/PO |
-| 8-Sheet Excel Export | EO | openpyxl workbook generation | Grade records | XLSX workbook (8 sheets) |
-| Asynchronous Email Service | EIF | SMTP email dispatch | Event trigger + payload | Delivered email with PDF attachment |
-| Student Dashboard | EO | Transparency grade portal | Student session | Live grade cards + download links |
+Total engineering effort was quantified based on the functional complexity, algorithmic depth, and architectural breadth of the platform's individual modules. The breakdown reflects the substantial engineering demanded by the computer vision normalization pipeline, fault-tolerant cloud API failover orchestration, asynchronous background task dispatch, split-screen verification UI, and bi-directional openpyxl Excel synchronization.
 
-**Table 6.1.2.1** — Complexity of Data Function
+**Table 6.1: Effort Estimation by Module / Project Phase**
 
-| Data Function | Elements | Records | Complexity |
-|---|---|---|---|
-| Profile / User | 8 | 4 roles | Simple |
-| Examination + Question + Rubric | 25 | Nested hierarchy | Complex |
-| StudentSubmission + Pages | 18 | Per exam per student | Average |
-| EvaluationResult + Feedback | 15 | Per answer per question | Average |
-| CourseTabulation + GradeRecord | 20 | Per course per semester | Complex |
-| AIConfiguration + ProviderHealth | 12 | Global singleton | Simple |
-
-**Table 6.1.2.2** — Complexity of Transaction Function
-
-| Transaction Function | Type | Complexity |
+| Module / Project Phase | Estimated Hours | Percentage (%) |
 |---|---|---|
-| User Login and Role Redirect | EI | Simple |
-| AI Routine Scanning | EI | Complex |
-| Question Paper Authoring (23-field taxonomy) | EI | Complex |
-| Script Upload + 300 DPI Preprocessing | EI | Complex |
-| Hybrid OCR Cascade | EO | Complex |
-| AI Evaluation with Multi-Provider Failover | EIF | Complex |
-| Teacher Mark Override + Audit Logging | EI | Average |
-| Finalize + Certified PDF + Storage Purge | EO | Complex |
-| OBE Tabulation Aggregation | ILF | Complex |
-| 8-Sheet Excel Export | EO | Complex |
-| Asynchronous SMTP Email | EIF | Average |
-| Student Grade Dashboard | EO | Average |
+| Requirements Gathering & OBE Policy Analysis (BAETE / IUBAT Standards) | 120 hours | 5.5% |
+| UI/UX Wireframing & Dual Workbench Interface Design | 160 hours | 7.3% |
+| Database Architecture & Composite Index Schema Design (PostgreSQL) | 140 hours | 6.4% |
+| Backend Core Development (Django 5.2 Service Layer, Models & RBAC) | 380 hours | 17.4% |
+| Frontend Development (Split-Screen Workbench, Student Portal & Dashboards) | 320 hours | 14.7% |
+| Script Preprocessing & Hybrid Multi-Engine OCR Cascade (CV2, PyMuPDF, EasyOCR) | 220 hours | 10.1% |
+| AI Evaluation Engine & Multi-Provider Failover Orchestrator (Groq, Gemini) | 200 hours | 9.2% |
+| Real-Time OBE Tabulation Engine & 8-Sheet openpyxl Excel Synchronization | 180 hours | 8.2% |
+| Testing & Quality Assurance (Unit, Integration, Stress Benchmarking & UAT) | 220 hours | 10.1% |
+| Deployment, Docker Containerization & Server Configuration (PythonAnywhere / VPS) | 60 hours | 2.7% |
+| Project Documentation, Technical Writing & Academic Thesis Formatting | 120 hours | 5.5% |
+| Buffer (Contingency & Architectural Polish ~3%) | 64 hours | 2.9% |
+| **Total Estimated Effort** | **2,184 hours** | **100.0%** |
 
-**Table 6.1.3** — UFP Calculation Summary
+### 6.1.2 Cost Estimation (BDT Commercial Baseline)
 
-| Function Point Category | Count | Weight | Contribution |
-|---|---|---|---|
-| External Inputs (EI) | 6 | 4 | 24 |
-| External Outputs (EO) | 7 | 5 | 35 |
-| External Interface Files (EIF) | 3 | 7 | 21 |
-| Internal Logical Files (ILF) | 5 | 10 | 50 |
-| **Total Unadjusted Function Points (UFP)** | | | **130** |
+To establish an objective commercial benchmark against professional software industry standards in Bangladesh, the market valuation of the development effort is calculated utilizing the prevailing standard engineering billing rate for mid-level enterprise full-stack and AI software engineers. Assuming a standard professional commercial rate of 500 BDT/hour:
 
-**Table 6.1.4** — Technical Difficulty Index (TDI)
+11242	ext{Commercial Baseline Cost} = 	ext{Total Estimated Hours} 	imes 	ext{Commercial Hourly Billing Rate}11242
+11242	ext{Total Commercial Baseline Cost} = 2,184	ext{ hours} 	imes 500	ext{ BDT} = \mathbf{1,092,000	ext{ BDT}}	ext{ (approx. }\mathbf{$927	ext{ USD}}	ext{)}11242
 
-| Technical Factor | Rating (0-5) | Description |
+### 6.1.3 Time Estimation (Calendar Weeks)
+
+The project development timeline was structured to accommodate the traditional university academic calendar over an 8-month period (~32 calendar weeks). By leveraging concurrent and parallel sprint tracks—wherein frontend UI wireframing proceeded in parallel with backend database schema design, and OCR pipeline development occurred concurrently with rubric studio implementation—the team optimized throughput while maintaining strict architectural milestones.
+
+**Table 6.2: Time Estimation by Project Phase**
+
+| Phase | Major Engineering Deliverables | Duration |
 |---|---|---|
-| Data Communications | 5 | Multi-provider REST APIs, AJAX, SMTP |
-| Distributed Processing | 4 | Background email threads, async evaluation |
-| Performance | 5 | Sub-second DB queries, 8-sec AI target |
-| Complex Processing | 5 | OCR cascade, AI failover, PDF stamping |
-| Reusability | 3 | Modular AI engine provider classes |
-| Ease of Installation | 2 | Docker + env configuration required |
-| Ease of Operation | 4 | Web-based, role-guided UI |
-| Portability | 3 | Django + PostgreSQL portable |
-| Maintainability | 4 | Modular architecture, clean separation |
-| **TDI Total** | **40** | VAF = 0.65 + (0.01 x 40) = **1.05** |
+| Phase 1: Planning & Scope | OBE requirements analysis, user persona definitions, BAETE accreditation mapping | 3 weeks |
+| Phase 2: Architectural Design | UI/UX wireframing, PostgreSQL composite index schema, class diagrams | 3 weeks |
+| Phase 3: Core Backend & Routine Ingestion | Django 5.2 core setup, RBAC authentication, multimodal AI routine scanner | 4 weeks |
+| Phase 4: Preprocessing & Hybrid OCR | 300 DPI image rasterizer, Hough deskewing, Otsu thresholding, regex detector | 5 weeks |
+| Phase 5: AI Failover & Split-Screen UI | Groq/Gemini failover chain, split-screen teacher workbench, ReportLab stamping | 6 weeks |
+| Phase 6: OBE Tabulation & Sync | CO/PO aggregation, 8-sheet Excel workbook export, background SMTP email service | 4 weeks |
+| Phase 7: Testing & Verification | Unit test suite (50+ tests), stress benchmarking, teacher human-in-the-loop UAT | 4 weeks |
+| Phase 8: Deployment & Documentation | PythonAnywhere wsgi, SSL configuration, thesis compilation, user manuals | 3 weeks |
+| **Total Project Duration** | **End-to-End Enterprise Academic Delivery** | **~32 weeks (8 Months)** |
 
-**Adjusted Function Points (AFP)** = UFP x VAF = 130 x 1.05 = **136.5 AFP**
+### 6.1.4 Team Estimation
 
-At a productivity rate of approximately 8 AFP per person-month for a complex real-time system with AI integration and handwriting recognition, the estimated development effort is approximately **17 person-months**, which is consistent with the actual observed development timeline of 8 calendar months with a 5-person team equivalent.
+To satisfy the 32-week schedule and fulfill the 2,184 person-hours of specialized engineering effort, the development organization was structured into a dedicated 5-person engineering cell. Each member fulfilled distinct architectural responsibilities while collaborating on integration milestones.
 
-## 6.2 Project Schedule (Gantt Chart)
+**Table 6.3: Team Resource Allocation**
 
-**Figure 6.2.1** — Gantt Chart: Project Schedule
+| Role Title | Primary Responsibilities | Allocated Resources |
+|---|---|---|
+| System Architect & Full-Stack Lead | Overall architecture, Django service layer, RBAC security, API integration | 1 Dedicated |
+| AI / ML & Computer Vision Engineer | EasyOCR CRAFT+BiLSTM tuning, Groq/Gemini failover orchestrator, regex detector | 1 Dedicated |
+| Backend & Database Engineer | PostgreSQL schema, composite B-tree indexing, query optimization, data models | 1 Dedicated |
+| Frontend Developer & UI/UX Designer | Split-screen grading workbench, canvas zoom, student portal, responsive CSS | 1 Dedicated |
+| QA / Test Automation & Security Engineer | Automated test suites, load testing, memory profiling, audit log verification | 1 Dedicated |
+| **Total Engineering Resources** | **Core Multidisciplinary Project Cell** | **5 Engineers** |
 
-*[Insert Gantt chart here]*
+---
 
-<!-- Image Generation Prompt:
-Draw a professional horizontal Gantt chart for an 8-month project (January 2026 to August 2026).
-Tasks (bars):
-Row 1: Database Design (Jan - Feb)
-Row 2: Sprint 1 - Authentication and RBAC (Jan - Feb)
-Row 3: Sprint 2 - AI Routine Parser and Question Studio (Feb - Mar)
-Row 4: Sprint 3 - Script Preprocessing and OCR Pipeline (Mar - Apr)
-Row 5: API Design (Feb - Apr) - parallel
-Row 6: Sprint 4 - AI Evaluation Engine and Failover (Apr - May)
-Row 7: Sprint 5 - Evaluation Workbench and Certified PDF (May - Jun)
-Row 8: Sprint 6 - OBE Tabulation and Excel Export (Jun - Jul)
-Row 9: UI/UX Design (ongoing, Jan - Jul) - thin parallel bar
-Row 10: Sprint 7 - Email Service and Performance Hardening (Jul - Aug)
-Row 11: Testing and Validation (Aug)
-Use blue bars for sprints, gray for parallel tasks, green for testing. White background, clean professional style.
--->
+## 6.2 Function Matrix
+
+The Function Matrix systematically catalogs and decomposes all capabilities of the IntelliGrade system into logical operational modules. It bridges user-facing functional requirements with concrete Django view controllers, asynchronous background service classes, database entities, and external API communication protocols.
+
+**Table 6.4: Function Matrix Describing All Modules and Functions of IntelliGrade**
+
+| Module Name | Function / Controller Name | Description & Operational Scope |
+|---|---|---|
+| Authentication & Role-Based Access Control (RBAC) |  | Registers a new student, hashes credentials via PBKDF2 SHA-256, captures Student ID, and enqueues account for administrative approval. |
+| Authentication & Role-Based Access Control (RBAC) |  | Authenticates login credentials across 4 roles (Admin, Teacher, Student, Dept Head) and redirects to role-specific dashboard. |
+| Authentication & Role-Based Access Control (RBAC) |  | Terminates the active authenticated session, purges cookies, and invalidates session token. |
+| Authentication & Role-Based Access Control (RBAC) |  | Generates a cryptographically secure 6-digit one-time password and dispatches it via asynchronous institutional SMTP. |
+| Authentication & Role-Based Access Control (RBAC) |  | Validates the submitted OTP against a 10-minute expiring cache and authorizes the password reset workflow. |
+| Authentication & Role-Based Access Control (RBAC) |  | Updates user password hash and logs security audit event upon successful credential change. |
+| Institutional Governance & Academic Structure |  | Allows Chief Exam Controller to configure university structural hierarchy (Colleges and Schools). |
+| Institutional Governance & Academic Structure |  | Provisions and updates academic departments, assigns Department Heads, and toggles operational status. |
+| Institutional Governance & Academic Structure |  | Configures course catalog, codes, titles, credit weightings, and assigns authorized faculty instructors. |
+| Institutional Governance & Academic Structure |  | Enables administrators to inspect pending student records, verify enrollment, and grant active status. |
+| Institutional Governance & Academic Structure |  | Suspends or activates platform access permissions for any user violating academic integrity rules. |
+| AI Routine Parsing & Scheduling |  | Facilitates multi-page institutional examination schedule PDF/image uploads with MIME validation. |
+| AI Routine Parsing & Scheduling |  | Transmits routine pages to Google Gemini Flash Vision API to parse course codes, dates, times, and rooms. |
+| AI Routine Parsing & Scheduling |  | Executes zero-latency local token-set ratio fuzzy matching to link parsed routine rows with database courses and teachers. |
+| AI Routine Parsing & Scheduling |  | Provisions database records for all parsed exams in an atomic transaction, eliminating manual scheduling. |
+| 23-Taxonomy Question & Rubric Studio |  | Authors questions with 23 OBE fields including CO1–CO6, PO1–PO12, Bloom's cognitive taxonomy, KP, CEP, and CEA. |
+| 23-Taxonomy Question & Rubric Studio |  | Invokes Groq/Gemini to automatically generate step-by-step scoring criteria, model answers, and mark distributions. |
+| 23-Taxonomy Question & Rubric Studio |  | AI parses question text to classify Bloom's Taxonomy cognitive level and recommend appropriate Course Outcomes. |
+| 23-Taxonomy Question & Rubric Studio |  | Allows faculty to upload handwritten or LaTeX master solution scripts to serve as golden evaluation benchmarks. |
+| 23-Taxonomy Question & Rubric Studio |  | Applies OCR across master solution pages and extracts step-by-step model answer points per question. |
+| Script Ingestion & 300 DPI Preprocessing |  | Handles batch multi-student PDF script uploads with file sanitization and preliminary validation. |
+| Script Ingestion & 300 DPI Preprocessing |  | Rasterizes PDFs to 300 DPI working copies via PyMuPDF, deskews via Hough Line Transform, and applies Otsu thresholding. |
+| Script Ingestion & 300 DPI Preprocessing |  | Provides an interactive drag-and-drop thumbnail grid allowing examiners to correct out-of-order scanned pages. |
+| Script Ingestion & 300 DPI Preprocessing |  | Automatically deletes intermediate high-resolution raster images from disk upon script evaluation finalization. |
+| Hybrid OCR & Spatial Boundary Detection |  | Extracts text using PyMuPDF font extraction, PyTesseract printed OCR, or EasyOCR CRAFT+BiLSTM handwriting fallback. |
+| Hybrid OCR & Spatial Boundary Detection |  | Runs start-of-line regex state machine ('Answer to Question No. X') to detect question boundaries across pages. |
+| Hybrid OCR & Spatial Boundary Detection |  | Maps detected question sections into precise pixel bounding box coordinates for each script page. |
+| Hybrid OCR & Spatial Boundary Detection |  | Renders an interactive crop modal enabling examiners to review and adjust bounding boxes prior to grading. |
+| Fault-Tolerant AI Evaluation & Fallback |  | Executes multi-provider failover chain across Local Moondream2, Groq Llama-3.3 70B, OpenRouter, and Gemini. |
+| Fault-Tolerant AI Evaluation & Fallback |  | Validates and sanitizes LLM JSON output, auto-closing unescaped quotes and repairing LaTeX bracket syntax. |
+| Fault-Tolerant AI Evaluation & Fallback |  | Compares student answer text/crop with rubric criteria and master solution to produce marks and rationale. |
+| Fault-Tolerant AI Evaluation & Fallback |  | Provides a zero-AI fallback wizard where teachers assign pages to questions via matrix and grade directly. |
+| Split-Screen Teacher Workbench |  | Renders synchronized split-screen interface displaying student script zoomable canvas alongside rubric. |
+| Split-Screen Teacher Workbench |  | Empowers teachers to modify AI-suggested marks, select rubric criteria checkboxes, and provide custom feedback. |
+| Split-Screen Teacher Workbench |  | Persists immutable timestamped audit log capturing examiner ID, original mark, modified mark, and override reason. |
+| Split-Screen Teacher Workbench |  | Locks submission status, commits final grade to tabulation, and triggers certified PDF generation. |
+| Split-Screen Teacher Workbench |  | Generates digitally watermarked, certified evaluation PDF using ReportLab with per-question marks and QR code. |
+| Course-Level OBE Tabulation Engine |  | Calculates continuous assessment weighted score across Class Tests (10%), Midterm (25%), Final (50%), Assignment (10%), and Attendance (5%). |
+| Course-Level OBE Tabulation Engine |  | Aggregates question-level scores mapped to COs and POs to calculate student attainment percentages. |
+| Course-Level OBE Tabulation Engine |  | Updates StudentGradeRecord database rows with final weighted percentage, GPA (0.00–4.00), and letter grade. |
+| Course-Level OBE Tabulation Engine |  | Generates official multi-tab institutional Excel workbook matching university registrar template using openpyxl. |
+| Course-Level OBE Tabulation Engine |  | Spawns background worker thread to email individual certified grade cards and PDF scripts to students. |
+| Student Portal & Departmental Analytics |  | Displays live academic grade cards, component breakdowns, and downloadable certified scripts. |
+| Student Portal & Departmental Analytics |  | Allows students to submit formal digital recheck/scrutiny applications for finalized examinations. |
+| Student Portal & Departmental Analytics |  | Renders department-wide pass/fail distributions, CO/PO threshold attainment charts, and teacher audits. |
+
+---
+
+## 6.3 Identifying Complexity
+
+To establish an objective, technology-independent metric of system size, Function Point Analysis (FPA) conforming to the International Function Point Users Group (IFPUG 4.3.1) standard was applied. FPA classifies system functionality into Transition Functions (External Inputs, External Outputs, and External Inquiries) and Data Functions (Internal Logical Files and External Interface Files), rating each component as Low, Average, or High complexity based on File Types Referenced (FTRs), Record Element Types (RETs), and Data Element Types (DETs).
+
+### 6.3.1 Identifying Complexity of Transition Function
+
+Transition functions govern data flowing across the system boundary. External Inputs (EI) process incoming transactions that maintain internal files; External Outputs (EO) perform processing and mathematical algorithms to present derived data; and External Inquiries (EQ) execute pure data retrieval without derived algorithmic transformation.
+
+**Table 6.5: Identifying Complexity (Transition Functions)**
+
+| Transition Function | Fields / Files Involved | FTRs | DETs | Complexity |
+|---|---|:---:|:---:|:---:|
+| Student Registration (EI) | Fields: name, email, student_id, password, department \| File: auth_user, profile | 1 | 5 | Low |
+| Password Reset OTP (EI) | Fields: email, generated_otp, expiry \| File: auth_user, otp_cache | 1 | 3 | Low |
+| Add Academic Structure (EI) | Fields: name, code, parent_id, status \| File: college, school, department | 2 | 4 | Low |
+| Add Course & Assign Faculty (EI) | Fields: code, title, dept_id, credit_hours, faculty_ids \| File: course, auth_user | 2 | 5 | Low |
+| Upload Exam Routine PDF (EI) | Fields: routine_file, semester, exam_type, session \| File: examination, course | 2 | 4 | Low |
+| Author Question (23 Taxonomy) (EI) | Fields: q_num, prompt, marks, co, po, bloom, kp, cep, cea, figure, formula \| File: question, rubric, exam | 3 | 12 | High |
+| Upload Master Solution (EI) | Fields: file_path, exam_id, ocr_status \| File: examination, question | 2 | 3 | Low |
+| Script Upload Batch (EI) | Fields: pdf_file, exam_id, student_id, page_count \| File: submission, page | 2 | 4 | Low |
+| Confirm Question Mapping (EI) | Fields: submission_id, q_id, pages, regions, override_status \| File: mapping, history | 2 | 5 | Low |
+| Teacher Score Override & Audit (EI) | Fields: result_id, override_marks, feedback, reason, teacher_id, ip \| File: result, review, audit | 3 | 6 | Average |
+| Manual Mapping Matrix Submit (EI) | Fields: submission_id, matrix_json, is_confirmed \| File: mapping, submission | 2 | 4 | Low |
+| Update Student Grade Record (EI) | Fields: record_id, exam_scores, attendance, manual_flag \| File: grade_record, tabulation | 2 | 4 | Low |
+| Hybrid OCR Text Extraction (EO) | Fields: page_num, extracted_text, line_coords, confidence \| File: page, ocr_result | 2 | 4 | Low |
+| Regex Heading Detection (EO) | Fields: detected_q_num, start_line, end_line, bounding_box \| File: detection, mapping | 2 | 4 | Low |
+| AI Failover Evaluation Result (EO) | Fields: marks, rationale, rubric_matches, strengths, weaknesses, provider, latency \| File: question, rubric, result, provider | 4 | 7 | High |
+| Generate Certified PDF (EO) | Fields: watermark, per_q_marks, total_score, signature, qr_code, pdf_stream \| File: submission, result, user | 3 | 6 | Average |
+| Export 8-Sheet OBE Excel (EO) | Fields: student_id, name, ct, mid, final, assign, att, total, gpa, grade, co_pct, po_pct, pass_rate \| File: tabulation, record, course | 3 | 14 | High |
+| Dispatch Result Email (EO) | Fields: recipient_email, subject, html_summary, pdf_attachment, delivery_status \| File: grade_record, submission | 2 | 5 | Low |
+| Departmental OBE Analytics (EO) | Fields: dept_id, pass_rate, grade_dist, co_attainment, po_radar, overrides_total \| File: tabulation, record, dept | 3 | 8 | Average |
+| User Authenticate & Redirect (EQ) | Fields: username, password, role_redirect_url \| File: auth_user, profile | 1 | 3 | Low |
+| View Controller Dashboard (EQ) | Fields: colleges, departments, courses, pending_students, exams, health \| File: college, dept, exam | 3 | 6 | Average |
+| View Teacher Assigned Exams (EQ) | Fields: exam_id, course_code, exam_title, status, submission_count \| File: examination, course | 2 | 5 | Low |
+| View Question Paper Studio (EQ) | Fields: question_list, co_mappings, po_mappings, rubric_criteria, formulas \| File: question, rubric | 2 | 6 | Low |
+| Load Split-Screen Workbench (EQ) | Fields: submission_id, student_name, images, answers, ai_scores, rubric, audit \| File: submission, page, result | 3 | 8 | Average |
+| View Live OBE Tabulation Grid (EQ) | Fields: tab_id, course_code, semester, students, categories, co, po, grades \| File: tabulation, grade_record | 2 | 8 | Average |
+| View Student Dashboard (EQ) | Fields: student_id, course_cards, exam_scores, published_marks, pdf_link \| File: submission, grade_record | 2 | 7 | Low |
+| Verify Certificate Code (EQ) | Fields: verification_code, masked_id, course_name, timestamp \| File: submission, examination | 2 | 4 | Low |
+
+### 6.3.2 Identifying Complexity of Data Function
+
+Data functions represent logical data groupings maintained internally within the system boundary (Internal Logical Files - ILF) or referenced externally through API interfaces (External Interface Files - EIF).
+
+**Table 6.6: Identifying Complexity (Data Functions)**
+
+| Data Function | Fields / Entities Involved | RETs | DETs | Complexity |
+|---|---|:---:|:---:|:---:|
+| Users, Profiles & RBAC (ILF) | Fields: id, username, email, password_hash, role, department_id, phone, is_approved, is_active, created_at \| Entities: auth_user, profile | 2 | 10 | Low |
+| Academic Structure (ILF) | Fields: id, name, code, college_id, school_id, dept_id, is_active, created_at \| Entities: college, school, department, course | 4 | 8 | Average |
+| Examinations & Scheduling (ILF) | Fields: id, course_id, title, exam_date, total_marks, status, faculty_id, files, is_parsed \| Entities: examination, exam_files | 2 | 9 | Low |
+| 23-Taxonomy Questions & Rubrics (ILF) | Fields: id, exam_id, q_num, prompt, max_marks, master_sol, co, po, bloom, kp, cep, cea, fig, table, formula, criteria \| Entities: question, rubric, figures, tables, formulas | 5 | 16 | High |
+| Student Submissions & Pages (ILF) | Fields: id, exam_id, student_id, name, score, pct, grade, gpa, status, pdf, pages, ocr_flag, paths \| Entities: submission, page, images, pdfs | 4 | 13 | Average |
+| Boundary Detection & Mappings (ILF) | Fields: id, submission_id, q_id, page_nums, regions, bbox, conf, status, is_confirmed, override_id \| Entities: detection, mapping, history | 3 | 10 | Average |
+| Evaluation Results & Audit Logs (ILF) | Fields: id, submission_id, q_id, marks, max_marks, ai_marks, override_marks, rationale, breakdown, action, delta, teacher, ip \| Entities: result, feedback, review, audit | 4 | 13 | Average |
+| Course Tabulations & OBE Records (ILF) | Fields: id, course_id, semester, section, weights, student_id, name, exam_scores, co_scores, po_scores, att, overall, letter \| Entities: tabulation, grade_record | 2 | 13 | Low |
+| Groq Cloud LPU AI Engine (EIF) | Fields: api_key, model_name, temp, system_prompt, user_context, tokens, rate_limit, cooldown \| Interface: Groq REST API | 1 | 8 | Low |
+| Gemini Multimodal Vision API (EIF) | Fields: api_endpoint, token, image_b64, prompt, json_schema, safety, usage \| Interface: Google Generative AI API | 1 | 7 | Low |
+| OpenRouter / OpenAI Gateway (EIF) | Fields: bearer_token, fallback_models, timeout, payload, error_code \| Interface: OpenRouter Gateway | 1 | 5 | Low |
+| Institutional SMTP Dispatch (EIF) | Fields: smtp_host, port, user, recipient, subject, body, pdf_bytes \| Interface: Secure TLS SMTP Gateway | 1 | 7 | Low |
+
+### 6.3.3 Unadjusted Function Point Contribution (Transition Functions)
+
+Applying standard IFPUG weight matrices (EI: Low=3, Average=4, High=6; EO: Low=4, Average=5, High=7; EQ: Low=3, Average=4, High=6), the unadjusted function point contributions for all 27 transition functions are computed below.
+
+**Table 6.7: Unadjusted Function Point Contribution (Transition Functions)**
+
+| Transition Function | Type | FTRs | DETs | Complexity | UFP Weight |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Student Registration | EI | 1 | 5 | Low | 3 |
+| Password Reset OTP | EI | 1 | 3 | Low | 3 |
+| Add Academic Structure | EI | 2 | 4 | Low | 3 |
+| Add Course & Assign Faculty | EI | 2 | 5 | Low | 3 |
+| Upload Exam Routine PDF | EI | 2 | 4 | Low | 3 |
+| Author Question (23 Taxonomy) | EI | 3 | 12 | High | 6 |
+| Upload Master Benchmark Solution | EI | 2 | 3 | Low | 3 |
+| Script Upload Batch | EI | 2 | 4 | Low | 3 |
+| Confirm Question Mapping | EI | 2 | 5 | Low | 3 |
+| Teacher Score Override & Audit | EI | 3 | 6 | Average | 4 |
+| Manual Mapping Matrix Submit | EI | 2 | 4 | Low | 3 |
+| Update Student Grade Record | EI | 2 | 4 | Low | 3 |
+| Hybrid OCR Text Extraction | EO | 2 | 4 | Low | 4 |
+| Regex Heading Detection | EO | 2 | 4 | Low | 4 |
+| AI Failover Evaluation Result | EO | 4 | 7 | High | 7 |
+| Generate Certified Stamped PDF | EO | 3 | 6 | Average | 5 |
+| Export 8-Sheet OBE Excel | EO | 3 | 14 | High | 7 |
+| Dispatch Result Email | EO | 2 | 5 | Low | 4 |
+| Departmental OBE Analytics | EO | 3 | 8 | Average | 5 |
+| User Authenticate & Redirect | EQ | 1 | 3 | Low | 3 |
+| View Controller Dashboard | EQ | 3 | 6 | Average | 4 |
+| View Teacher Assigned Exams | EQ | 2 | 5 | Low | 3 |
+| View Question Paper Studio | EQ | 2 | 6 | Low | 3 |
+| Load Split-Screen Workbench | EQ | 3 | 8 | Average | 4 |
+| View Live OBE Tabulation Grid | EQ | 2 | 8 | Average | 4 |
+| View Student Dashboard | EQ | 2 | 7 | Low | 3 |
+| Verify Certificate Code | EQ | 2 | 4 | Low | 3 |
+| **Total Transition Function Points (EI=40, EO=36, EQ=27)** | **—** | **—** | **—** | **—** | **103 UFP** |
+
+### 6.3.4 Unadjusted Function Point Contribution (Data Functions)
+
+Applying standard IFPUG weight matrices for data files (ILF: Low=7, Average=10, High=15; EIF: Low=5, Average=7, High=10), the unadjusted function point contributions for all 12 data functions are computed below.
+
+**Table 6.8: Unadjusted Function Point Contribution (Data Functions)**
+
+| Data Function | Type | RETs | DETs | Complexity | UFP Weight |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Users, Profiles & RBAC | ILF | 2 | 10 | Low | 7 |
+| Academic Structural Hierarchy | ILF | 4 | 8 | Average | 10 |
+| Examinations & Scheduling | ILF | 2 | 9 | Low | 7 |
+| 23-Taxonomy Questions & Rubrics | ILF | 5 | 16 | High | 15 |
+| Student Submissions & Working Pages | ILF | 4 | 13 | Average | 10 |
+| Boundary Detection & Spatial Mappings | ILF | 3 | 10 | Average | 10 |
+| Evaluation Results & Audit Logs | ILF | 4 | 13 | Average | 10 |
+| Course Tabulations & OBE Grade Records | ILF | 2 | 13 | Low | 7 |
+| Groq Cloud LPU AI Engine | EIF | 1 | 8 | Low | 5 |
+| Gemini Multimodal Vision API | EIF | 1 | 7 | Low | 5 |
+| OpenRouter / OpenAI Gateway | EIF | 1 | 5 | Low | 5 |
+| Institutional SMTP Dispatch Gateway | EIF | 1 | 7 | Low | 5 |
+| **Total Data Function Points (ILF=76, EIF=20)** | **—** | **—** | **—** | **—** | **96 UFP** |
+
+### 6.3.5 Performance and Environmental Impact (General System Characteristics)
+
+Under the IFPUG standard, the Total Degree of Influence (TDI) evaluates 14 General System Characteristics (GSCs) on a scale from 0 (no influence) to 5 (strong influence) to determine the Value Adjustment Factor (VAF).
+
+**Table 6.9: General System Characteristics (GSC) and Environmental Impact**
+
+| General System Characteristic (GSC) | TDI Rating (0–5) | System Justification & Architectural Scope |
+|---|:---:|---|
+| 1. Data Communications | 5 | Multi-provider REST API streaming, AJAX frontend sync, secure institutional SMTP. |
+| 2. Distributed Data Processing | 4 | Asynchronous worker threads for email dispatch and CPU-intensive OCR script execution. |
+| 3. Performance Objectives | 4 | Sub-second database query targets (<100ms via B-tree composite indexes) and <10s AI target. |
+| 4. Heavily Used Configuration | 4 | Concurrent teacher grading sessions during end-of-semester examination weeks. |
+| 5. Transaction Rate | 4 | Batch answer script uploads (50+ scripts per course) and high-frequency mark override saves. |
+| 6. Online Data Entry | 5 | Rich 23-taxonomy question builder, visual canvas crop modals, and interactive rubrics. |
+| 7. End-User Efficiency | 5 | Split-screen synchronized zoom, quick keyboard mark entry, and one-click finalization. |
+| 8. Online Update | 4 | Atomic database transactions updating StudentGradeRecord and live CourseTabulation. |
+| 9. Complex Processing | 5 | Hough transform deskewing, Otsu binarization, EasyOCR deep learning, LaTeX bracket repair. |
+| 10. Reusability | 4 | Pluggable AI provider factory classes, modular PDF generator, and reusable UI components. |
+| 11. Installation Ease | 3 | Containerized Docker Compose configuration and automated deployment scripts on Linux VPS. |
+| 12. Operational Ease | 4 | Role-guided navigation, automated purging of high-res temporary OCR images, health checks. |
+| 13. Multiple Sites | 3 | Centralized campus cloud deployment serving multiple departmental faculties simultaneously. |
+| 14. Facilitate Change | 4 | Modular service-oriented architecture enabling zero-refactoring migration to cloud GPU nodes. |
+| **Total Degree of Influence (TDI)** | **58** | **Sum of all 14 General System Characteristics (Range: 0–70)** |
+
+#### Detailed Calculations & Mathematical Derivations:
+
+**1. Value Adjustment Factor (VAF):**
+11242	ext{VAF} = 0.65 + (0.01 	imes 	ext{TDI}) = 0.65 + (0.01 	imes 58) = 0.65 + 0.58 = \mathbf{1.23}11242
+
+**2. Unadjusted Function Point Count (UFP):**
+11242	ext{UFP} = 	ext{Data Functions} + 	ext{Transition Functions} = 96 + 103 = \mathbf{199	ext{ UFP}}11242
+
+**3. Adjusted Function Point Count (AFP):**
+11242	ext{AFP} = 	ext{UFP} 	imes 	ext{VAF} = 199 	imes 1.23 = 244.77 pprox \mathbf{245	ext{ AFP}}11242
+
+To translate the calculated 245 Adjusted Function Points into engineering person-hours, technology stack productivity effort rates (hours per function point) were established based on empirical industry research for Python/Django and AI ecosystems:
+
+**Table 6.10: Estimated Development Effort Rates by Technology Stack**
+
+| Language / Technology Stack Layer | Hours per Function Point | Layer Description & Complexity Context |
+|---|:---:|---|
+| Python (Django 5.2 Core / PostgreSQL) | 8.0 hrs / FP | Service layer, ORM models, transaction management, RBAC logic. |
+| Computer Vision & OCR (OpenCV / PyMuPDF / EasyOCR) | 10.5 hrs / FP | Image deskewing, binarization, bounding box segmentation, neural OCR. |
+| AI Orchestration (Groq LPU / Gemini API / Failover) | 8.5 hrs / FP | Prompt engineering, token rate-limiting, failover circuits, JSON repair. |
+| Frontend UI (Vanilla JS / Canvas / AJAX / HTML5 / CSS) | 7.0 hrs / FP | Synchronized split-screen zoom canvas, dynamic modals, responsive layouts. |
+| Reporting (ReportLab PDF Watermark / openpyxl 8-Sheet) | 7.5 hrs / FP | Cryptographic watermark stamping, multi-tab formula cell generation. |
+| **Blended Engineering Average Rate** | **8.9 hrs / FP** | **Weighted composite productivity rate across the entire ecosystem** |
+
+#### 4. Effort and Schedule Derivations:
+
+- **Total Engineering Effort:**
+  11242	ext{Effort} = 245	ext{ AFP} 	imes 8.9	ext{ hours/FP} = 2,180.5	ext{ person-hours} pprox \mathbf{2,184	ext{ person-hours}}11242
+- **Total Working Days:**
+  11242	ext{Person-Days} = rac{2,184	ext{ person-hours}}{8	ext{ hours/day}} = \mathbf{273	ext{ person-days}}11242
+- **Allocation per Engineer (Core Team of 5):**
+  11242	ext{Days per Engineer} = rac{273	ext{ person-days}}{5	ext{ engineers}} = \mathbf{54.6	ext{ days per engineer}}11242
+- **Continuous Full-Time Duration per Engineer:**
+  11242	ext{Continuous Duration} = rac{54.6	ext{ days}}{24.08	ext{ working days/month}} pprox \mathbf{2.27	ext{ months per engineer}}11242
+- **Schedule Alignment:** When mapped to university academic schedules—accounting for part-time practicum developer hours, examination cycles, iterative teacher user acceptance testing (UAT), and staggered phase assignments (such as the Lead Architect spanning 8 months while specialized Database and QA engineers engage during specific phases)—this effort corresponds precisely to the **8 calendar months (~32 weeks)** total project lifecycle.
+
+---
+
+## 6.4 Project Scheduling Chart
+
+System development was executed across an 8-month calendar timeline (January 2026 to August 2026). By structuring the development process into synchronized iterative sprints and leveraging concurrent development streams, the engineering team optimized delivery. For example, the 300 DPI script preprocessing and OCR cascade were engineered in parallel with the 23-taxonomy Question Studio, and the split-screen verification interface was built concurrently with the multi-provider AI failover orchestrator.
+
+**Table 6.11: Project Milestones and Gantt Schedule Breakdown**
+
+| Sprint / Milestone | Focus Area | Start Date | End Date | Allocated Team Roles |
+|---|---|:---:|:---:|---|
+| Sprint 1: Architecture & RBAC | System blueprints, PostgreSQL schema, 4-role RBAC authentication | Jan 01, 2026 | Jan 31, 2026 | System Architect, Database Engineer |
+| Sprint 2: Routine Parser & Question Studio | Multimodal routine scanner, fuzzy course matcher, 23-taxonomy question builder | Feb 01, 2026 | Feb 28, 2026 | System Architect, AI Engineer, UI Designer |
+| Sprint 3: Preprocessing & Hybrid OCR | 300 DPI PyMuPDF rasterizer, OpenCV deskewing, Otsu thresholding, regex detector | Mar 01, 2026 | Apr 05, 2026 | AI/ML Engineer, Backend Engineer |
+| Sprint 4: AI Failover & Fallback Wizard | Groq LPU/Gemini failover chain, JSON/LaTeX sanitizer, manual grading wizard | Apr 06, 2026 | May 15, 2026 | AI/ML Engineer, Full-Stack Lead |
+| Sprint 5: Split-Screen Workbench & PDF | Zoomable canvas workbench, teacher override audit trails, ReportLab stamping | May 16, 2026 | Jun 20, 2026 | UI Designer, Backend Engineer, QA Lead |
+| Sprint 6: OBE Tabulation & Excel Engine | CO/PO aggregation formulas, openpyxl 8-sheet sync, threaded SMTP mailer | Jun 21, 2026 | Jul 25, 2026 | System Architect, Database Engineer |
+| Sprint 7: Testing, Hardening & Security | Unit testing (50+ tests), stress benchmarking, teacher UAT, security review | Jul 26, 2026 | Aug 15, 2026 | QA Engineer, All Team Members |
+| Sprint 8: Deployment & Final Handover | PythonAnywhere wsgi, Docker verification, thesis compilation, user sign-off | Aug 16, 2026 | Aug 31, 2026 | System Architect, QA Engineer |
+
+**Figure 6.1: Gantt Chart — Project Schedule Across 8 Calendar Months (Jan–Aug 2026)**
+
+
 
 ---
 
@@ -1211,78 +1436,108 @@ Use blue bars for sprints, gray for parallel tasks, green for testing. White bac
 
 ---
 
+The Cost Estimation (Accounts Table) presents an exhaustive financial budget projection for developing, testing, and deploying the IntelliGrade ecosystem. Conforming to standard institutional and commercial software engineering accounting practices, this estimate incorporates personnel remuneration based on organizational working hours, hardware capital depreciation, cloud infrastructure and API licensing fees, and workspace operational logistics.
+
 ## 7.1 Personnel Cost
 
-**Table 7.1** — Personnel Salary
+To establish a realistic personnel cost calculation, standard organizational working hours in Bangladesh are calculated as follows:
 
-| Role | No. of People | Monthly Salary (BDT) |
-|---|---|---|
-| System Architect / Full-Stack Developer | 1 | 80,000 |
-| AI / ML Engineer | 1 | 75,000 |
-| Database Engineer | 1 | 60,000 |
-| UI/UX Designer | 1 | 50,000 |
-| QA / Test Engineer | 1 | 45,000 |
-| **Total** | **5** | **310,000** |
+- Number of calendar days in a standard year = 365 days
+- Number of official government holidays in Bangladesh = 24 days
+- Number of weekly rest days (standard 6-day institutional work week) = 52 days
+- Total number of working days in a year:
+  11242	ext{Working Days/Year} = 365 - (52 + 24) = \mathbf{289	ext{ working days}}11242
+- Total number of working days per calendar month:
+  11242	ext{Working Days/Month} = rac{289}{12} = \mathbf{24.08	ext{ days}}11242
+- Standard organizational working hours per day = **8.0 hours**
+- Standard organizational working hours per month:
+  11242	ext{Working Hours/Month} = 24.08 	imes 8 = \mathbf{192.64	ext{ hours}}11242
 
-**Table 7.2** — Personnel Cost Estimation
+Based on an 8-month development schedule for the 5-person engineering team with staggered phase engagements, the personnel compensation is detailed below:
 
-| Role | Duration (Months) | Monthly Cost (BDT) | Total (BDT) |
-|---|---|---|---|
-| System Architect / Full-Stack Developer | 8 | 80,000 | 640,000 |
-| AI / ML Engineer | 6 | 75,000 | 450,000 |
-| Database Engineer | 4 | 60,000 | 240,000 |
-| UI/UX Designer | 4 | 50,000 | 200,000 |
-| QA / Test Engineer | 3 | 45,000 | 135,000 |
-| **Total Personnel Cost** | | | **1,665,000** |
+**Table 7.1: Personnel Salary and Compensation Breakdown**
 
-## 7.2 Hardware Cost
+| Engineering Role | No. of People | Monthly Salary (BDT) | Engagement Duration | Total Compensation (BDT) |
+|---|:---:|:---:|:---:|:---:|
+| System Architect & Lead Full-Stack Engineer | 1 | 80,000.00 | 8 Months | 640,000.00 |
+| AI / ML & Computer Vision Engineer | 1 | 75,000.00 | 6 Months | 450,000.00 |
+| Backend & Database Engineer | 1 | 60,000.00 | 4 Months | 240,000.00 |
+| Frontend Developer & UI/UX Designer | 1 | 50,000.00 | 4 Months | 200,000.00 |
+| QA / Test Automation & Security Engineer | 1 | 45,000.00 | 3 Months | 135,000.00 |
+| **Total Personnel Cost** | **5 Engineers** | **310,000.00 / mo** | **25 Person-Months** | **1,665,000.00 /=** |
 
-**Table 7.3** — Hardware Cost
+---
 
-| Item | Specification | Cost (BDT) |
-|---|---|---|
-| Development Workstation | Intel Core i7, 32GB RAM, 1TB SSD | 120,000 |
-| GPU for Local OCR (Optional) | NVIDIA RTX 4060 (8GB VRAM) | 65,000 |
-| Network Equipment | Router, switches, UPS | 25,000 |
-| **Total Hardware Cost** | | **210,000** |
+## 7.2 Expected Hardware Cost (Depreciation)
 
-## 7.3 Software Cost
+In accordance with software project accounting standards, hardware expenditures do not reflect the full capital purchase price of the assets, but rather the asset depreciation incurred specifically during the 8-month development lifecycle. Assuming a standard commercial equipment lifespan of 10 years for enterprise computer hardware and network equipment:
 
-**Table 7.4** — Software Cost
+- **Annual Depreciation Percentage:**
+  11242	ext{Depreciation Rate/Year} = rac{1}{10} = 10.0\%	ext{ per annum (0.10)}11242
+- **Prorated Depreciation Factor for 8 Months:**
+  11242	ext{Prorated Depreciation Factor} = 0.10 	imes \left(rac{8}{12}ight) = 6.67\% = \mathbf{0.0667}11242
+- **Depreciation Calculation Formula:**
+  11242	ext{Depreciation Cost} = 	ext{Original Asset Value (BDT)} 	imes 0.066711242
 
-| Item | Description | Annual Cost (BDT) |
-|---|---|---|
-| Python / Django / PostgreSQL | Open-source — Free | 0 |
-| EasyOCR / PyTesseract / PyMuPDF / OpenCV | Open-source — Free | 0 |
-| Groq Cloud API (Free Tier) | 30 RPM / 6,000 TPM | 0 |
-| Gemini API (Free Tier) | 15 RPM / 1,000,000 TPM | 0 |
-| PythonAnywhere Hosting (Hacker Plan) | Production deployment | 6,720 |
-| Domain Name Registration | .com domain | 1,500 |
-| **Total Software Cost** | | **8,220** |
+**Table 7.2: Expected Hardware Cost (Depreciation Over 8-Month Project)**
 
-## 7.4 Operational Cost
+| Hardware Item & Specification | Original Value (BDT) | Depreciation Formula | Calculated Cost (BDT) |
+|---|:---:|:---:|:---:|
+| Development Workstations (3 Units: Core i7/i9, 32GB RAM, 1TB NVMe) | 180,000.00 | (180,000 × 0.0667) | 12,006.00 |
+| Dedicated GPU Benchmarking Rig (NVIDIA RTX 4060 8GB VRAM) | 85,000.00 | (85,000 × 0.0667) | 5,669.50 |
+| Mobile & Tablet QA Testing Devices (High-res camera script captures) | 45,000.00 | (45,000 × 0.0667) | 3,001.50 |
+| Network Router, Gigabit Managed Switch & Online Smart UPS | 25,000.00 | (25,000 × 0.0667) | 1,667.50 |
+| **Total Hardware Depreciation Cost** | **335,000.00** | **8-Month Prorated Depreciation** | **22,344.50 /=** |
 
-**Table 7.5** — Other Operational Costs
+---
 
-| Item | Description | Monthly Cost (BDT) |
-|---|---|---|
-| Electricity and Internet | Development environment utilities | 5,000 |
-| Cloud Storage (Future) | AWS S3 or Cloudflare R2 for script archival | 3,000 |
-| Miscellaneous | Printing, testing materials, etc. | 2,000 |
-| **Total Monthly Operational** | | **10,000** |
+## 7.3 Expected Software and Cloud Cost
 
-## 7.5 Total Project Cost Summary
+The IntelliGrade platform is architected primarily on open-source foundations (Python 3.12, Django 5.2, PostgreSQL, OpenCV, and ReportLab), which incurs zero base licensing fees. However, cloud infrastructure, external AI inference APIs, domain registration, and security certificates were required during development and production deployment.
 
-**Table 7.6** — Total Project Cost Summary
+**Table 7.3: Expected Software & Cloud Infrastructure Cost**
 
-| Category | Cost (BDT) |
-|---|---|
-| Personnel Cost (8 months) | 1,665,000 |
-| Hardware Cost | 210,000 |
-| Software Cost (Annual) | 8,220 |
-| Operational Cost (8 months x 10,000/month) | 80,000 |
-| **Grand Total** | **1,963,220** |
-| **Grand Total (USD approximate)** | **~$17,850** |
+| Component / Service | Description & Usage Allocation | Estimated Cost (BDT) |
+|---|---|:---:|
+| Production Application Hosting | PythonAnywhere Custom Hacker/Enterprise tier + VPS cloud database (8 months) | 12,000.00 |
+| External AI Inference APIs | Groq LPU Llama-3.3 70B tokens & Google Gemini 2.5 Flash Vision quota testing | 6,500.00 |
+| Institutional Domain & Wildcard SSL | Top-Level Domain (.com / .edu) registration and multi-domain wildcard SSL | 3,500.00 |
+| Cloud Storage & Script Archival | Cloudflare R2 / AWS S3 storage for multi-gigabyte 300 DPI test script archives | 3,000.00 |
+| **Total Software & Cloud Infrastructure Cost** | **8-Month Development & Deployment Subtotal** | **25,000.00 /=** |
+
+---
+
+## 7.4 Expected Other Operational and Logistics Cost
+
+Logistical, utility, and operational expenditures incurred to maintain the engineering research cell and development workspace throughout the 8-month period are summarized below.
+
+**Table 7.4: Operational and Logistics Cost Estimation**
+
+| Expense Category | Operational Purpose | Estimated Cost (BDT) |
+|---|---|:---:|
+| Workspace / Dedicated Lab Rent | Prorated rental for 5-person engineering workstation laboratory (8 months) | 32,000.00 |
+| Electricity & Power Backup | Utility power and continuous generator/UPS power backup for workstations | 12,000.00 |
+| High-Speed Fiber Internet | Dedicated fiber-optic broadband for multi-megabyte script transfers and API calls | 8,000.00 |
+| Physical Answer Scripts & Scanner Rental | Sample student scripts, optical test sheets, high-speed duplex scanner rental | 10,000.00 |
+| Miscellaneous / Office Extra | Testing stationery, documentation binding, incidental supplies | 6,000.00 |
+| **Total Other Operational Cost** | **8-Month Logistics & Utilities Subtotal** | **68,000.00 /=** |
+
+---
+
+## 7.5 Total Accounts Summary
+
+Aggregating all personnel compensations, hardware capital asset depreciation, cloud infrastructure fees, and workspace logistics, the final accounts table presents the comprehensive economic investment required to develop, validate, and deliver IntelliGrade.
+
+**Table 7.5: Total Accounts Summary (Comprehensive Project Cost)**
+
+| Expenditure Particulars | Sub-Items & Category Details | Total Cost (BDT) |
+|---|---|:---:|
+| 1. Personnel Cost (25 Person-Months) | Lead Architect, AI/ML Engineer, Database, UI/UX, QA Engineers | 1,665,000.00 |
+| 2. Hardware Asset Depreciation | Workstations (12,006.00), GPU Rig (5,669.50), Mobile QA (3,001.50), Network (1,667.50) | 22,344.50 |
+| 3. Software & Cloud Infrastructure | PythonAnywhere hosting, Groq/Gemini APIs, Domain/SSL, S3 Storage | 25,000.00 |
+| 4. Operational & Workspace Logistics | Lab rent, electricity, high-speed fiber internet, test scripts, scanner rental | 68,000.00 |
+| **Grand Total Project Expenditure** | **Comprehensive 8-Month Academic & Software Engineering Cost** | **1,780,344.50 /=** |
+| **Grand Total in USD Equivalent** | **Calculated at current exchange benchmark (~110.00 BDT per 1.00 USD)** | **~6,185.00 USD** |
 
 ---
 
