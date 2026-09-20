@@ -62,6 +62,8 @@ generate_test_student_sheet.py
 *.swo
 .DS_Store
 Thumbs.db
+~$*
+.~lock.*
 OCR and HTR
 
 # ==========================================
