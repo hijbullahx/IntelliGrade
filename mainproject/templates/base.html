@@ -1,17 +1,19 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en" class="h-full font-sans antialiased dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <!-- SEO & Metadata -->
     <title>{% block title %}IntelliGrade - AI Examination Evaluation Platform{% endblock %}</title>
-    <meta name="description" content="IntelliGrade is an AI-assisted examination evaluation system empowering instructors with intelligent rubric-based grading.">
-    
+    <meta name="description"
+        content="IntelliGrade is an AI-assisted examination evaluation system empowering instructors with intelligent rubric-based grading.">
+
     <!-- Inline Theme Script to Prevent Flash -->
     <script>
-        (function() {
+        (function () {
             const savedTheme = localStorage.getItem('theme') || 'dark';
             if (savedTheme === 'dark') {
                 document.documentElement.classList.add('dark');
@@ -49,14 +51,16 @@
             }
         }
     </script>
-    
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
 
     <style>
         :root {
@@ -74,7 +78,7 @@
             --bg-table-row: #ffffff;
             --bg-input: #ffffff;
             --border-input: #cbd5e1;
-            --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 10px rgba(0,0,0,0.02);
+            --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.05), 0 0 10px rgba(0, 0, 0, 0.02);
         }
 
         html.dark {
@@ -102,15 +106,17 @@
             transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
         .glass-panel {
             background: var(--bg-panel);
             backdrop-filter: blur(16px);
             border-color: var(--border-card);
             transition: all 0.3s ease;
         }
-        
+
         .glass-card {
             background: var(--bg-card);
             backdrop-filter: blur(12px);
@@ -123,9 +129,17 @@
             border-color: var(--border-hover);
         }
 
-        .theme-text-primary { color: var(--text-primary) !important; }
-        .theme-text-secondary { color: var(--text-secondary) !important; }
-        .theme-text-muted { color: var(--text-muted) !important; }
+        .theme-text-primary {
+            color: var(--text-primary) !important;
+        }
+
+        .theme-text-secondary {
+            color: var(--text-secondary) !important;
+        }
+
+        .theme-text-muted {
+            color: var(--text-muted) !important;
+        }
 
         .gradient-text {
             background: linear-gradient(135deg, #a5b4fc 0%, #6366f1 50%, #38bdf8 100%);
@@ -135,65 +149,105 @@
 
         /* Wave Theme Toggle Button Styles */
         @keyframes themeWave {
-            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6); }
-            70% { box-shadow: 0 0 0 18px rgba(99, 102, 241, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+            0% {
+                box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.6);
+            }
+
+            70% {
+                box-shadow: 0 0 0 18px rgba(99, 102, 241, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+            }
         }
 
         .theme-wave-btn {
             animation: themeWave 3s infinite;
         }
+
         .theme-wave-btn:hover {
             animation: none;
             box-shadow: 0 0 25px rgba(99, 102, 241, 0.6);
         }
-        
+
         /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-main); }
-        ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-main);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #64748b;
+            border-radius: 4px;
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
+
 <body class="h-full flex flex-col selection:bg-brand-500 selection:text-white">
 
     <!-- Top Navigation Bar -->
     <header class="sticky top-0 z-40 glass-panel border-b border-slate-200 dark:border-slate-800/80">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
-                
-                <!-- Logo & Brand -->
+
+                <!-- Brand Logo and Platform Title: Links back to public landing page -->
                 <div class="flex items-center gap-3">
                     <a href="{% url 'landing_page' %}" class="flex items-center gap-2.5 group">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-400 p-0.5 shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform duration-200">
+                        <!-- Logo Icon Container with Gradient Border and Lucide Sparkles Icon -->
+                        <div
+                            class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-400 p-0.5 shadow-lg shadow-brand-500/20 group-hover:scale-105 transition-transform duration-200">
                             <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
                                 <i data-lucide="sparkles" class="w-5 h-5 text-brand-400"></i>
                             </div>
                         </div>
+                        <!-- Platform Title and Subtitle -->
                         <div>
                             <span class="text-xl font-bold tracking-tight theme-text-primary flex items-center gap-1.5">
                                 Intelli<span class="gradient-text">Grade</span>
                             </span>
-                            <span class="text-[10px] tracking-wider uppercase font-semibold theme-text-muted block -mt-1">OBE Exam &amp; Evaluation Ecosystem</span>
+                            <span
+                                class="text-[10px] tracking-wider uppercase font-semibold theme-text-muted block -mt-1">OBE
+                                Exam &amp; Evaluation Ecosystem</span>
                         </div>
                     </a>
                 </div>
 
-                <!-- Central Navigation Links -->
-                <nav class="hidden md:flex items-center gap-1 p-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-900/80">
-                    <a href="{% url 'landing_page' %}" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                <!-- Central Navigation Links: Quick entry into each respective role portal -->
+                <nav
+                    class="hidden md:flex items-center gap-1 p-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/80 dark:bg-slate-900/80">
+                    <!-- Home Page Link: Navigates to main landing page -->
+                    <a href="{% url 'landing_page' %}"
+                        class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
                         <i data-lucide="home" class="w-3.5 h-3.5"></i> Home
                     </a>
-                    <a href="{% url 'teacher_login' %}" onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                    <!-- Faculty / Examiner Portal Link: Calls handlePortalClick to prevent session clash if logged in under another role -->
+                    <a href="{% url 'teacher_login' %}"
+                        onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');"
+                        class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
                         <i data-lucide="award" class="w-3.5 h-3.5 text-brand-500"></i> Teacher
                     </a>
-                    <a href="{% url 'student_login' %}" onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                    <!-- Student Portal Link: Enrolled student login / workspace link -->
+                    <a href="{% url 'student_login' %}"
+                        onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');"
+                        class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
                         <i data-lucide="user-check" class="w-3.5 h-3.5 text-emerald-500"></i> Student
                     </a>
-                    <a href="{% url 'dept_head_login' %}" onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                    <!-- Department Head Portal Link: Head of Department login / oversight dashboard -->
+                    <a href="{% url 'dept_head_login' %}"
+                        onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');"
+                        class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
                         <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-cyan-500"></i> Dept Head
                     </a>
-                    <a href="{% url 'exam_controller_login' %}" onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');" class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
+                    <!-- Chief Exam Controller Portal Link: Institutional Administrator portal -->
+                    <a href="{% url 'exam_controller_login' %}"
+                        onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');"
+                        class="px-4 py-1.5 text-xs font-medium rounded-full theme-text-secondary hover:text-brand-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
                         <i data-lucide="shield-check" class="w-3.5 h-3.5 text-amber-500"></i> Exam Controller
                     </a>
                 </nav>
@@ -204,79 +258,106 @@
                     <!-- User Profile & Sign Out Dropdown -->
                     {% if request.user.is_authenticated %}
                     <div class="relative group pl-2 border-l border-slate-300 dark:border-slate-800">
-                        <button type="button" class="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white flex items-center justify-center text-xs font-extrabold shadow-sm">
+                        <button type="button"
+                            class="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                            <div
+                                class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-600 via-brand-500 to-cyan-500 text-white flex items-center justify-center text-xs font-extrabold shadow-sm">
                                 {{ request.user.username|slice:":2"|upper }}
                             </div>
                             <div class="hidden md:block text-left">
-                                <span class="block text-xs font-bold theme-text-primary leading-tight">{{ request.user.get_full_name|default:request.user.username }}</span>
-                                <span class="block text-[10px] text-emerald-500 dark:text-emerald-400 font-semibold leading-tight flex items-center gap-1">
+                                <span class="block text-xs font-bold theme-text-primary leading-tight">{{
+                                    request.user.get_full_name|default:request.user.username }}</span>
+                                <span
+                                    class="block text-[10px] text-emerald-500 dark:text-emerald-400 font-semibold leading-tight flex items-center gap-1">
                                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                     {% if request.user.is_superuser or request.user.profile.role == 'ADMIN' %}
-                                        Chief Exam Controller
+                                    Chief Exam Controller
                                     {% elif request.user.profile.role == 'STUDENT' %}
-                                        Enrolled Student
+                                    Enrolled Student
                                     {% elif request.user.profile.role == 'DEPT_HEAD' %}
-                                        Department Head
+                                    Department Head
                                     {% else %}
-                                        Faculty / Examiner
+                                    Faculty / Examiner
                                     {% endif %}
                                 </span>
                             </div>
-                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 theme-text-muted group-hover:rotate-180 transition-transform"></i>
+                            <i data-lucide="chevron-down"
+                                class="w-3.5 h-3.5 theme-text-muted group-hover:rotate-180 transition-transform"></i>
                         </button>
-                        
+
                         <!-- Dropdown Menu -->
-                        <div class="absolute right-0 top-full mt-2 w-52 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800">
+                        <div
+                            class="absolute right-0 top-full mt-2 w-52 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800">
                             <div class="px-3 py-2 border-b border-slate-200 dark:border-slate-800 mb-1">
-                                <span class="block text-xs font-bold theme-text-primary">{{ request.user.get_full_name|default:request.user.username }}</span>
-                                <span class="block text-[10px] theme-text-muted truncate">{{ request.user.email|default:"Authenticated User" }}</span>
+                                <span class="block text-xs font-bold theme-text-primary">{{
+                                    request.user.get_full_name|default:request.user.username }}</span>
+                                <span class="block text-[10px] theme-text-muted truncate">{{
+                                    request.user.email|default:"Authenticated User" }}</span>
                             </div>
                             {% if request.user.is_superuser or request.user.profile.role == 'ADMIN' %}
-                            <a href="{% url 'exam_controller_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                                <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i> Chief Controller Portal
+                            <a href="{% url 'exam_controller_dashboard' %}"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i> Chief Controller
+                                Portal
                             </a>
                             {% elif request.user.profile.role == 'STUDENT' %}
-                            <a href="{% url 'student_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <a href="{% url 'student_dashboard' %}"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <i data-lucide="user-check" class="w-4 h-4 text-emerald-500"></i> Student Portal
                             </a>
                             {% elif request.user.profile.role == 'DEPT_HEAD' %}
-                            <a href="{% url 'dept_head_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <a href="{% url 'dept_head_dashboard' %}"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-500"></i> Dept Head Portal
                             </a>
                             {% else %}
-                            <a href="{% url 'teacher_dashboard' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <a href="{% url 'teacher_dashboard' %}"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-xl theme-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                 <i data-lucide="award" class="w-4 h-4 text-brand-500"></i> Faculty Workspace
                             </a>
                             {% endif %}
                             <div class="border-t border-slate-200 dark:border-slate-800 my-1"></div>
-                            <a href="{% url 'logout' %}" class="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
+                            <a href="{% url 'logout' %}"
+                                class="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors">
                                 <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
                             </a>
                         </div>
                     </div>
                     {% else %}
                     <div class="relative group pl-2 border-l border-slate-300 dark:border-slate-800">
-                        <button type="button" class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <button type="button"
+                            class="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5">
                             <i data-lucide="log-in" class="w-3.5 h-3.5"></i> Sign In
-                            <i data-lucide="chevron-down" class="w-3.5 h-3.5 group-hover:rotate-180 transition-transform"></i>
+                            <i data-lucide="chevron-down"
+                                class="w-3.5 h-3.5 group-hover:rotate-180 transition-transform"></i>
                         </button>
 
                         <!-- Role Sign In Selection Dropdown -->
-                        <div class="absolute right-0 top-full mt-2 w-56 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800 space-y-1">
-                            <div class="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider theme-text-muted border-b border-slate-200 dark:border-slate-800">
+                        <div
+                            class="absolute right-0 top-full mt-2 w-56 glass-card rounded-2xl p-1.5 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 border border-slate-200 dark:border-slate-800 space-y-1">
+                            <div
+                                class="px-3 py-1.5 text-[10px] uppercase font-bold tracking-wider theme-text-muted border-b border-slate-200 dark:border-slate-800">
                                 Select Portal Sign In
                             </div>
-                            <a href="{% url 'exam_controller_login' %}" onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl theme-text-primary hover:bg-amber-500/10 hover:text-amber-500 transition-colors">
-                                <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i> Exam Controller Sign In
+                            <a href="{% url 'exam_controller_login' %}"
+                                onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');"
+                                class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl theme-text-primary hover:bg-amber-500/10 hover:text-amber-500 transition-colors">
+                                <i data-lucide="shield-check" class="w-4 h-4 text-amber-500"></i> Exam Controller Sign
+                                In
                             </a>
-                            <a href="{% url 'teacher_login' %}" onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-brand-500/10 hover:text-brand-500 transition-colors">
+                            <a href="{% url 'teacher_login' %}"
+                                onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');"
+                                class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-brand-500/10 hover:text-brand-500 transition-colors">
                                 <i data-lucide="award" class="w-4 h-4 text-brand-500"></i> Faculty / Examiner Sign In
                             </a>
-                            <a href="{% url 'student_login' %}" onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors">
+                            <a href="{% url 'student_login' %}"
+                                onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');"
+                                class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-emerald-500/10 hover:text-emerald-500 transition-colors">
                                 <i data-lucide="user-check" class="w-4 h-4 text-emerald-500"></i> Student Sign In
                             </a>
-                            <a href="{% url 'dept_head_login' %}" onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');" class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-cyan-500/10 hover:text-cyan-500 transition-colors">
+                            <a href="{% url 'dept_head_login' %}"
+                                onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');"
+                                class="flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl theme-text-secondary hover:bg-cyan-500/10 hover:text-cyan-500 transition-colors">
                                 <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-500"></i> Dept Head Sign In
                             </a>
                         </div>
@@ -292,7 +373,8 @@
     {% if messages %}
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
         {% for message in messages %}
-        <div class="p-4 rounded-xl border flex items-center justify-between gap-3 text-sm {% if message.tags == 'error' %}bg-rose-900/20 dark:bg-rose-950/80 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-200{% elif message.tags == 'success' %}bg-emerald-900/20 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200{% else %}bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 theme-text-primary{% endif %}">
+        <div
+            class="p-4 rounded-xl border flex items-center justify-between gap-3 text-sm {% if message.tags == 'error' %}bg-rose-900/20 dark:bg-rose-950/80 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-200{% elif message.tags == 'success' %}bg-emerald-900/20 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200{% else %}bg-slate-100 dark:bg-slate-900 border-slate-300 dark:border-slate-800 theme-text-primary{% endif %}">
             <div class="flex items-center gap-2.5">
                 <i data-lucide="info" class="w-4 h-4"></i>
                 <span>{{ message }}</span>
@@ -308,17 +390,23 @@
     </main>
 
     <!-- App Footer -->
-    <footer class="mt-auto border-t border-slate-200 dark:border-slate-800/80 glass-panel py-6 text-xs theme-text-muted">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <footer
+        class="mt-auto border-t border-slate-200 dark:border-slate-800/80 glass-panel py-6 text-xs theme-text-muted">
+        <div
+            class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div class="flex items-center gap-2">
                 <i data-lucide="shield" class="w-4 h-4 text-brand-500"></i>
-                <span>IntelliGrade Evaluation Platform &copy; 2026. Developed by <a href="https://hijbullah.me" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-600 dark:text-brand-400 hover:underline transition-colors">Md. Taher Bin Omar Hijbulah</a>.</span>
+                <span>IntelliGrade Evaluation Platform &copy; 2026. Developed by <a href="https://hijbullah.me"
+                        target="_blank" rel="noopener noreferrer"
+                        class="font-medium text-brand-600 dark:text-brand-400 hover:underline transition-colors">Md.
+                        Taher Bin Omar Hijbullah</a>.</span>
             </div>
         </div>
     </footer>
 
     <!-- Floating Wave Theme Switcher Button (Lower Right Corner) -->
-    <button id="themeToggleBtn" onclick="toggleTheme()" type="button" title="Switch Theme (Dark / Light)" class="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-r from-brand-600 via-brand-500 to-cyan-500 hover:from-brand-500 hover:to-cyan-400 text-white shadow-2xl theme-wave-btn flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 border-2 border-white/30 focus:outline-none">
+    <button id="themeToggleBtn" onclick="toggleTheme()" type="button" title="Switch Theme (Dark / Light)"
+        class="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-r from-brand-600 via-brand-500 to-cyan-500 hover:from-brand-500 hover:to-cyan-400 text-white shadow-2xl theme-wave-btn flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 border-2 border-white/30 focus:outline-none">
         <span id="themeBtnIcon">
             <i data-lucide="sun" class="w-5 h-5 text-amber-300 animate-spin-slow"></i>
         </span>
@@ -353,7 +441,7 @@
         }
 
         // Global Role Portal Navigation Interceptor for Logged-In Users
-        window.CURRENT_USER_LOGGED_IN = {% if request.user.is_authenticated %}true{% else %}false{% endif %};
+        window.CURRENT_USER_LOGGED_IN = {% if request.user.is_authenticated %}true{% else %} false{% endif %};
         window.CURRENT_USER_ROLE = "{% if request.user.is_authenticated %}{% if request.user.is_superuser or request.user.profile.role == 'ADMIN' %}ADMIN{% elif request.user.profile.role == 'STUDENT' %}STUDENT{% elif request.user.profile.role == 'DEPT_HEAD' %}DEPT_HEAD{% else %}TEACHER{% endif %}{% endif %}";
         window.CURRENT_USER_ROLE_NAME = "{% if request.user.is_authenticated %}{% if request.user.is_superuser or request.user.profile.role == 'ADMIN' %}Chief Exam Controller{% elif request.user.profile.role == 'STUDENT' %}Enrolled Student{% elif request.user.profile.role == 'DEPT_HEAD' %}Department Head{% else %}Teacher / Examiner{% endif %}{% endif %}";
         window.CURRENT_USER_DASHBOARD = "{% if request.user.is_authenticated %}{% if request.user.is_superuser or request.user.profile.role == 'ADMIN' %}{% url 'exam_controller_dashboard' %}{% elif request.user.profile.role == 'STUDENT' %}{% url 'student_dashboard' %}{% elif request.user.profile.role == 'DEPT_HEAD' %}{% url 'dept_head_dashboard' %}{% else %}{% url 'teacher_dashboard' %}{% endif %}{% endif %}";
@@ -375,7 +463,7 @@
         }
 
         function getRoleDisplayName(roleCode) {
-            switch(roleCode) {
+            switch (roleCode) {
                 case 'ADMIN': return 'Chief Exam Controller';
                 case 'TEACHER': return 'Teacher / Examiner';
                 case 'STUDENT': return 'Student';
@@ -421,4 +509,5 @@
     </script>
     {% block extra_scripts %}{% endblock %}
 </body>
+
 </html>
