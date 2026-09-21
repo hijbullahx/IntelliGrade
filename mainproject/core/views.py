@@ -1553,7 +1553,7 @@ def scan_routine_ai(request):
             if not course_obj:
                 # Try normalized code without space (e.g. CSE411 vs CSE 411)
                 norm_c = c_code.replace(' ', '').strip()
-                course_obj = Course.objects.filter(code__iregex=f"^{norm_c[:3]}\s*{norm_c[3:]}$").first()
+                course_obj = Course.objects.filter(code__iregex=rf"^{norm_c[:3]}\s*{norm_c[3:]}$").first()
         if not course_obj and c_title:
             course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
 
