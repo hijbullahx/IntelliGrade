@@ -34,8 +34,15 @@ from .models import (
 )
 from core.utils.question_accessor import QuestionAccessor, QuestionDTO
 
+# ==============================================================================
+# LANDING PAGE VIEW
+# Renders the public home/landing page of the IntelliGrade ecosystem.
+# It serves as the primary gateway for all 4 academic roles (Controller,
+# Dept Head, Teacher, Student) and presents the end-to-end examination flow.
+# ==============================================================================
 def landing_page(request):
     """Renders the main landing page for the IntelliGrade SaaS platform."""
+    # Renders the landing_page.html template extending templates/base.html
     return render(request, 'core/landing_page.html')
 
 

@@ -1,17 +1,28 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+# ==============================================================================
+# USER PROFILE & ROLE DEFINITIONS (USED BY LANDING PAGE PORTAL WORKSPACES)
+# Extends Django standard User with role-based access control (RBAC).
+# Enables landing page navigation to route users to the appropriate portal.
+# ==============================================================================
 class Profile(models.Model):
+    # 4 distinct portal user roles supported across the IntelliGrade ecosystem
     class Role(models.TextChoices):
-        ADMIN = 'ADMIN', 'Administrator'
-        TEACHER = 'TEACHER', 'Teacher / Examiner'
-        STUDENT = 'STUDENT', 'Student'
-        DEPARTMENT_HEAD = 'DEPT_HEAD', 'Department Head'
+        ADMIN = 'ADMIN', 'Administrator'                 # Chief Exam Controller
+        TEACHER = 'TEACHER', 'Teacher / Examiner'         # Faculty / Course Examiner
+        STUDENT = 'STUDENT', 'Student'                   # Enrolled Student
+        DEPARTMENT_HEAD = 'DEPT_HEAD', 'Department Head' # Department Head
 
+    # 1-to-1 link to standard Django User
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    # Assigned portal role determining permission scope and dashboard access
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.TEACHER)
+    # Academic department affiliation
     department = models.ForeignKey('Department', on_delete=models.SET_NULL, null=True, blank=True)
+    # Optional contact phone number
     phone_number = models.CharField(max_length=20, blank=True)
+    # Approval state (students need admin approval to log into their portal)
     is_approved = models.BooleanField(default=True)
 
     def __str__(self):

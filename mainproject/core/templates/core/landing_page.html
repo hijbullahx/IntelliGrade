@@ -38,11 +38,14 @@ Ecosystem for Higher Education Institutions{% endblock %}
                         Governance &amp; AI Routine Scheduling to 23-Taxonomy OBE Question Paper Design, Dual
                         Intelligent Script Evaluation Workbenches, and Live 8-Sheet Course Tabulation.
                     </p>
+                    <!-- Call-to-Action Action Buttons -->
                     <div class="flex flex-wrap justify-center lg:justify-start gap-4">
+                        <!-- 'Enter Portal Workspace' Button: Triggers openRoleSelectionModal() to display the 4-role selection modal -->
                         <button type="button" onclick="openRoleSelectionModal()"
                             class="px-6 py-3.5 bg-blue-600 dark:bg-brand-600 text-white font-bold rounded-xl shadow-lg shadow-brand-500/20 hover:bg-blue-700 dark:hover:bg-brand-500 transition-all duration-300 transform hover:scale-105 flex items-center gap-2 cursor-pointer text-sm">
                             <i data-lucide="layers" class="w-4 h-4"></i> Enter Portal Workspace
                         </button>
+                        <!-- 'Explore Examination Flow' Link: Smooth scrolls the viewport to the '#how-it-works' timeline section -->
                         <a href="#how-it-works"
                             class="px-6 py-3.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-all duration-300 transform hover:scale-105 text-sm flex items-center gap-2">
                             <i data-lucide="play-circle" class="w-4 h-4 text-brand-500"></i> Explore Examination Flow
@@ -407,10 +410,10 @@ Ecosystem for Higher Education Institutions{% endblock %}
             </p>
         </div>
 
-        <!-- Role Options Grid -->
+        <!-- Role Options Grid: 4 permission-scoped workspaces -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
 
-            <!-- 1. Faculty / Examiner -->
+            <!-- 1. Faculty / Examiner Workspace Card: Links to teacher_login -->
             <a href="{% url 'teacher_login' %}"
                 onclick="handlePortalClick(event, 'TEACHER', '{% url 'teacher_login' %}');"
                 class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-brand-50/50 dark:hover:bg-brand-950/40 hover:border-brand-500/50 dark:hover:border-brand-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
@@ -433,7 +436,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
                 </div>
             </a>
 
-            <!-- 2. Student Portal -->
+            <!-- 2. Student Portal Workspace Card: Links to student_login -->
             <a href="{% url 'student_login' %}"
                 onclick="handlePortalClick(event, 'STUDENT', '{% url 'student_login' %}');"
                 class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/40 hover:border-emerald-500/50 dark:hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
@@ -456,7 +459,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
                 </div>
             </a>
 
-            <!-- 3. Department Head -->
+            <!-- 3. Department Head Workspace Card: Links to dept_head_login -->
             <a href="{% url 'dept_head_login' %}"
                 onclick="handlePortalClick(event, 'DEPT_HEAD', '{% url 'dept_head_login' %}');"
                 class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/40 hover:border-cyan-500/50 dark:hover:border-cyan-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
@@ -466,8 +469,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
                         <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
                     </div>
                     <span
-                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">Dept
-                        Head</span>
+                        class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">Dept Head</span>
                 </div>
                 <div>
                     <h3
@@ -480,7 +482,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
                 </div>
             </a>
 
-            <!-- 4. Chief Exam Controller -->
+            <!-- 4. Chief Exam Controller Workspace Card: Links to exam_controller_login -->
             <a href="{% url 'exam_controller_login' %}"
                 onclick="handlePortalClick(event, 'ADMIN', '{% url 'exam_controller_login' %}');"
                 class="group p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-amber-50/50 dark:hover:bg-amber-950/40 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-md">
@@ -508,6 +510,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
 </div>
 
 <script>
+    // Displays the role selection modal overlay and initializes Lucide icons
     function openRoleSelectionModal() {
         const modal = document.getElementById('roleSelectionModal');
         if (modal) {
@@ -519,6 +522,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
         }
     }
 
+    // Hides the role selection modal overlay
     function closeRoleSelectionModal() {
         const modal = document.getElementById('roleSelectionModal');
         if (modal) {
@@ -527,13 +531,13 @@ Ecosystem for Higher Education Institutions{% endblock %}
         }
     }
 
-    // Modal & Lucide icon handlers
+    // Event listeners: close modal on backdrop click or ESC key press
     document.addEventListener('DOMContentLoaded', () => {
         if (window.lucide) {
             window.lucide.createIcons();
         }
 
-        // Close modal on backdrop click or ESC key
+        // Close modal on backdrop click
         const roleModal = document.getElementById('roleSelectionModal');
         if (roleModal) {
             roleModal.addEventListener('click', (e) => {
@@ -542,6 +546,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
                 }
             });
         }
+        // Close modal on ESC key press
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeRoleSelectionModal();
@@ -549,7 +554,7 @@ Ecosystem for Higher Education Institutions{% endblock %}
         });
     });
 
-    // Add a style tag for the spinning circle animation
+    // Injects CSS keyframe animation for the slow continuous orbiting circle in Hero section
     const style = document.createElement('style');
     style.innerHTML = `
         @keyframes spin-slow {

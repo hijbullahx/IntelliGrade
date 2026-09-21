@@ -2,7 +2,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # Primary landing page route (public entry point: /)
     path('', views.landing_page, name='landing_page'),
+
+    # Role-based portal authentication routes accessed from the landing page role modal
     path('controller/login/', views.exam_controller_login, name='exam_controller_login'),
     path('teacher/login/', views.teacher_login, name='teacher_login'),
     path('dept-head/login/', views.dept_head_login, name='dept_head_login'),
