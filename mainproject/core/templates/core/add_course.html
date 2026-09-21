@@ -19,6 +19,7 @@
         <form method="POST" class="space-y-4">
             {% csrf_token %}
             {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+            {% if source %}<input type="hidden" name="source" value="{{ source }}">{% endif %}
             
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider theme-text-muted mb-1.5">Course Title</label>

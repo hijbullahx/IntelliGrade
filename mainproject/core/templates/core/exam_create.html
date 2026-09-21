@@ -731,10 +731,14 @@ function renderExtractedRoutineTable(data) {
     resultBox.classList.remove('hidden');
 
     if (data.available_faculty && Array.isArray(data.available_faculty) && data.available_faculty.length > 0) {
-        window.availableFacultyList = data.available_faculty;
+        if (!window.availableFacultyList || window.availableFacultyList.length === 0 || window.availableFacultyList.length <= data.available_faculty.length) {
+            window.availableFacultyList = data.available_faculty;
+        }
     }
     if (data.available_courses && Array.isArray(data.available_courses) && data.available_courses.length > 0) {
-        window.availableCoursesList = data.available_courses;
+        if (!window.availableCoursesList || window.availableCoursesList.length === 0 || window.availableCoursesList.length <= data.available_courses.length) {
+            window.availableCoursesList = data.available_courses;
+        }
     }
 
     let html = `<div class="space-y-4">`;
@@ -780,10 +784,10 @@ function renderExtractedRoutineTable(data) {
             let safeDate = (item.exam_date || '').replace(/'/g, "\\'");
             let safeTime = (item.exam_time || '').replace(/'/g, "\\'");
 
-            let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}`;
+            let addCourseUrl = `{% url 'add_course' %}?code=${encodeURIComponent(item.course_code || '')}&title=${encodeURIComponent(item.course_title || '')}&source=routine`;
             let rawFaculty = item.faculty_name ? item.faculty_name.trim() : '';
             let isUnassigned = !rawFaculty || rawFaculty.toLowerCase() === 'unassigned' || rawFaculty.toLowerCase() === 'assigned examiner';
-            let addFacultyUrl = `{% url 'add_faculty' %}` + (isUnassigned ? '' : `?name=${encodeURIComponent(rawFaculty)}`);
+            let addFacultyUrl = `{% url 'add_faculty' %}` + (isUnassigned ? '?source=routine' : `?name=${encodeURIComponent(rawFaculty)}&source=routine`);
 
             // Course Selector or Badge
             let courseCellContent = '';
@@ -843,11 +847,7 @@ function renderExtractedRoutineTable(data) {
             </div>`;
 
             // Action Button
-            let actionBtn = `
-            <button type="button" id="row-btn-${index}" onclick="publishExamFromRowDirect(${index}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition-all inline-flex items-center gap-1.5 whitespace-nowrap">
-                <i data-lucide="send" class="w-3.5 h-3.5"></i> ${item.is_published ? 'Update Assignment' : 'Assign & Publish'}
-            </button>`;
-
+            let actionBtn = '';
             if (item.is_published) {
                 actionBtn = `
                 <div class="flex items-center justify-end gap-2">
@@ -858,6 +858,11 @@ function renderExtractedRoutineTable(data) {
                         Reassign
                     </button>
                 </div>`;
+            } else {
+                actionBtn = `
+                <button type="button" id="row-btn-${index}" onclick="publishExamFromRowDirect(${index}, '${safeDate}', '${item.total_marks || 100}', '${safeCode}')" class="px-4 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition-all inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i> Assign & Publish
+                </button>`;
             }
 
             html += `<tr class="hover:bg-slate-100/50 dark:hover:bg-slate-900/50 transition-colors">
@@ -961,17 +966,29 @@ function publishExamFromRowDirect(rowIndex, examDate, totalMarks, defaultCourseC
     .then(r => r.json())
     .then(data => {
         if (data.success) {
+            // Update item in local scan result so subsequent re-renders keep Published / Reassign
+            if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items && window.lastAIRoutineScanResult.routine_items[rowIndex]) {
+                const item = window.lastAIRoutineScanResult.routine_items[rowIndex];
+                item.is_published = true;
+                item.course_id = courseId;
+                if (facultyId) {
+                    item.faculty_id = facultyId;
+                    item.faculty_found = true;
+                }
+            }
+
             const actionCell = document.getElementById(`action-cell-${rowIndex}`);
             if (actionCell) {
                 actionCell.innerHTML = `
                 <div class="flex items-center justify-end gap-2">
                     <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold text-xs rounded-xl inline-flex items-center gap-1">
-                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Assigned & Published
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Published
                     </span>
                     <button type="button" id="row-btn-${rowIndex}" onclick="publishExamFromRowDirect(${rowIndex}, '${examDate}', '${totalMarks}', '${defaultCourseCode}')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-bold rounded-lg border border-slate-700 transition-all" title="Click to change faculty and update">
                         Reassign
                     </button>
                 </div>`;
+                lucide.createIcons();
             }
 
             // Sync main form
@@ -1013,6 +1030,66 @@ function publishExamFromRow(btnElement, courseId, facultyId, examDate, totalMark
 // ============================================================================
 // Zero-Latency Local Re-matching when Entity is Added
 // ============================================================================
+function matchFacultyInJS(rawTarget, facultyList) {
+    if (!rawTarget || !rawTarget.trim() || !Array.isArray(facultyList)) return null;
+    const titleRegex = /\b(dr|prof|professor|engr|engineer|mr|mrs|ms|md|mohammad|muhammad)\b/gi;
+    
+    let cleanTarget = rawTarget.toLowerCase().trim();
+    let normTarget = cleanTarget.replace(titleRegex, ' ')
+                                .replace(/[()[\],.\-:]+/g, ' ')
+                                .replace(/\s+/g, ' ').trim();
+    let targetTokens = normTarget.split(' ').filter(t => t.length > 1);
+
+    // 1. Direct exact match
+    for (let f of facultyList) {
+        let fName = (f.name || '').toLowerCase().trim();
+        let fUser = (f.username || '').toLowerCase().trim();
+        if (cleanTarget === fName || cleanTarget === fUser) return f;
+        
+        let normF = fName.replace(titleRegex, ' ')
+                         .replace(/[()[\],.\-:]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim();
+        if (normTarget && normTarget === normF) return f;
+    }
+
+    // 2. Direct Substring matches
+    for (let f of facultyList) {
+        let fName = (f.name || '').toLowerCase().trim();
+        let normF = fName.replace(titleRegex, ' ')
+                         .replace(/[()[\],.\-:]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim();
+        if (normTarget.length >= 3 && normF.length >= 3) {
+            if (normTarget.includes(normF) || normF.includes(normTarget)) return f;
+        }
+    }
+
+    // 3. Token overlap match
+    let bestMatch = null;
+    let maxOverlap = 0;
+    for (let f of facultyList) {
+        let fName = (f.name || '').toLowerCase().trim();
+        let normF = fName.replace(titleRegex, ' ')
+                         .replace(/[()[\],.\-:]+/g, ' ')
+                         .replace(/\s+/g, ' ').trim();
+        let userTokens = normF.split(' ').filter(t => t.length > 1);
+        if (targetTokens.length > 0 && userTokens.length > 0) {
+            let common = targetTokens.filter(t => userTokens.includes(t));
+            if (common.length >= 1) {
+                if (common.length === targetTokens.length || common.length >= 2 || (targetTokens.length === 1 && common.length === 1)) {
+                    if (common.length > maxOverlap) {
+                        maxOverlap = common.length;
+                        bestMatch = f;
+                    }
+                }
+            }
+        }
+        if (f.username && (cleanTarget.includes(f.username.toLowerCase()) || f.username.toLowerCase().includes(cleanTarget))) {
+            return f;
+        }
+    }
+    return bestMatch;
+}
+
 function syncDropdownsAndRescanRoutine() {
     fetch("{% url 'api_courses_and_faculty' %}")
     .then(r => r.json())
@@ -1023,7 +1100,12 @@ function syncDropdownsAndRescanRoutine() {
         window.availableCoursesList = courses;
         window.availableFacultyList = faculty;
 
-        // Update Course Dropdown
+        if (window.lastAIRoutineScanResult) {
+            window.lastAIRoutineScanResult.available_faculty = faculty;
+            window.lastAIRoutineScanResult.available_courses = courses;
+        }
+
+        // Update Course Dropdown in Main Form
         const courseSelect = document.getElementById('courseSelect');
         if (courseSelect) {
             const currCourse = courseSelect.value;
@@ -1035,7 +1117,7 @@ function syncDropdownsAndRescanRoutine() {
             if (currCourse) courseSelect.value = currCourse;
         }
 
-        // Update Faculty Dropdown
+        // Update Faculty Dropdown in Main Form
         const facultySelect = document.getElementById('facultySelect');
         if (facultySelect) {
             const currFaculty = facultySelect.value;
@@ -1049,38 +1131,62 @@ function syncDropdownsAndRescanRoutine() {
 
         // INSTANT local re-matching without re-scanning
         if (window.lastAIRoutineScanResult && window.lastAIRoutineScanResult.routine_items) {
-            window.lastAIRoutineScanResult.routine_items.forEach(item => {
-                const normCourseCode = (item.course_code || '').replace(/\s+/g, '').toUpperCase();
-                const matchedCourse = courses.find(c => (c.code || '').replace(/\s+/g, '').toUpperCase() === normCourseCode);
-                if (matchedCourse) {
-                    item.course_found = true;
-                    item.course_id = matchedCourse.id;
+            window.lastAIRoutineScanResult.routine_items.forEach((item, idx) => {
+                const existingFacSelect = document.getElementById(`row-faculty-${idx}`);
+                
+                // Re-match course if needed
+                if (!item.course_found || !item.course_id) {
+                    const normCourseCode = (item.course_code || '').replace(/\s+/g, '').toUpperCase();
+                    const matchedCourse = courses.find(c => (c.code || '').replace(/\s+/g, '').toUpperCase() === normCourseCode);
+                    if (matchedCourse) {
+                        item.course_found = true;
+                        item.course_id = matchedCourse.id;
+                        item.course_title = matchedCourse.title;
+                    }
                 }
 
-                const normFacName = (item.faculty_name || '').toLowerCase().trim();
-                const matchedFaculty = faculty.find(f => {
-                    const fName = (f.name || '').toLowerCase();
-                    const fUser = (f.username || '').toLowerCase();
-                    return fName.includes(normFacName) || normFacName.includes(fName) || fUser.includes(normFacName);
-                });
-                if (matchedFaculty) {
-                    item.faculty_found = true;
-                    item.faculty_id = matchedFaculty.id;
+                // Re-match faculty if unassigned or if user hasn't explicitly selected someone else
+                if (!item.faculty_found || !item.faculty_id) {
+                    const matchedFaculty = matchFacultyInJS(item.faculty_name, faculty);
+                    if (matchedFaculty) {
+                        item.faculty_found = true;
+                        item.faculty_id = matchedFaculty.id;
+                    }
+                } else if (existingFacSelect && existingFacSelect.value) {
+                    item.faculty_id = existingFacSelect.value;
                 }
             });
 
             renderExtractedRoutineTable(window.lastAIRoutineScanResult);
+
+            // Sync main form faculty if currently empty
+            if (window.lastAIRoutineScanResult.routine_items.length > 0) {
+                const first = window.lastAIRoutineScanResult.routine_items[0];
+                if (first.faculty_id && facultySelect && !facultySelect.value) {
+                    facultySelect.value = first.faculty_id;
+                }
+            }
         }
     })
     .catch(e => console.error(e));
 }
 
+// Listen for storage changes from other tabs/windows when entity is added
 window.addEventListener('storage', function(e) {
     if (e.key === 'intelligrade_entity_added') {
+        localStorage.removeItem('intelligrade_entity_added');
         syncDropdownsAndRescanRoutine();
     }
 });
 
+// Listen for direct postMessage from child popup/window when entity is added
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'entity_added') {
+        syncDropdownsAndRescanRoutine();
+    }
+});
+
+// Re-sync on focus ONLY IF an entity was added while user was away
 window.addEventListener('focus', function() {
     const item = localStorage.getItem('intelligrade_entity_added');
     if (item) {
@@ -1090,7 +1196,7 @@ window.addEventListener('focus', function() {
                 localStorage.removeItem('intelligrade_entity_added');
                 syncDropdownsAndRescanRoutine();
             }
-        } catch(e){}
+        } catch(e) {}
     }
 });
 
