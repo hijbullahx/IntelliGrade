@@ -19,10 +19,10 @@ class GroqProvider(BaseAIProvider):
         "supports_pdf": False,
         "supports_json": True,
         "supports_function_calling": False,
-        "max_images": 3  # Groq qwen/qwen3.6-27b: HTTP 400 if >3 images
+        "max_images": 3  # Groq qwen/qwen3.8-27b: HTTP 400 if >3 images
     }
 
-    def __init__(self, api_key: str, model_name: str = "qwen/qwen3.6-27b"):
+    def __init__(self, api_key: str, model_name: str = "qwen/qwen3.8-27b"):
         self.api_key = api_key
         self.model_name = model_name
 
@@ -115,7 +115,7 @@ class GroqProvider(BaseAIProvider):
 
         selected_model = self.model_name
         if image_bytes:
-            selected_model = "qwen/qwen3.6-27b"
+            selected_model = "qwen/qwen3.8-27b"
             import base64
             comp_bytes, comp_mime = self._compress_image_bytes(image_bytes, max_dim=1000, quality=85)
             b64 = base64.b64encode(comp_bytes).decode('utf-8')
@@ -132,7 +132,7 @@ class GroqProvider(BaseAIProvider):
                         content_list.append({"type": "image_url", "image_url": {"url": f"data:{ef_mime};base64,{b64_ef}"}})
             messages.append({"role": "user", "content": content_list})
         else:
-            selected_model = self.model_name or "qwen/qwen3.6-27b"
+            selected_model = self.model_name or "qwen/qwen3.8-27b"
             messages.append({"role": "user", "content": prompt})
 
         payload = {

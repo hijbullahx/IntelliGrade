@@ -871,10 +871,20 @@ Return strict JSON ONLY:
         except Exception as e:
             print(f"[OCR V3 EASYOCR WARNING] {e}")
 
-        # 3. Only query Vision LLM if text length is strictly 0 (with short 5.0s timeout max)
+        # 3. Only query Vision LLM if text length is strictly 0 (fast vision OCR)
         try:
             import cv2
-            _, enc_buf = cv2.imencode('.jpg', bgr_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            h, w = bgr_img.shape[:2]
+            max_dim = 1600
+            if max(h, w) > max_dim:
+                scale = max_dim / float(max(h, w))
+                new_w = max(1, int(w * scale))
+                new_h = max(1, int(h * scale))
+                ocr_target_img = cv2.resize(bgr_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            else:
+                ocr_target_img = bgr_img
+
+            _, enc_buf = cv2.imencode('.jpg', ocr_target_img, [cv2.IMWRITE_JPEG_QUALITY, 80])
             img_bytes = enc_buf.tobytes()
             from core.ai_engine.providers.factory import AIProviderFactory
             from core.ai_engine.routing.task_types import TaskType
@@ -883,7 +893,7 @@ Return strict JSON ONLY:
                 prompt="Transcribe all visible handwritten or printed text on this student exam page verbatim line-by-line. Output text only.",
                 image_bytes=img_bytes,
                 mime_type="image/jpeg",
-                timeout=5.0,
+                timeout=10.0,
                 task_type=TaskType.OCR_TEXT
             )
             if vis_text and len(vis_text.strip()) > 5:
