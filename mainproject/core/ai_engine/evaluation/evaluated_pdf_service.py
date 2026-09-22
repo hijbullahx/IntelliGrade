@@ -426,11 +426,10 @@ class EvaluatedScriptPDFService:
         table_top = 155
         summary_page.draw_rect(fitz.Rect(20, table_top, w - 20, table_top + 22), color=(0.2, 0.2, 0.3), fill=(0.2, 0.2, 0.3))
         summary_page.insert_text(fitz.Point(28, table_top + 15), "Q#", fontsize=8.5, color=(1, 1, 1), fontname="helv")
-        summary_page.insert_text(fitz.Point(55, table_top + 15), "Question Statement", fontsize=8.5, color=(1, 1, 1), fontname="helv")
-        summary_page.insert_text(fitz.Point(310, table_top + 15), "Script Pages", fontsize=8.5, color=(1, 1, 1), fontname="helv")
-        summary_page.insert_text(fitz.Point(385, table_top + 15), "Allocated", fontsize=8.5, color=(1, 1, 1), fontname="helv")
-        summary_page.insert_text(fitz.Point(445, table_top + 15), "Obtained", fontsize=8.5, color=(1, 1, 1), fontname="helv")
-        summary_page.insert_text(fitz.Point(505, table_top + 15), "Confidence", fontsize=8.5, color=(1, 1, 1), fontname="helv")
+        summary_page.insert_text(fitz.Point(60, table_top + 15), "Question Statement", fontsize=8.5, color=(1, 1, 1), fontname="helv")
+        summary_page.insert_text(fitz.Point(340, table_top + 15), "Script Pages", fontsize=8.5, color=(1, 1, 1), fontname="helv")
+        summary_page.insert_text(fitz.Point(430, table_top + 15), "Allocated", fontsize=8.5, color=(1, 1, 1), fontname="helv")
+        summary_page.insert_text(fitz.Point(500, table_top + 15), "Obtained", fontsize=8.5, color=(1, 1, 1), fontname="helv")
 
         # Table Rows
         y = table_top + 22
@@ -438,13 +437,12 @@ class EvaluatedScriptPDFService:
             q = ans.question
             q_num = QuestionAccessor.get_question_number(q)
             q_text = QuestionAccessor.get_text(q)
-            if len(q_text) > 42:
-                q_text = q_text[:39] + "..."
+            if len(q_text) > 55:
+                q_text = q_text[:52] + "..."
 
             eval_res = getattr(ans, 'evaluation_result', None)
             obtained = float(eval_res.obtained_marks) if eval_res else 0.0
             max_m = float(eval_res.maximum_marks) if eval_res else QuestionAccessor.get_marks(q)
-            conf = float(eval_res.confidence) if eval_res else 0.0
 
             pg_list = answer_pages_map.get(ans.id, [])
             pg_str = ", ".join(map(str, pg_list)) if pg_list else "Unmapped"
@@ -454,11 +452,10 @@ class EvaluatedScriptPDFService:
             summary_page.draw_rect(row_rect, color=(0.85, 0.85, 0.85), fill=bg_color, width=0.5)
 
             summary_page.insert_text(fitz.Point(28, y + 15), f"{normalize_q_code(q_num)}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
-            summary_page.insert_text(fitz.Point(55, y + 15), q_text, fontsize=8, color=(0.2, 0.2, 0.2), fontname="helv")
-            summary_page.insert_text(fitz.Point(310, y + 15), f"Page {pg_str}", fontsize=8, color=(0.1, 0.3, 0.6), fontname="helv")
-            summary_page.insert_text(fitz.Point(385, y + 15), f"{max_m:.1f}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
-            summary_page.insert_text(fitz.Point(445, y + 15), f"{obtained:.1f}", fontsize=8, color=(0.05, 0.45, 0.2), fontname="helv")
-            summary_page.insert_text(fitz.Point(505, y + 15), f"{conf:.2f}", fontsize=8, color=(0.3, 0.3, 0.3), fontname="helv")
+            summary_page.insert_text(fitz.Point(60, y + 15), q_text, fontsize=8, color=(0.2, 0.2, 0.2), fontname="helv")
+            summary_page.insert_text(fitz.Point(340, y + 15), f"Page {pg_str}", fontsize=8, color=(0.1, 0.3, 0.6), fontname="helv")
+            summary_page.insert_text(fitz.Point(430, y + 15), f"{max_m:.1f}", fontsize=8, color=(0.1, 0.1, 0.1), fontname="helv")
+            summary_page.insert_text(fitz.Point(500, y + 15), f"{obtained:.1f}", fontsize=8, color=(0.05, 0.45, 0.2), fontname="helv")
 
             y += 22
 
