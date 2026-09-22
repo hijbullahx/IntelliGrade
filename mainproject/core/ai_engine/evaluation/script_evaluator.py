@@ -962,6 +962,8 @@ Return strict JSON ONLY:
             )
             sub_ans.extracted_text = extracted_ans_text
             sub_ans.requires_manual_review = is_ambiguous
+            if matched_page and sub_ans.page != matched_page:
+                sub_ans.page = matched_page
             sub_ans.save()
             created_answers.append(sub_ans)
 

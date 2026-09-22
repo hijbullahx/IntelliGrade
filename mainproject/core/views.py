@@ -75,12 +75,39 @@ def teacher_dashboard(request):
     # Fetch examinations assigned strictly to this specific faculty examiner
     assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course')
 
-    pending_scripts = AnswerScript.objects.filter(examination__assigned_faculty=request.user, status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
-    
+    # Submissions evaluated under assigned examinations (StudentSubmission + legacy AnswerScript)
+    evaluated_subs = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).filter(
+        Q(status__in=[
+            StudentSubmission.Status.AI_EVALUATED,
+            StudentSubmission.Status.UNDER_REVIEW,
+            StudentSubmission.Status.REVIEWED,
+            StudentSubmission.Status.FINALIZED,
+        ]) | Q(is_finalized=True)
+    ).distinct()
+
+    legacy_evaluated = AnswerScript.objects.filter(
+        examination__in=assigned_exams,
+        status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+    )
+
+    total_evaluated_count = evaluated_subs.count() + legacy_evaluated.count()
+
+    pending_reviews_count = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).filter(
+        status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW]
+    ).distinct().count() + AnswerScript.objects.filter(examination__in=assigned_exams, status='EVALUATED').count()
+
+    pending_scripts = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).select_related('examination', 'student').order_by('-updated_at')[:5]
+
     stats = {
         'total_exams': assigned_exams.count(),
-        'pending_reviews': AnswerScript.objects.filter(examination__assigned_faculty=request.user, status='EVALUATED').count(),
-        'total_scripts': AnswerScript.objects.filter(examination__assigned_faculty=request.user).count(),
+        'pending_reviews': pending_reviews_count,
+        'total_scripts': total_evaluated_count,
         'avg_confidence': '94.2%',
     }
     
