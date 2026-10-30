@@ -302,7 +302,7 @@
         </div>
 
         <!-- System Metrics Dashboard Banner -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-slate-950/60 border-b border-slate-800/80 text-xs font-mono">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-950/60 border-b border-slate-800/80 text-xs font-mono">
             <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-0.5">
                 <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Active Page</span>
                 <div class="font-extrabold text-white text-sm flex items-center gap-1.5" id="statActivePage">
@@ -310,17 +310,12 @@
                 </div>
             </div>
             <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-0.5">
-                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Lines Clustered</span>
-                <div class="font-extrabold text-cyan-400 text-sm" id="statLinesCount">0 lines</div>
-            </div>
-            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-0.5">
-                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Headings Found</span>
+                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Headings / Questions Found</span>
                 <div class="font-extrabold text-amber-400 text-sm" id="statHeadingsCount">0 headers</div>
             </div>
-            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-0.5">
-                <span class="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Engine Confidence</span>
-                <div class="font-extrabold text-emerald-400 text-sm" id="statConfidence">0.0%</div>
-            </div>
+            <!-- Hidden DOM anchors to preserve JS state safely without visual display -->
+            <div class="hidden" id="statLinesCount">0 lines</div>
+            <div class="hidden" id="statConfidence">0.0%</div>
         </div>
 
         <!-- Main Body: Laser Page Preview Scanner (Left) + Terminal Console Stream (Right) -->

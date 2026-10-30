@@ -22,6 +22,7 @@
     <form method="POST" autocomplete="off" class="glass-card p-6 md:p-8 rounded-2xl space-y-6">
         {% csrf_token %}
         {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+        {% if source %}<input type="hidden" name="source" value="{{ source }}">{% endif %}
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="md:col-span-2">

@@ -25,7 +25,7 @@ MODEL_REGISTRY = {
         }
     },
     "groq": {
-        "models": ["qwen/qwen3.6-27b", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+        "models": ["qwen/qwen3.8-27b", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
         "capabilities": {
             "supports_text": True,
             "supports_images": True,

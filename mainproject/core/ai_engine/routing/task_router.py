@@ -47,10 +47,10 @@ class TaskRouter:
     """
 
     TASK_CHAINS: Dict[TaskType, List[Type[BaseAIProvider]]] = {
-        TaskType.OCR_TEXT: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.OCR_TEXT: [GroqProvider, GeminiProvider, LocalOfflineVisionProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider],
         TaskType.ROUTINE_PARSE: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
         TaskType.QUESTION_MAPPING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
-        TaskType.ANSWER_VISUAL_READ: [GeminiProvider, GroqProvider, LocalOfflineVisionProvider, OpenAIProvider, OpenRouterProvider],
+        TaskType.ANSWER_VISUAL_READ: [GroqProvider, GeminiProvider, LocalOfflineVisionProvider, OpenAIProvider, OpenRouterProvider],
         TaskType.ANSWER_GRADING: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
         TaskType.FEEDBACK_GENERATION: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],
         TaskType.REPORT_SUMMARY: [GroqProvider, GeminiProvider, OpenAIProvider, OllamaProvider, OpenRouterProvider],

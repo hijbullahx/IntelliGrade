@@ -75,12 +75,39 @@ def teacher_dashboard(request):
     # Fetch examinations assigned strictly to this specific faculty examiner
     assigned_exams = Examination.objects.filter(assigned_faculty=request.user).select_related('course')
 
-    pending_scripts = AnswerScript.objects.filter(examination__assigned_faculty=request.user, status__in=['UPLOADED', 'OCR_DONE', 'EVALUATED']).select_related('examination', 'student')[:5]
-    
+    # Submissions evaluated under assigned examinations (StudentSubmission + legacy AnswerScript)
+    evaluated_subs = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).filter(
+        Q(status__in=[
+            StudentSubmission.Status.AI_EVALUATED,
+            StudentSubmission.Status.UNDER_REVIEW,
+            StudentSubmission.Status.REVIEWED,
+            StudentSubmission.Status.FINALIZED,
+        ]) | Q(is_finalized=True)
+    ).distinct()
+
+    legacy_evaluated = AnswerScript.objects.filter(
+        examination__in=assigned_exams,
+        status__in=[AnswerScript.Status.EVALUATED, AnswerScript.Status.REVIEWED]
+    )
+
+    total_evaluated_count = evaluated_subs.count() + legacy_evaluated.count()
+
+    pending_reviews_count = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).filter(
+        status__in=[StudentSubmission.Status.AI_EVALUATED, StudentSubmission.Status.UNDER_REVIEW]
+    ).distinct().count() + AnswerScript.objects.filter(examination__in=assigned_exams, status='EVALUATED').count()
+
+    pending_scripts = StudentSubmission.objects.filter(
+        Q(examination__assigned_faculty=request.user) | Q(examination__in=assigned_exams)
+    ).select_related('examination', 'student').order_by('-updated_at')[:5]
+
     stats = {
         'total_exams': assigned_exams.count(),
-        'pending_reviews': AnswerScript.objects.filter(examination__assigned_faculty=request.user, status='EVALUATED').count(),
-        'total_scripts': AnswerScript.objects.filter(examination__assigned_faculty=request.user).count(),
+        'pending_reviews': pending_reviews_count,
+        'total_scripts': total_evaluated_count,
         'avg_confidence': '94.2%',
     }
     
@@ -973,6 +1000,7 @@ def add_faculty(request):
 
     preset_name = request.GET.get('name', '').strip()
     next_url = request.GET.get('next', '').strip()
+    source = request.GET.get('source', '').strip() or request.POST.get('source', '').strip()
 
     if request.method == 'POST':
         full_name = request.POST.get('full_name', '').strip()
@@ -981,6 +1009,7 @@ def add_faculty(request):
         password = request.POST.get('password', '')
         dept_code = request.POST.get('department', '').strip()
         redirect_after = request.POST.get('next', '').strip()
+        source = request.POST.get('source', '').strip() or source
 
         if User.objects.filter(username=username).exists():
             messages.error(request, f"User with ID / Username '{username}' already exists.")
@@ -1016,6 +1045,16 @@ def add_faculty(request):
             )
         except Exception as _e_mail:
             pass
+
+        if source == 'routine':
+            return render(request, 'core/entity_created_success.html', {
+                'entity_type': 'faculty',
+                'entity_id': user.id,
+                'entity_name': full_name,
+                'username': username,
+                'dept_code': dept_obj.code if dept_obj else ''
+            })
+
         if redirect_after:
             return redirect(redirect_after)
         return redirect('faculty_list')
@@ -1032,6 +1071,7 @@ def add_faculty(request):
         'preset_name': preset_name,
         'suggested_username': suggested_username,
         'next_url': next_url,
+        'source': source,
     })
 
 
@@ -1553,7 +1593,7 @@ def scan_routine_ai(request):
             if not course_obj:
                 # Try normalized code without space (e.g. CSE411 vs CSE 411)
                 norm_c = c_code.replace(' ', '').strip()
-                course_obj = Course.objects.filter(code__iregex=f"^{norm_c[:3]}\s*{norm_c[3:]}$").first()
+                course_obj = Course.objects.filter(code__iregex=rf"^{norm_c[:3]}\s*{norm_c[3:]}$").first()
         if not course_obj and c_title:
             course_obj = Course.objects.filter(title__icontains=c_title.strip()).first()
 
@@ -2124,12 +2164,14 @@ def add_course(request):
     preset_code = request.GET.get('code', '').strip()
     preset_title = request.GET.get('title', '').strip()
     next_url = request.GET.get('next', '').strip()
+    source = request.GET.get('source', '').strip() or request.POST.get('source', '').strip()
 
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         code = request.POST.get('code', '').strip()
         dept_code = request.POST.get('department', '').strip()
         redirect_after = request.POST.get('next', '').strip()
+        source = request.POST.get('source', '').strip() or source
 
         if Course.objects.filter(code=code).exists():
             messages.error(request, f"Course code '{code}' already exists.")
@@ -2154,6 +2196,14 @@ def add_course(request):
                     pass
 
         messages.success(request, f"Course '{title}' ({code}) registered successfully!")
+        if source == 'routine':
+            return render(request, 'core/entity_created_success.html', {
+                'entity_type': 'course',
+                'entity_id': course.id,
+                'entity_name': f"{course.code} - {course.title}",
+                'code': course.code
+            })
+
         if redirect_after:
             return redirect(redirect_after)
         return redirect('courses_list')
@@ -2164,6 +2214,7 @@ def add_course(request):
         'preset_code': preset_code,
         'preset_title': preset_title,
         'next_url': next_url,
+        'source': source,
     })
 
 
@@ -2300,7 +2351,12 @@ def api_get_courses_and_faculty(request):
             'username': prof.user.username,
             'dept_code': prof.department.code if prof.department else ''
         })
-    return JsonResponse({'courses': courses, 'faculty': faculty})
+    published_course_ids = list(Examination.objects.values_list('course_id', flat=True).distinct())
+    return JsonResponse({
+        'courses': courses,
+        'faculty': faculty,
+        'published_course_ids': published_course_ids
+    })
 
 
 def api_publish_exam(request):

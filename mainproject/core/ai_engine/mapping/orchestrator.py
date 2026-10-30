@@ -832,6 +832,8 @@ class QuestionMappingOrchestrator:
                     question=q_obj,
                     defaults={'extracted_text': ans_text, 'ocr_confidence': 1.0, 'requires_manual_review': False}
                 )
+                if sorted_pg_list and sorted_pg_list[0] in pages:
+                    sub_ans.page = pages[sorted_pg_list[0]]
                 sub_ans.extracted_text = ans_text
                 sub_ans.requires_manual_review = False
                 sub_ans.save()
